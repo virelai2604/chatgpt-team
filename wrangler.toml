@@ -1,0 +1,3 @@
+name = "chatgpt-team"          # must match the Pages project slug
+compatibility_date = "2025-08-29"
+pages_build_output_dir = "."
