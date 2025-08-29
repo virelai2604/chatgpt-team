@@ -35,3 +35,5 @@ pnpm-debug.log*
 .cache/
 .temp/
 .tmp/
+
+.wrangler/tmp/
