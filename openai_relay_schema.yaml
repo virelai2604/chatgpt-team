@@ -127,3 +127,48 @@ components:
 
 security:
   - ApiKeyAuth: []
+
+# ---- added endpoints ----
+  /v1/responses:
+    post:
+      summary: Relay to OpenAI Responses API
+      description: Unified endpoint for text, tools, and more (pass-through to OpenAI).
+      operationId: createResponse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, input]
+              additionalProperties: true
+      responses:
+        "200":
+          description: Responses API JSON
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /v1/embeddings:
+    post:
+      summary: Relay to OpenAI Embeddings
+      description: Creates embedding vectors for search/RAG.
+      operationId: createEmbedding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, input]
+              additionalProperties: true
+      responses:
+        "200":
+          description: Embedding vector response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
