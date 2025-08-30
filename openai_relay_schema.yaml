@@ -1,0 +1,45 @@
+openapi: 3.1.0
+info:
+  title: OpenAI Relay
+  version: 1.0.0
+  description: |
+    Routes ChatGPT requests to OpenAI's /v1/chat/completions endpoint via a
+    Cloudflare Worker. The worker attaches the Authorization and
+    OpenAI-Organization headers on the server side.
+servers:
+  - url: https://chatgpt-team.pages.dev
+    description: Cloudflare Worker Relay
+paths:
+  /v1/chat/completions:
+    post:
+      summary: Relay to OpenAI Chat Completions
+      description: |
+        Forwards a chat completion request to OpenAI's API. The Cloudflare Worker
+        adds the required OpenAI authentication and organization headers.
+      operationId: createChatCompletion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              description: OpenAI Chat Completions request payload
+      responses:
+        "200":
+          description: OpenAI response forwarded through the relay
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                description: OpenAI Chat Completions response payload
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: API key for OpenAI (prefixed with "Bearer ")
+security:
+  - ApiKeyAuth: []
