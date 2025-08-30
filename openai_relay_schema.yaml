@@ -32,6 +32,190 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatCompletionResponse'
 
+
+# ---- added endpoints ----
+  /v1/responses:
+    post:
+      summary: Relay to OpenAI Responses API
+      description: Unified endpoint for text, tools, and more (pass-through to OpenAI).
+      operationId: createResponse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, input]
+              additionalProperties: true
+      responses:
+        "200":
+          description: Responses API JSON
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /v1/embeddings:
+    post:
+      summary: Relay to OpenAI Embeddings
+      description: Creates embedding vectors for search/RAG.
+      operationId: createEmbedding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, input]
+              additionalProperties: true
+      responses:
+        "200":
+          description: Embedding vector response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+# ---- added endpoints (no moderation) ----
+  /v1/models:
+    get:
+      summary: List models (pass-through)
+      operationId: listModels
+      responses:
+        "200":
+          description: Models list
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /v1/audio/speech:
+    post:
+      summary: Text-to-Speech (pass-through)
+      operationId: createSpeech
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, voice, input]
+              properties:
+                model: { type: string, description: "e.g., gpt-4o-mini-tts" }
+                voice: { type: string, description: "e.g., alloy" }
+                input: { type: string }
+                format: { type: string, description: "e.g., mp3, wav" }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Binary audio
+          content:
+            audio/mpeg: { schema: { type: string, format: binary } }
+            application/octet-stream: { schema: { type: string, format: binary } }
+
+  /v1/audio/transcriptions:
+    post:
+      summary: Speech-to-Text (pass-through)
+      operationId: createTranscription
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [model, file]
+              properties:
+                model: { type: string, description: "e.g., gpt-4o-mini-transcribe or whisper-1" }
+                file:  { type: string, format: binary }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Transcription JSON
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /v1/images/generations:
+    post:
+      summary: Image generation (pass-through)
+      operationId: createImage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, prompt]
+              properties:
+                model:  { type: string, description: "e.g., gpt-image-1" }
+                prompt: { type: string }
+                size:   { type: string, description: "e.g., 256x256, 1024x1024" }
+                response_format: { type: string, description: "e.g., b64_json" }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Image JSON
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /v1/images/edits:
+    post:
+      summary: Image edit (pass-through)
+      operationId: editImage
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [model, image, prompt]
+              properties:
+                model:  { type: string }
+                image:  { type: string, format: binary }
+                mask:   { type: string, format: binary }
+                prompt: { type: string }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Image JSON
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /v1/images/variations:
+    post:
+      summary: Image variation (pass-through)
+      operationId: varyImage
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [model, image]
+              properties:
+                model:  { type: string }
+                image:  { type: string, format: binary }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Image JSON
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /v1/files:
+    get:
+      summary: List files (pass-through)
+      operationId: listFiles
+      responses:
+        "200":
+          description: Files list
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -128,47 +312,4 @@ components:
 security:
   - ApiKeyAuth: []
 
-# ---- added endpoints ----
-  /v1/responses:
-    post:
-      summary: Relay to OpenAI Responses API
-      description: Unified endpoint for text, tools, and more (pass-through to OpenAI).
-      operationId: createResponse
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, input]
-              additionalProperties: true
-      responses:
-        "200":
-          description: Responses API JSON
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
 
-  /v1/embeddings:
-    post:
-      summary: Relay to OpenAI Embeddings
-      description: Creates embedding vectors for search/RAG.
-      operationId: createEmbedding
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, input]
-              additionalProperties: true
-      responses:
-        "200":
-          description: Embedding vector response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
