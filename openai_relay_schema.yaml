@@ -1,14 +1,24 @@
+---
 openapi: 3.1.0
 info:
   title: OpenAI Relay
   version: 1.0.0
   description: |
     Routes ChatGPT requests to OpenAI's /v1/chat/completions endpoint via a
-    Cloudflare Worker. The worker attaches the required OpenAI API key and
-    organization ID headers on the server side.
+    Cloudflare Worker. The worker attaches the Authorization and
+    OpenAI-Organization headers on the server side.
 servers:
-  - url: https://chatgpt-team.pages.dev
+  - url: https://chatgpt-team.pages.dev  # Cloudflare Worker base URL
     description: Cloudflare Worker Relay
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: API key for OpenAI (prefixed with "Bearer ")
+security:
+  - ApiKeyAuth: []
 paths:
   /v1/chat/completions:
     post:
@@ -22,48 +32,15 @@ paths:
         content:
           application/json:
             schema:
+              description: OpenAI Chat Completions request payload
               type: object
-              required:
-                - model
-                - messages
-              properties:
-                model:
-                  type: string
-                  description: ID of the OpenAI model to use (e.g., gpt-3.5-turbo).
-                messages:
-                  type: array
-                  description: The messages to generate chat completions for, in the chat format.
-                  items:
-                    type: object
-                    required:
-                      - role
-                      - content
-                    properties:
-                      role:
-                        type: string
-                        description: The role of the message (e.g., system, user, or assistant).
-                      content:
-                        type: string
-                        description: The content of the message.
-                      name:
-                        type: string
-                        description: An optional name for the user or assistant (for multi-user chats).
-              additionalProperties: true
+              additionalProperties: true  # Accepts any OpenAI JSON fields
       responses:
         "200":
           description: OpenAI response forwarded through the relay
           content:
             application/json:
               schema:
+                description: OpenAI Chat Completions response
                 type: object
-                additionalProperties: true
-                description: OpenAI Chat Completions API response payload
-components:
-  securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: Authorization
-      description: API key for OpenAI (prefixed with 'Bearer ')
-security:
-  - ApiKeyAuth: []
+                additionalProperties: true  # Pass‑through of OpenAI response
