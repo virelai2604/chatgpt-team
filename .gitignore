@@ -39,3 +39,7 @@ pnpm-debug.log*
 .wrangler/tmp/
 .dev.vars
 .dev.vars.*
+
+body.json
+
+repo-tree.txt
