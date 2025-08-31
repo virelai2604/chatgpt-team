@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Not allowed to download files of purpose: assistants",
+    "type": "invalid_request_error",
+    "param": null,
+    "code": null
+  }
+}
