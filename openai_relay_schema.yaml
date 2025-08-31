@@ -1,66 +1,54 @@
 openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
-  title: OpenAI Relay
-  version: 1.0.0
-  description: |
-    Routes ChatGPT requests to OpenAI's /v1/chat/completions endpoint via a
-    Cloudflare Worker. The worker attaches the required OpenAI API key and
-    organization ID headers on the server side.
+  title: ChatGPT-Team Relay (Cloudflare Pages → OpenAI)
+  version: 1.3.0
 servers:
   - url: https://chatgpt-team.pages.dev
-    description: Cloudflare Worker Relay
-
+    description: Cloudflare Pages relay
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearer: []
 paths:
-  /v1/chat/completions:
-    post:
-      summary: Relay to OpenAI Chat Completions
-      description: |
-        Forwards a chat completion request to OpenAI's API. The Cloudflare Worker
-        adds the required OpenAI authentication and organization headers.
-      operationId: createChatCompletion
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ChatCompletionRequest'
-      responses:
-        "200":
-          description: OpenAI response forwarded through the relay
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ChatCompletionResponse'
-
-
-# ---- added endpoints ----
   /v1/responses:
     post:
-      summary: Relay to OpenAI Responses API
-      description: Unified endpoint for text, tools, and more (pass-through to OpenAI).
       operationId: createResponse
+      summary: Unified Responses (text, tools, multimodal)
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [model, input]
-              additionalProperties: true
-      responses:
-        "200":
-          description: Responses API JSON
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
+              required: [model]
+              properties:
+                model: { type: string }
+                input:
+                  oneOf:
+                    - { type: string }
+                    - { type: object }
+                    - { type: array }
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role: { type: string, enum: [system, user, assistant, tool] }
+                      content:
+                        oneOf:
+                          - { type: string }
+                          - { type: array, items: { type: object } }
+      responses: { "200": { description: OK } }
 
   /v1/embeddings:
     post:
-      summary: Relay to OpenAI Embeddings
-      description: Creates embedding vectors for search/RAG.
       operationId: createEmbedding
+      summary: Embeddings
       requestBody:
         required: true
         content:
@@ -68,78 +56,63 @@ paths:
             schema:
               type: object
               required: [model, input]
-              additionalProperties: true
-      responses:
-        "200":
-          description: Embedding vector response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
+              properties:
+                model: { type: string }
+                input:
+                  oneOf:
+                    - { type: string }
+                    - { type: array, items: { type: string } }
+      responses: { "200": { description: OK } }
 
-# ---- added endpoints (no moderation) ----
   /v1/models:
     get:
-      summary: List models (pass-through)
       operationId: listModels
-      responses:
-        "200":
-          description: Models list
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
+      summary: List models
+      responses: { "200": { description: OK } }
 
   /v1/audio/speech:
     post:
-      summary: Text-to-Speech (pass-through)
-      operationId: createSpeech
+      operationId: textToSpeech
+      summary: TTS
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [model, voice, input]
+              required: [model, input, voice]
               properties:
-                model: { type: string, description: "e.g., gpt-4o-mini-tts" }
-                voice: { type: string, description: "e.g., alloy" }
+                model: { type: string }
                 input: { type: string }
-                format: { type: string, description: "e.g., mp3, wav" }
-              additionalProperties: true
+                voice: { type: string }
       responses:
         "200":
-          description: Binary audio
+          description: MP3/OGG/WAV audio
           content:
             audio/mpeg: { schema: { type: string, format: binary } }
             application/octet-stream: { schema: { type: string, format: binary } }
 
   /v1/audio/transcriptions:
     post:
-      summary: Speech-to-Text (pass-through)
-      operationId: createTranscription
+      operationId: speechToText
+      summary: STT
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
               type: object
-              required: [model, file]
+              required: [file, model]
               properties:
-                model: { type: string, description: "e.g., gpt-4o-mini-transcribe or whisper-1" }
-                file:  { type: string, format: binary }
-              additionalProperties: true
-      responses:
-        "200":
-          description: Transcription JSON
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
+                file: { type: string, format: binary }
+                model: { type: string }
+                language: { type: string }
+      responses: { "200": { description: OK } }
 
   /v1/images/generations:
     post:
-      summary: Image generation (pass-through)
-      operationId: createImage
+      operationId: imageGenerate
+      summary: Image generation
       requestBody:
         required: true
         content:
@@ -148,168 +121,132 @@ paths:
               type: object
               required: [model, prompt]
               properties:
-                model:  { type: string, description: "e.g., gpt-image-1" }
+                model: { type: string }
                 prompt: { type: string }
-                size:   { type: string, description: "e.g., 256x256, 1024x1024" }
-                response_format: { type: string, description: "e.g., b64_json" }
-              additionalProperties: true
-      responses:
-        "200":
-          description: Image JSON
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-
-  /v1/images/edits:
-    post:
-      summary: Image edit (pass-through)
-      operationId: editImage
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [model, image, prompt]
-              properties:
-                model:  { type: string }
-                image:  { type: string, format: binary }
-                mask:   { type: string, format: binary }
-                prompt: { type: string }
-              additionalProperties: true
-      responses:
-        "200":
-          description: Image JSON
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-
-  /v1/images/variations:
-    post:
-      summary: Image variation (pass-through)
-      operationId: varyImage
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [model, image]
-              properties:
-                model:  { type: string }
-                image:  { type: string, format: binary }
-              additionalProperties: true
-      responses:
-        "200":
-          description: Image JSON
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
+                size: { type: string, enum: ["1024x1024","1024x1792","1792x1024"] }
+                response_format: { type: string, enum: [url, b64_json] }
+      responses: { "200": { description: OK } }
 
   /v1/files:
     get:
-      summary: List files (pass-through)
       operationId: listFiles
+      summary: List files
+      responses: { "200": { description: OK } }
+    post:
+      operationId: uploadFile
+      summary: Upload file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, purpose]
+              properties:
+                file: { type: string, format: binary }
+                purpose: { type: string, description: "OpenAI file purpose (e.g., user_data, fine-tune, assistants, batch, responses)" }
+      responses: { "200": { description: OK } }
+
+  /v1/files/{file_id}:
+    delete:
+      operationId: deleteFile
+      summary: Delete file
+      parameters:
+        - in: path
+          name: file_id
+          required: true
+          schema: { type: string }
+      responses: { "200": { description: OK } }
+
+  /v1/files/{file_id}/content:
+    get:
+      operationId: getFileContent
+      summary: Download file
+      parameters:
+        - in: path
+          name: file_id
+          required: true
+          schema: { type: string }
       responses:
         "200":
-          description: Files list
+          description: File bytes
           content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-components:
-  securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: Authorization
-      description: API key for OpenAI (prefixed with 'Bearer ')
-  schemas:
-    ChatMessage:
-      type: object
-      required: [role, content]
-      properties:
-        role:
-          type: string
-          description: system, user, assistant, or tool
-          enum: [system, user, assistant, tool]
+            application/octet-stream:
+              schema: { type: string, format: binary }
+
+  # Assistants (minimal)
+  /v1/assistants:
+    post:
+      operationId: createAssistant
+      summary: Create assistant
+      requestBody:
+        required: true
         content:
-          type: string
-          description: Message text
-        name:
-          type: string
-          description: Optional speaker name
-      additionalProperties: false
+          application/json:
+            schema: { type: object }
+      responses: { "200": { description: OK } }
+    get:
+      operationId: listAssistants
+      summary: List assistants
+      responses: { "200": { description: OK } }
 
-    ChatCompletionRequest:
-      type: object
-      required: [model, messages]
-      properties:
-        model:
-          type: string
-          description: OpenAI model ID (e.g., gpt-4o, gpt-5, gpt-5-mini)
-        messages:
-          type: array
-          items:
-            $ref: '#/components/schemas/ChatMessage'
-        temperature:
-          type: number
-          minimum: 0
-          maximum: 2
-        stream:
-          type: boolean
-        tools:
-          type: array
-          items:
-            type: object
-            description: Tool definitions passed through to OpenAI
-      additionalProperties: true
+  /v1/assistants/{assistant_id}:
+    post:
+      operationId: modifyAssistant
+      summary: Modify assistant
+      parameters:
+        - in: path
+          name: assistant_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses: { "200": { description: OK } }
 
-    Choice:
-      type: object
-      properties:
-        index:
-          type: integer
-        message:
-          $ref: '#/components/schemas/ChatMessage'
-        finish_reason:
-          type: string
-        logprobs:
-          nullable: true
-      additionalProperties: true
+  /v1/threads:
+    post:
+      operationId: createThread
+      summary: Create thread
+      responses: { "200": { description: OK } }
 
-    Usage:
-      type: object
-      properties:
-        prompt_tokens: { type: integer }
-        completion_tokens: { type: integer }
-        total_tokens: { type: integer }
-      additionalProperties: true
+  /v1/threads/{thread_id}/messages:
+    post:
+      operationId: createMessage
+      summary: Add message to thread
+      parameters:
+        - in: path
+          name: thread_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses: { "200": { description: OK } }
 
-    ChatCompletionResponse:
-      type: object
-      required: [id, object, created, model, choices]
-      properties:
-        id:
-          type: string
-        object:
-          type: string
-          description: Typically 'chat.completion'
-        created:
-          type: integer
-          description: Unix timestamp (seconds)
-        model:
-          type: string
-        choices:
-          type: array
-          items:
-            $ref: '#/components/schemas/Choice'
-        usage:
-          $ref: '#/components/schemas/Usage'
-        system_fingerprint:
-          type: string
-      additionalProperties: true
+  /v1/threads/{thread_id}/runs:
+    post:
+      operationId: createRun
+      summary: Create run
+      parameters:
+        - in: path
+          name: thread_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses: { "200": { description: OK } }
 
-security:
-  - ApiKeyAuth: []
+
+
+
+
 
 
