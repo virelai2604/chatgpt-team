@@ -2,26 +2,157 @@ openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: Cloudflare → OpenAI Relay
-  version: 1.4.0
+  version: 1.5.0
   description: >
     Catch-all relay for OpenAI's /v1/* endpoints. Authorization is injected at the edge.
 servers:
   - url: https://chatgpt-team.pages.dev
     description: Cloudflare Pages relay
+tags:
+  - name: Chat
+    description: Chat completions (conversational AI)
+  - name: Responses
+    description: Unified responses (completions and beyond)
+  - name: Embeddings
+    description: Vector embeddings for text
+  - name: Models
+    description: Model listing
+  - name: Audio
+    description: Speech-to-text and text-to-speech
+  - name: Images
+    description: Image generation
+  - name: Files
+    description: File uploads and management
+  - name: Assistants
+    description: Experimental Assistants API (v2)
 components:
   securitySchemes:
     bearer:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  schemas:
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          description: Role of the message (system, user, assistant, or tool)
+          enum: [system, user, assistant, tool]
+        content:
+          type: string
+          description: Message content
+        name:
+          type: string
+          description: Optional name of the speaker (for system/tool roles)
+      additionalProperties: false
+    ChatCompletionRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+          description: OpenAI model ID (e.g., gpt-3.5-turbo, gpt-4)
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+        top_p:
+          type: number
+        n:
+          type: integer
+        stream:
+          type: boolean
+        stop:
+          oneOf:
+            - type: string
+            - type: array
+              items: { type: string }
+        max_tokens:
+          type: integer
+        presence_penalty:
+          type: number
+        frequency_penalty:
+          type: number
+        tools:
+          type: array
+          description: Tool definitions to pass through to OpenAI
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: true
+    Choice:
+      type: object
+      properties:
+        index: { type: integer }
+        message:
+          $ref: '#/components/schemas/ChatMessage'
+        finish_reason: { type: string }
+        logprobs:
+          type: object
+          nullable: true
+      additionalProperties: true
+    Usage:
+      type: object
+      properties:
+        prompt_tokens: { type: integer }
+        completion_tokens: { type: integer }
+        total_tokens: { type: integer }
+      additionalProperties: true
+    ChatCompletionResponse:
+      type: object
+      required: [id, object, created, model, choices]
+      properties:
+        id: { type: string }
+        object:
+          type: string
+          description: Typically 'chat.completion'
+        created:
+          type: integer
+          description: Unix timestamp (seconds)
+        model: { type: string }
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/Choice'
+        usage:
+          $ref: '#/components/schemas/Usage'
+        system_fingerprint: { type: string }
+      additionalProperties: true
 security:
   - bearer: []
 paths:
+  /v1/chat/completions:
+    post:
+      operationId: createChatCompletion
+      summary: Chat completions
+      description: Relay to OpenAI Chat Completions API.
+      tags: [Chat]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
+
   /v1/responses:
     post:
       operationId: createResponse
       summary: OpenAI Responses (unified)
       description: Pass-through to OpenAI Responses API.
+      tags: [Responses]
       requestBody:
         required: true
         content:
@@ -37,9 +168,7 @@ paths:
                     - { type: array, items: { type: object, additionalProperties: true } }
                 messages:
                   type: array
-                  items:
-                    type: object
-                    additionalProperties: true
+                  items: { type: object, additionalProperties: true }
               additionalProperties: true
       responses:
         "200":
@@ -52,6 +181,7 @@ paths:
     post:
       operationId: createEmbedding
       summary: Embeddings
+      tags: [Embeddings]
       requestBody:
         required: true
         content:
@@ -77,6 +207,7 @@ paths:
     get:
       operationId: listModels
       summary: List models
+      tags: [Models]
       responses:
         "200":
           description: OK
@@ -87,7 +218,8 @@ paths:
   /v1/audio/speech:
     post:
       operationId: textToSpeech
-      summary: TTS (text → audio)
+      summary: Text to Speech
+      tags: [Audio]
       requestBody:
         required: true
         content:
@@ -105,13 +237,16 @@ paths:
         "200":
           description: Audio stream
           content:
-            audio/mpeg: { schema: { type: string, format: binary } }
-            application/octet-stream: { schema: { type: string, format: binary } }
+            audio/mpeg:
+              schema: { type: string, format: binary }
+            application/octet-stream:
+              schema: { type: string, format: binary }
 
   /v1/audio/transcriptions:
     post:
       operationId: speechToText
-      summary: STT (audio → text)
+      summary: Speech to Text
+      tags: [Audio]
       requestBody:
         required: true
         content:
@@ -135,6 +270,7 @@ paths:
     post:
       operationId: imageGenerate
       summary: Image generation
+      tags: [Images]
       requestBody:
         required: true
         content:
@@ -147,7 +283,7 @@ paths:
                 prompt: { type: string }
                 size:
                   type: string
-                  enum: ["1024x1024","1024x1792","1792x1024"]
+                  enum: ["1024x1024", "1024x1792", "1792x1024"]
                 response_format:
                   type: string
                   enum: [url, b64_json]
@@ -163,6 +299,7 @@ paths:
     get:
       operationId: listFiles
       summary: List files
+      tags: [Files]
       responses:
         "200":
           description: OK
@@ -172,6 +309,7 @@ paths:
     post:
       operationId: uploadFile
       summary: Upload file
+      tags: [Files]
       requestBody:
         required: true
         content:
@@ -183,7 +321,7 @@ paths:
                 file: { type: string, format: binary }
                 purpose:
                   type: string
-                  description: assistants or fine-tune (others may be restricted)
+                  description: e.g., "assistants" or "fine-tune"
               additionalProperties: true
       responses:
         "200":
@@ -196,6 +334,7 @@ paths:
     delete:
       operationId: deleteFile
       summary: Delete file
+      tags: [Files]
       parameters:
         - in: path
           name: file_id
@@ -211,7 +350,8 @@ paths:
   /v1/files/{file_id}/content:
     get:
       operationId: getFileContent
-      summary: Download file bytes
+      summary: Download file
+      tags: [Files]
       parameters:
         - in: path
           name: file_id
@@ -219,16 +359,27 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: File bytes
+          description: File content
           content:
             application/octet-stream:
               schema: { type: string, format: binary }
 
   /v1/assistants:
+    get:
+      operationId: listAssistants
+      summary: List assistants
+      tags: [Assistants]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
     post:
       operationId: createAssistant
-      summary: Create assistant (Assistants v2)
-      description: Requires OpenAI-Beta: assistants=v2 (relay adds it automatically).
+      summary: Create assistant
+      description: Requires OpenAI-Beta header (assistants=v2).
+      tags: [Assistants]
       requestBody:
         required: true
         content:
@@ -240,20 +391,12 @@ paths:
           content:
             application/json:
               schema: { type: object, additionalProperties: true }
-    get:
-      operationId: listAssistants
-      summary: List assistants (Assistants v2)
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
 
   /v1/assistants/{assistant_id}:
     post:
       operationId: modifyAssistant
-      summary: Modify assistant (Assistants v2)
+      summary: Update assistant
+      tags: [Assistants]
       parameters:
         - in: path
           name: assistant_id
@@ -274,7 +417,8 @@ paths:
   /v1/threads:
     post:
       operationId: createThread
-      summary: Create thread (Assistants v2)
+      summary: Create thread
+      tags: [Assistants]
       requestBody:
         required: false
         content:
@@ -290,7 +434,8 @@ paths:
   /v1/threads/{thread_id}/messages:
     post:
       operationId: createMessage
-      summary: Add message to thread (Assistants v2)
+      summary: Add thread message
+      tags: [Assistants]
       parameters:
         - in: path
           name: thread_id
@@ -311,7 +456,8 @@ paths:
   /v1/threads/{thread_id}/runs:
     post:
       operationId: createRun
-      summary: Create run (Assistants v2)
+      summary: Create thread run
+      tags: [Assistants]
       parameters:
         - in: path
           name: thread_id
@@ -328,4 +474,3 @@ paths:
           content:
             application/json:
               schema: { type: object, additionalProperties: true }
-

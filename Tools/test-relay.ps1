@@ -203,7 +203,7 @@ foreach ($t in $targets) {
     try {
         # Use curl for binary response to save directly to file
         Remove-Item -ErrorAction SilentlyContinue $ttsFile  # remove old file if exists
-        $curlCmd = "curl.exe -s -w `%{http_code}` -H `"Authorization: Bearer test`" -H `"Content-Type: application/json`" -d `'{"model":"tts-1","input":"Hello world","voice":"en-US-JennyNeural"}'` `"${base}/v1/audio/speech`" -o `"$ttsFile`""
+        $curlCmd = "curl.exe -s -w `%{http_code}` -H `"Authorization: Bearer test`" -H `"Content-Type: application/json`" -d `'{\"model\":\"tts-1\",\"input\":\"Hello world\",\"voice\":\"en-US-JennyNeural\"}'` \""${base}/v1/audio/speech"\" -o \"${ttsFile}\""
         $statusCodeStr = Invoke-Expression $curlCmd
         $statusCode = [int] $statusCodeStr 2>$null
         if ($statusCode -eq 200 -and (Test-Path -LiteralPath $ttsFile) -and ((Get-Item $ttsFile).Length -gt 0)) {
@@ -320,7 +320,7 @@ foreach ($t in $targets) {
             $downloadPath = "$name-downloaded-sample.txt"
             Remove-Item -ErrorAction SilentlyContinue $downloadPath
             # Use curl to download file content to disk (binary-safe)
-            $curlCmd = "curl.exe -s -w `%{http_code}` -H `"Authorization: Bearer test`" `"${base}/v1/files/$uploadedFileId/content`" -o `"$downloadPath`""
+            $curlCmd = "curl.exe -s -w `%{http_code}` -H `"Authorization: Bearer test`" \""${base}/v1/files/$uploadedFileId/content"\" -o \"${downloadPath}\""
             $statusCodeStr = Invoke-Expression $curlCmd
             $code = [int] $statusCodeStr 2>$null
             if ($code -eq 200 -and (Test-Path -LiteralPath $downloadPath)) {
