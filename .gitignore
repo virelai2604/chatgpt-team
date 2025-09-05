@@ -43,3 +43,9 @@ pnpm-debug.log*
 body.json
 
 repo-tree.txt
+
+# relay local artifacts
+body.local.txt
+headers.local.txt
+downloads/*.bin
+*.mp3

@@ -1,8 +1,10 @@
 openapi: 3.1.0
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
-  title: ChatGPT-Team Relay (Cloudflare Pages → OpenAI)
-  version: 1.3.0
+  title: Cloudflare → OpenAI Relay
+  version: 1.4.0
+  description: >
+    Catch-all relay for OpenAI's /v1/* endpoints. Authorization is injected at the edge.
 servers:
   - url: https://chatgpt-team.pages.dev
     description: Cloudflare Pages relay
@@ -18,7 +20,8 @@ paths:
   /v1/responses:
     post:
       operationId: createResponse
-      summary: Unified Responses (text, tools, multimodal)
+      summary: OpenAI Responses (unified)
+      description: Pass-through to OpenAI Responses API.
       requestBody:
         required: true
         content:
@@ -31,19 +34,19 @@ paths:
                 input:
                   oneOf:
                     - { type: string }
-                    - { type: object }
-                    - { type: array }
+                    - { type: array, items: { type: object, additionalProperties: true } }
                 messages:
                   type: array
                   items:
                     type: object
-                    properties:
-                      role: { type: string, enum: [system, user, assistant, tool] }
-                      content:
-                        oneOf:
-                          - { type: string }
-                          - { type: array, items: { type: object } }
-      responses: { "200": { description: OK } }
+                    additionalProperties: true
+              additionalProperties: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
   /v1/embeddings:
     post:
@@ -62,18 +65,29 @@ paths:
                   oneOf:
                     - { type: string }
                     - { type: array, items: { type: string } }
-      responses: { "200": { description: OK } }
+              additionalProperties: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
   /v1/models:
     get:
       operationId: listModels
       summary: List models
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
   /v1/audio/speech:
     post:
       operationId: textToSpeech
-      summary: TTS
+      summary: TTS (text → audio)
       requestBody:
         required: true
         content:
@@ -85,9 +99,11 @@ paths:
                 model: { type: string }
                 input: { type: string }
                 voice: { type: string }
+                format: { type: string }
+              additionalProperties: true
       responses:
         "200":
-          description: MP3/OGG/WAV audio
+          description: Audio stream
           content:
             audio/mpeg: { schema: { type: string, format: binary } }
             application/octet-stream: { schema: { type: string, format: binary } }
@@ -95,7 +111,7 @@ paths:
   /v1/audio/transcriptions:
     post:
       operationId: speechToText
-      summary: STT
+      summary: STT (audio → text)
       requestBody:
         required: true
         content:
@@ -107,7 +123,13 @@ paths:
                 file: { type: string, format: binary }
                 model: { type: string }
                 language: { type: string }
-      responses: { "200": { description: OK } }
+              additionalProperties: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
   /v1/images/generations:
     post:
@@ -123,15 +145,30 @@ paths:
               properties:
                 model: { type: string }
                 prompt: { type: string }
-                size: { type: string, enum: ["1024x1024","1024x1792","1792x1024"] }
-                response_format: { type: string, enum: [url, b64_json] }
-      responses: { "200": { description: OK } }
+                size:
+                  type: string
+                  enum: ["1024x1024","1024x1792","1792x1024"]
+                response_format:
+                  type: string
+                  enum: [url, b64_json]
+              additionalProperties: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
   /v1/files:
     get:
       operationId: listFiles
       summary: List files
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
     post:
       operationId: uploadFile
       summary: Upload file
@@ -144,8 +181,16 @@ paths:
               required: [file, purpose]
               properties:
                 file: { type: string, format: binary }
-                purpose: { type: string, description: "OpenAI file purpose (e.g., user_data, fine-tune, assistants, batch, responses)" }
-      responses: { "200": { description: OK } }
+                purpose:
+                  type: string
+                  description: assistants or fine-tune (others may be restricted)
+              additionalProperties: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
   /v1/files/{file_id}:
     delete:
@@ -156,12 +201,17 @@ paths:
           name: file_id
           required: true
           schema: { type: string }
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
   /v1/files/{file_id}/content:
     get:
       operationId: getFileContent
-      summary: Download file
+      summary: Download file bytes
       parameters:
         - in: path
           name: file_id
@@ -174,26 +224,36 @@ paths:
             application/octet-stream:
               schema: { type: string, format: binary }
 
-  # Assistants (minimal)
   /v1/assistants:
     post:
       operationId: createAssistant
-      summary: Create assistant
+      summary: Create assistant (Assistants v2)
+      description: Requires OpenAI-Beta: assistants=v2 (relay adds it automatically).
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
-      responses: { "200": { description: OK } }
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
     get:
       operationId: listAssistants
-      summary: List assistants
-      responses: { "200": { description: OK } }
+      summary: List assistants (Assistants v2)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
   /v1/assistants/{assistant_id}:
     post:
       operationId: modifyAssistant
-      summary: Modify assistant
+      summary: Modify assistant (Assistants v2)
       parameters:
         - in: path
           name: assistant_id
@@ -203,19 +263,34 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object }
-      responses: { "200": { description: OK } }
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
   /v1/threads:
     post:
       operationId: createThread
-      summary: Create thread
-      responses: { "200": { description: OK } }
+      summary: Create thread (Assistants v2)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
   /v1/threads/{thread_id}/messages:
     post:
       operationId: createMessage
-      summary: Add message to thread
+      summary: Add message to thread (Assistants v2)
       parameters:
         - in: path
           name: thread_id
@@ -225,13 +300,18 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object }
-      responses: { "200": { description: OK } }
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
   /v1/threads/{thread_id}/runs:
     post:
       operationId: createRun
-      summary: Create run
+      summary: Create run (Assistants v2)
       parameters:
         - in: path
           name: thread_id
@@ -241,12 +321,11 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object }
-      responses: { "200": { description: OK } }
-
-
-
-
-
-
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
 
