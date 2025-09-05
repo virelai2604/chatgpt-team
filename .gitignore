@@ -49,3 +49,9 @@ body.local.txt
 headers.local.txt
 downloads/*.bin
 *.mp3
+
+.wrangler/state/
+
+node_modules/.cache/
+
+node_modules/.mf/
