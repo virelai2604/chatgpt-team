@@ -1,384 +1,50 @@
 openapi: 3.1.0
 info:
-  title: OpenAI Relay API
-  version: 1.0.0
-  description: |
-    This OpenAPI document defines a catch‑all relay for OpenAI’s public endpoints.
-    It aggregates multiple API surfaces—including Responses, Embeddings, Audio,
-    Images, Files, Assistants v2 and Models—under a single `/v1` namespace. Models
-    are whitelisted by family so that future snapshots can be used without changing
-    the schema.
+  title: Cloudflare → OpenAI Relay
+  version: 1.5.1
+  description: Cloudflare Pages relay that proxies /v1/* to OpenAI with server-side auth and CORS.
 servers:
-  - url: https://chatgpt-team.pages.dev/v1
-    description: Cloudflare Pages relay
+  - url: https://chatgpt-team.pages.dev
+    description: Production (Pages)
+  - url: http://localhost:8788
+    description: Local (wrangler pages dev)
+
 components:
   securitySchemes:
     bearer:
       type: http
       scheme: bearer
       bearerFormat: JWT
-  schemas:
-    ModelId:
-      type: string
-      description: Allowed model identifiers
-      enum:
-        - gpt-5
-        - gpt-5-mini
-        - gpt-5-nano
-        - gpt-5-chat-latest
-        - o3
-        - o3-pro
-        - o4-mini
-        - gpt-4.1
-        - gpt-4.1-mini
-        - gpt-4.1-nano
-        - gpt-4o
-        - gpt-4o-mini
-        - gpt-realtime
-        - text-embedding-3-small
-        - text-embedding-3-large
-        - gpt-image-1
-        - whisper-1
-        - gpt-4o-transcribe
-        - gpt-4o-mini-transcribe
-        - tts-1
-        - tts-1-hd
-        - gpt-4o-mini-tts
-    GenericResponse:
-      type: object
-      additionalProperties: true
+
+security:
+  - bearer: []
+
 paths:
-  /models:
+  /v1/models:
     get:
-      summary: List available models
-      security: [{ bearer: [] }]
+      summary: List models
+      operationId: listModels
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema: { type: object, additionalProperties: true }
-  /responses:
+
+  /v1/chat/completions:
     post:
-      summary: Create a response (chat/completion)
-      description: |
-        Unified Responses API.  Handles chat, vision, multimodal and tool calls.
-      security: [{ bearer: [] }]
+      summary: Chat Completions
+      operationId: createChatCompletion
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [model]
-              properties:
-                model:
-                  $ref: '#/components/schemas/ModelId'
-                instructions:
-                  type: string
-                input:
-                  oneOf:
-                    - type: string
-                    - type: array
-                      items: { type: object, additionalProperties: true }
-                messages:
-                  type: array
-                  items:
-                    type: object
-                    additionalProperties: true
-                attachments:
-                  type: array
-                  items:
-                    type: object
-                    additionalProperties: true
+              required: [model, messages]
               additionalProperties: true
       responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericResponse'
-  /embeddings:
-    post:
-      summary: Create embeddings
-      security: [{ bearer: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, input]
-              properties:
-                model: { $ref: '#/components/schemas/ModelId' }
-                input:
-                  oneOf:
-                    - type: string
-                    - type: array
-                      items: { type: string }
-              additionalProperties: true
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-  /images/generations:
-    post:
-      summary: Generate an image
-      security: [{ bearer: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [prompt, size]
-              properties:
-                prompt: { type: string }
-                size: { type: string }
-              additionalProperties: true
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-  /audio/speech:
-    post:
-      summary: Text to speech
-      security: [{ bearer: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, voice, input]
-              properties:
-                model: { $ref: '#/components/schemas/ModelId' }
-                voice: { type: string }
-                input: { type: string }
-              additionalProperties: true
-      responses:
-        '200':
-          description: OK
-          content:
-            audio/mpeg:
-              schema: { type: string, format: binary }
-  /audio/transcriptions:
-    post:
-      summary: Speech to text
-      security: [{ bearer: [] }]
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file, model]
-              properties:
-                file:
-                  type: string
-                  format: binary
-                model:
-                  $ref: '#/components/schemas/ModelId'
-              additionalProperties: true
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-  /files:
-    post:
-      summary: Upload a file
-      security: [{ bearer: [] }]
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file, purpose]
-              properties:
-                file:
-                  type: string
-                  format: binary
-                purpose:
-                  type: string
-              additionalProperties: true
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-    get:
-      summary: List files
-      security: [{ bearer: [] }]
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-  /files/{file_id}:
-    get:
-      summary: Retrieve a file
-      security: [{ bearer: [] }]
-      parameters:
-        - name: file_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-  /files/{file_id}/content:
-    get:
-      summary: Download file content
-      security: [{ bearer: [] }]
-      parameters:
-        - name: file_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-  /assistants:
-    post:
-      summary: Create an assistant (v2)
-      description: Assistants API v2 endpoint. Requires OpenAI-Beta header.
-      security: [{ bearer: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model]
-              properties:
-                model: { $ref: '#/components/schemas/ModelId' }
-                name: { type: string }
-                instructions: { type: string }
-                tools:
-                  type: array
-                  items:
-                    type: object
-                    additionalProperties: true
-              additionalProperties: true
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-  /threads:
-    post:
-      summary: Create a thread
-      security: [{ bearer: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-  /threads/{thread_id}/messages:
-    post:
-      summary: Add a message to a thread
-      security: [{ bearer: [] }]
-      parameters:
-        - name: thread_id
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [role, content]
-              properties:
-                role:
-                  type: string
-                  enum: [user, assistant, tool]
-                content:
-                  type: string
-                file_ids:
-                  type: array
-                  items: { type: string }
-              additionalProperties: true
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-  /threads/{thread_id}/runs:
-    post:
-      summary: Create a run
-      security: [{ bearer: [] }]
-      parameters:
-        - name: thread_id
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [assistant_id]
-              properties:
-                assistant_id: { type: string }
-                instructions: { type: string }
-                tools:
-                  type: array
-                  items:
-                    type: object
-                    additionalProperties: true
-              additionalProperties: true
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-  /threads/{thread_id}/runs/{run_id}:
-    get:
-      summary: Get run status
-      security: [{ bearer: [] }]
-      parameters:
-        - name: thread_id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: run_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
