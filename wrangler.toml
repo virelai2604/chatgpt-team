@@ -2,6 +2,29 @@ name = "chatgpt-team"
 compatibility_date = "2025-09-05"
 pages_build_output_dir = "."
 
+# Optional environment variables.  The values here are placeholders
+# and should be overridden via `.dev.vars` for local development or
+# via Cloudflare dashboard / `wrangler secret put` for production.
+[vars]
+# Primary API key names.  Do not set your real key here; instead, use
+# `wrangler secret put` to store secrets securely.  These definitions
+# exist solely to document the expected variable names.
+OPENAI_KEY = ""
+OPENAI_API_KEY = ""
+
+# Organisation identifiers.  Only one needs to be set.
+OPENAI_ORG_ID = ""
+OPENAI_ORG = ""
+OPENAI_ORGANIZATION = ""
+
+# Project and beta flag.  Optional.
+OPENAI_PROJECT = ""
+OPENAI_BETA = ""
+
+# Base URL.  Leave blank for https://api.openai.com.  Override in
+# .dev.vars for local development (e.g., http://localhost:8787/v1).
+BASE_URL = ""
+
 
 
 
