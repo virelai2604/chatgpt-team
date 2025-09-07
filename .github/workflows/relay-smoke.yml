@@ -1,0 +1,24 @@
+name: Relay Smoke
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    env:
+      BASE: https://chatgpt-team.pages.dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run smoke tests (PowerShell 7)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not (Test-Path "tools/relay-smoke.ps1")) {
+            Write-Error "tools/relay-smoke.ps1 not found"; exit 1
+          }
+          ./tools/relay-smoke.ps1 -Base $env:BASE -TimeoutSec 120
