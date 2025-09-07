@@ -21,9 +21,16 @@ OPENAI_ORGANIZATION = ""
 OPENAI_PROJECT = ""
 OPENAI_BETA = ""
 
-# Base URL.  Leave blank for https://api.openai.com.  Override in
-# .dev.vars for local development (e.g., http://localhost:8787/v1).
+# Base URL used by clients to call the relay.  Leave blank to use the Pages
+# domain.  In local development, set `BASE_URL` in `.dev.vars` to
+# something like `http://127.0.0.1:8787/v1`.
 BASE_URL = ""
+
+# Upstream base override.  Leave blank to use https://api.openai.com for
+# all proxied requests.  If set, this should be the full origin URL
+# (without trailing slash) that the relay should forward to, e.g.,
+# `https://some-other-endpoint`.
+BASE = ""
 
 
 

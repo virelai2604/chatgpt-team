@@ -55,3 +55,8 @@ downloads/*.bin
 node_modules/.cache/
 
 node_modules/.mf/
+node_modules/
+.wrangler/
+.dev.vars
+dist/
+**/.DS_Store
