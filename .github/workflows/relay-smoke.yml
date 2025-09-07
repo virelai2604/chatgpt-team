@@ -14,11 +14,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run smoke tests (PowerShell 7)
+      - name: Diagnostics
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          if (-not (Test-Path "tools/relay-smoke.ps1")) {
-            Write-Error "tools/relay-smoke.ps1 not found"; exit 1
-          }
-          ./tools/relay-smoke.ps1 -Base $env:BASE -TimeoutSec 120
+          Write-Host "PSVersion:"; $PSVersionTable
+          Write-Host "Health:"; curl -sS $env:BASE/health
+          Write-Host "Repo files:"; Get-ChildItem -Recurse tools | Format-List -Property FullName,Length
+
+      - name: Run smoke tests (PowerShell 7)
+        shell: pwsh
+        run: ./tools/relay-smoke.ps1 -Base $env:BASE -TimeoutSec 120
