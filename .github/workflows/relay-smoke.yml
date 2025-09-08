@@ -1,7 +1,6 @@
 name: relay-smoke
 on:
-  push:
-    branches: [ main ]
+  push: { branches: [ main ] }
   workflow_dispatch: {}
 jobs:
   smoke:
@@ -11,7 +10,6 @@ jobs:
       - name: Run smoke
         shell: pwsh
         run: |
-          ./tools/smoke-all.ps1 -BaseUrl "$RELAY_BASEURL" -ApiKey "$OPENAI_API_KEY" -Model gpt-4o-mini
+          ./tools/smoke-all.ps1 -BaseUrl "$RELAY_BASEURL" -NoClientAuth -Model gpt-4o-mini
         env:
           RELAY_BASEURL: $\{\{ secrets.RELAY_BASEURL \}\}
-          OPENAI_API_KEY: $\{\{ secrets.OPENAI_API_KEY \}\}
