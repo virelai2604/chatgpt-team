@@ -13,7 +13,7 @@ param(
   [string]$ApiKey = $env:OPENAI_API_KEY,
   [string]$Org = $env:OPENAI_ORG,
   [string]$Project = $env:OPENAI_PROJECT,
-  [string]$Model = 'o4-mini',
+  [string]$Model = 'gpt-4o-mini',
   [string]$EmbeddingModel = 'text-embedding-3-small',
   [string]$TtsModel = 'gpt-4o-mini-tts',
   [string]$SttModel = 'gpt-4o-mini-transcribe',
@@ -416,3 +416,4 @@ if ($failedRequired) {
   Write-Host "All required checks passed." -ForegroundColor Green
   exit 0
 }
+
