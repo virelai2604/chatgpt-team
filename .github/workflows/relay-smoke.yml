@@ -1,28 +1,17 @@
-name: Relay Smoke
-
+name: relay-smoke
 on:
   push:
-    branches: [ main, master ]
-  workflow_dispatch:
-
+    branches: [ main ]
+  workflow_dispatch: {}
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    env:
-      BASE: https://chatgpt-team.pages.dev
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Diagnostics
+      - uses: actions/checkout@v4
+      - name: Run smoke
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          Write-Host "PSVersion:"; $PSVersionTable
-          Write-Host "Health:"; curl -sS $env:BASE/health
-          Write-Host "Repo files (tools/):"
-          if (Test-Path tools) { Get-ChildItem -Recurse tools | Format-List -Property FullName,Length } else { Write-Host "tools/ missing" }
-
-      - name: Run smoke tests (PowerShell 7)
-        shell: pwsh
-        run: ./tools/relay-smoke.ps1 -Base $env:BASE -TimeoutSec 120
+          ./tools/smoke-all.ps1 -BaseUrl "$RELAY_BASEURL" -ApiKey "$OPENAI_API_KEY" -Model gpt-4o-mini
+        env:
+          RELAY_BASEURL: $\{\{ secrets.RELAY_BASEURL \}\}
+          OPENAI_API_KEY: $\{\{ secrets.OPENAI_API_KEY \}\}

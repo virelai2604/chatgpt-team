@@ -4,24 +4,36 @@ param(
   [int]$TimeoutSec = 120,
   [switch]$VerboseMode,
 
-  # Per-endpoint model defaults
   [string]$ModelChat      = "gpt-4o-mini",
   [string]$ModelResponses = "o4-mini",
   [string]$ModelEmbed     = "text-embedding-3-small",
   [string]$ModelTTS       = "gpt-4o-mini-tts",
   [string]$ModelSTT       = "whisper-1",
   [string]$ModelImage     = "gpt-image-1",
-  [string]$ModelRealtime  = "gpt-4o-realtime-preview-2024-12-17"
+  [string]$ModelRealtime  = "gpt-4o-realtime-preview-2024-12-17",
+
+  # extras
+  [string]$RealtimeBase,
+  [string]$Org,
+  [string]$Project,
+
+  # files run order
+  [switch]$FilesFirst,
+  [switch]$OnlyFiles
 )
 
 $ErrorActionPreference = "Stop"
 
 # ---------- Base & Auth ----------
-$Local = "http://127.0.0.1:8788"
-$Live  = "https://chatgpt-team.pages.dev"
-
+$Live = "https://chatgpt-team.pages.dev"
 if ([string]::IsNullOrWhiteSpace($Base)) { $Base = $Live }
 if ($Base -notmatch "/v1/?$") { $Base = ($Base.TrimEnd('/')) + "/v1" }
+
+if ($RealtimeBase) {
+  if ($RealtimeBase -notmatch "/v1/?$") { $RealtimeBase = ($RealtimeBase.TrimEnd('/')) + "/v1" }
+} else {
+  $RealtimeBase = $Base
+}
 
 if ([string]::IsNullOrWhiteSpace($Auth)) {
   $Auth = $env:OPENAI_CLIENT_KEY
@@ -38,19 +50,29 @@ function New-JsonHeaders {
   param([switch]$WithAuth)
   $h = @{ "Content-Type" = "application/json" }
   if ($WithAuth -and $UseHeader) { $h["Authorization"] = "Bearer $Auth" }
+  $org = if ($PSBoundParameters.ContainsKey("Org") -and $Org) { $Org } elseif ($env:OPENAI_ORG_ID) { $env:OPENAI_ORG_ID } else { $null }
+  $prj = if ($PSBoundParameters.ContainsKey("Project") -and $Project) { $Project } elseif ($env:OPENAI_PROJECT) { $env:OPENAI_PROJECT } else { $null }
+  if ($org) { $h["OpenAI-Organization"] = $org }
+  if ($prj) { $h["OpenAI-Project"] = $prj }
   $h
 }
+
 function New-MultipartHeaders {
-  # Do NOT set Content-Type for -Form; PS builds the multipart boundary automatically.
   $h = @{}
   if ($UseHeader) { $h["Authorization"] = "Bearer $Auth" }
+  $org = if ($PSBoundParameters.ContainsKey("Org") -and $Org) { $Org } elseif ($env:OPENAI_ORG_ID) { $env:OPENAI_ORG_ID } else { $null }
+  $prj = if ($PSBoundParameters.ContainsKey("Project") -and $Project) { $Project } elseif ($env:OPENAI_PROJECT) { $env:OPENAI_PROJECT } else { $null }
+  if ($org) { $h["OpenAI-Organization"] = $org }
+  if ($prj) { $h["OpenAI-Project"] = $prj }
   $h
 }
+
 function Invoke-JsonPost {
   param([string]$Uri, [hashtable]$Body, [int]$Timeout = $TimeoutSec)
   $json = $Body | ConvertTo-Json -Depth 12
   Invoke-RestMethod -Uri $Uri -Method Post -Headers (New-JsonHeaders -WithAuth) -Body $json -TimeoutSec $Timeout
 }
+
 function U { param([string]$Path) ($Base.TrimEnd('/')) + $Path }
 
 $global:FAILURES = New-Object System.Collections.Generic.List[string]
@@ -59,8 +81,61 @@ function Add-Failure { param([string]$Name,[string]$Details) $global:FAILURES.Ad
 # ---------- temp ----------
 $Tmp = Join-Path $PSScriptRoot "smoke-tmp"
 if (-not (Test-Path $Tmp)) { New-Item -ItemType Directory -Path $Tmp | Out-Null }
-$SampleTxt = Join-Path $Tmp "sample.txt"
-if (-not (Test-Path $SampleTxt)) { "hello from relay smoke" | Set-Content -Encoding UTF8 $SampleTxt }
+
+# ---------- Files Suite (fine-tune JSONL path) ----------
+function Run-FilesSuite {
+  try {
+    Say "Files: preparing sample.jsonl"
+    $sampleJsonl = Join-Path $Tmp "sample.jsonl"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $jsonl = @(
+      '{"messages":[{"role":"system","content":"You are concise."},{"role":"user","content":"ping?"},{"role":"assistant","content":"pong."}]}'
+    ) -join "`n"
+    [IO.File]::WriteAllText($sampleJsonl, $jsonl, $utf8NoBom)
+
+    Say "Files: upload (.jsonl, purpose=fine-tune)"
+    $up = Invoke-RestMethod -Uri (U "/files") -Method Post -Headers (New-MultipartHeaders) `
+          -Form @{ file = Get-Item $sampleJsonl; purpose = "fine-tune" } -TimeoutSec $TimeoutSec
+    $fid = $up.id; if (-not $fid) { throw "upload returned no id" }
+
+    Say "Files: list"
+    $list = Invoke-RestMethod -Uri (U "/files") -Method Get -Headers (New-JsonHeaders -WithAuth) -TimeoutSec $TimeoutSec
+    if (-not $list.data -or $list.data.Count -lt 1) { throw "list empty" }
+
+    Say "Files: get metadata"
+    $meta = Invoke-RestMethod -Uri (U ("/files/{0}" -f $fid)) -Method Get -Headers (New-JsonHeaders -WithAuth) -TimeoutSec $TimeoutSec
+    if ($meta.id -ne $fid) { throw "metadata id mismatch" }
+
+    Say "Files: download content"
+    $dlPath = Join-Path $Tmp "downloaded.jsonl"
+    Invoke-WebRequest -Uri (U ("/files/{0}/content" -f $fid)) -Method Get -Headers (New-JsonHeaders -WithAuth) -TimeoutSec $TimeoutSec -OutFile $dlPath | Out-Null
+    if (-not (Test-Path $dlPath)) { throw "no content file" }
+    if ((Get-Item $dlPath).Length -lt 1) { throw "downloaded content empty" }
+
+    Say "Files: delete"
+    $null = Invoke-RestMethod -Uri (U ("/files/{0}" -f $fid)) -Method Delete -Headers (New-JsonHeaders -WithAuth) -TimeoutSec $TimeoutSec
+
+    # Negative probes (non-fatal)
+    try { $null = Invoke-RestMethod -Uri (U ("/files/{0}" -f $fid)) -Method Get -Headers (New-JsonHeaders -WithAuth) -TimeoutSec $TimeoutSec; Write-Host "[WARN] files.get after delete unexpectedly succeeded" -ForegroundColor Yellow } catch { Say "Files: confirmed metadata gone" }
+    try { $tmp2 = Join-Path $Tmp "file-content-2.bin"; Invoke-WebRequest -Uri (U ("/files/{0}/content" -f $fid)) -Method Get -Headers (New-JsonHeaders -WithAuth) -TimeoutSec $TimeoutSec -OutFile $tmp2 | Out-Null; Write-Host "[WARN] files.content after delete unexpectedly succeeded" -ForegroundColor Yellow } catch { Say "Files: confirmed content gone" }
+  }
+  catch {
+    Add-Failure "files" $_.Exception.Message
+  }
+}
+
+# ---------- optional ordering ----------
+if ($FilesFirst -or $OnlyFiles) { Run-FilesSuite }
+if ($OnlyFiles) {
+  if ($global:FAILURES.Count) {
+    Write-Host "`nFAILURES:" -ForegroundColor Red
+    $global:FAILURES | ForEach-Object { Write-Host " - $_" -ForegroundColor Red }
+    exit 2
+  } else {
+    Write-Host "`nFiles-only suite passed." -ForegroundColor Green
+    exit 0
+  }
+}
 
 # ---------- 1) models ----------
 try {
@@ -128,25 +203,17 @@ try {
   }
 }
 
-# ---------- 7) audio/transcriptions (multipart) ----------
+# ---------- 7) audio/transcriptions ----------
 try {
   $sttIn = Join-Path $Tmp "tts-check.mp3"
   if (Test-Path $sttIn) {
     Say "POST /v1/audio/transcriptions"
     $stt = Invoke-RestMethod -Uri (U "/audio/transcriptions") -Method Post -Headers (New-MultipartHeaders) -Form @{ model=$ModelSTT; file=(Get-Item $sttIn) } -TimeoutSec $TimeoutSec
     $null = $stt.text | Out-Null
-  } else { Say "STT: skipped (no mp3)" }
+  } else {
+    Say "STT: skipped (no mp3)"
+  }
 } catch { Add-Failure "audio.transcriptions" $_.Exception.Message }
-
-# ---------- 8) files upload/list/delete ----------
-try {
-  Say "Files lifecycle"
-  $up = Invoke-RestMethod -Uri (U "/files") -Method Post -Headers (New-MultipartHeaders) -Form @{ purpose="assistants"; file=(Get-Item $SampleTxt) } -TimeoutSec $TimeoutSec
-  $fid = $up.id; if (-not $fid) { throw "no file id" }
-  $list = Invoke-RestMethod -Uri (U "/files") -Method Get -Headers (New-JsonHeaders -WithAuth) -TimeoutSec $TimeoutSec
-  if (-not $list.data) { throw "list empty" }
-  $null = Invoke-RestMethod -Uri (U ("/files/{0}" -f $fid)) -Method Delete -Headers (New-JsonHeaders -WithAuth) -TimeoutSec $TimeoutSec
-} catch { Add-Failure "files" $_.Exception.Message }
 
 # ---------- 9) assistants v2 ----------
 try {
@@ -159,20 +226,24 @@ try {
   if (-not $run.id) { throw "run create failed" }
 } catch { Add-Failure "assistants.v2" $_.Exception.Message }
 
-# ---------- 10) realtime handshake (WARN on Pages) ----------
+# ---------- 10) realtime handshake (HTTP/1.1 + WS headers) ----------
 try {
   Say "Realtime handshake"
-  $root   = $Base -replace "/v1/?$",""
-  $rt1    = "$root/realtime?model=$ModelRealtime"
-  $rt2    = "$Base/realtime?model=$ModelRealtime"
-  $hdrOpt = if ($UseHeader) { "-H `"Authorization: Bearer $Auth`"" } else { "" }
-  $code1  = cmd /c "curl.exe -s -o NUL -w `%{http_code} $hdrOpt -H `"Connection: Upgrade`" -H `"Upgrade: websocket`" `"$rt1`""
-  if ($code1 -ne "101") {
-    $code2 = cmd /c "curl.exe -s -o NUL -w `%{http_code} $hdrOpt -H `"Connection: Upgrade`" -H `"Upgrade: websocket`" `"$rt2`""
-    if ($code2 -ne "101") {
-      Write-Host "[WARN] Realtime not upgrading on Pages (codes: $code1,$code2) — skipping" -ForegroundColor Yellow
-    } else { Say "Realtime 101 (via /v1) OK" }
-  } else { Say "Realtime 101 OK" }
+  $useBase = if ($RealtimeBase -and $RealtimeBase.Trim()) { $RealtimeBase.TrimEnd("/") } else { $Base.TrimEnd("/") }
+  $rtUrl   = "$useBase/realtime?model=$ModelRealtime"
+
+  $bytes = New-Object 'System.Byte[]' 16
+  [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+  $wsKey = [Convert]::ToBase64String($bytes)
+
+  $hdrAuth = if ($UseHeader) { '-H "Authorization: Bearer ' + $Auth + '"' } else { '' }
+  $cmd = 'curl.exe --http1.1 -s -o NUL --max-time 5 -w "%{http_code}" ' + $hdrAuth + ' -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: ' + $wsKey + '" "' + $rtUrl + '"'
+  $code = cmd /c $cmd
+  if ($code -ne "101") {
+    Write-Host "[WARN] Realtime not upgrading on this base (code: $code) — skipping" -ForegroundColor Yellow
+  } else {
+    Say "Realtime 101 OK"
+  }
 } catch {
   Write-Host "[WARN] Realtime check skipped ($($_.Exception.Message))" -ForegroundColor Yellow
 }
