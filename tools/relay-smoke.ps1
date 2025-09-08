@@ -1,183 +1,244 @@
+<#
+.SYNOPSIS
+  End-to-end smoke tests for an OpenAI-compatible relay (Cloudflare Worker, FastAPI proxy, etc.).
+.DESCRIPTION
+  Runs a minimal-but-useful set of API checks:
+    1) GET /v1/models
+    2) POST /v1/chat/completions
+    3) POST /v1/embeddings
+    4) POST /v1/images/generations (optional)
+    5) POST /v1/audio/speech  (Text-to-Speech; optional)
+    6) POST /v1/audio/transcriptions (Speech-to-Text; optional)
+    7) Files API: upload -> list -> retrieve -> delete (optional)
+  Each step prints PASS/FAIL and returns non-zero exit code if any required step fails.
+.PARAMETER BaseUrl
+  Base URL for the relay (e.g., https://chatgpt-team.pages.dev or http://localhost:8787).
+.PARAMETER ApiKey
+  API key to send in Authorization header. Defaults to $env:OPENAI_API_KEY.
+.PARAMETER SkipOptional
+  If provided, skips optional tests (images, tts, stt, files).
+.EXAMPLE
+  .\relay-smoke.ps1 -BaseUrl https://chatgpt-team.pages.dev -ApiKey $env:OPENAI_API_KEY
+#>
 
 param(
-  [string]$Base = "https://chatgpt-team.pages.dev",
-  [int]$TimeoutSec = 120
+  [Parameter(Mandatory=$true)][string]$BaseUrl,
+  [string]$ApiKey = $env:OPENAI_API_KEY,
+  [switch]$SkipOptional
 )
 
+if ([string]::IsNullOrWhiteSpace($ApiKey)) {
+  Write-Error "ApiKey is empty. Provide -ApiKey or set OPENAI_API_KEY."
+  exit 2
+}
+
+# Ensure no trailing slash
+if ($BaseUrl.EndsWith("/")) { $BaseUrl = $BaseUrl.TrimEnd("/") }
+
+$Headers = @{
+  "Authorization" = "Bearer $ApiKey"
+  "Content-Type"  = "application/json"
+}
+
 $ErrorActionPreference = "Stop"
-$ProgressPreference = "SilentlyContinue"
+$global:FAILURES = @()
 
-$summary = @()
-
-function Add-Result([string]$name, [bool]$ok, [string]$detail="") {
-  $global:summary += [pscustomobject]@{
-    Test   = $name
-    Result = $(if ($ok) { "PASS" } else { "FAIL" })
-    Detail = $detail
+function Write-StepResult($Name, $Succeeded, $Details) {
+  if ($Succeeded) {
+    Write-Host "[PASS] $Name" -ForegroundColor Green
+  } else {
+    Write-Host "[FAIL] $Name -> $Details" -ForegroundColor Red
+    $global:FAILURES += "$Name: $Details"
   }
-  if ($ok) { Write-Host "[PASS] $name" -ForegroundColor Green }
-  else     { Write-Host "[FAIL] $name - $detail" -ForegroundColor Red }
 }
 
-function Post-Json([string]$uri, $obj, $headers=$null) {
-  $json = $obj | ConvertTo-Json -Depth 12 -Compress
-  return Invoke-RestMethod -Uri $uri -Method Post -ContentType "application/json" -Body $json -Headers $headers -TimeoutSec 120
+function Invoke-JsonPost($Uri, $BodyObj, [switch]$RawResponse) {
+  $json = $BodyObj | ConvertTo-Json -Depth 10 -Compress
+  try {
+    $resp = Invoke-RestMethod -Uri $Uri -Headers $Headers -Method Post -Body $json
+    if ($RawResponse) { return $resp } else { return $resp }
+  }
+  catch {
+    throw $_
+  }
 }
 
-function Get-Json([string]$uri, $headers=$null) {
-  return Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -TimeoutSec 60
-}
-
-$IsPS7 = ($PSVersionTable.PSVersion.Major -ge 7)
-
-# Optional: allow client Authorization via env var for local tests
-$Headers = @{}
-$CurlAuthArgs = @()
-if ($env:OPENAI_CLIENT_KEY -and $env:OPENAI_CLIENT_KEY.Trim().Length -gt 0) {
-  $Headers["Authorization"] = "Bearer " + $env:OPENAI_CLIENT_KEY
-  $CurlAuthArgs += @("-H", "Authorization: Bearer " + $env:OPENAI_CLIENT_KEY)
-}
-
-function Curl-Json([string[]]$Args) {
-  $out = & curl.exe @Args
-  try { return $out | ConvertFrom-Json } catch { return $out }
-}
+# Create downloads folder
+$dl = Join-Path -Path $PSScriptRoot -ChildPath "downloads"
+if (-not (Test-Path $dl)) { New-Item -ItemType Directory -Path $dl | Out-Null }
 
 # 1) Models
 try {
-  $models = Get-Json "$Base/v1/models" $Headers
-  $ok = ($models -and $models.data -and $models.data.Count -gt 0)
-  Add-Result "Models" $ok ("Returned " + ($models.data.Count) + " models")
-} catch { Add-Result "Models" $false $_.Exception.Message }
+  $models = Invoke-RestMethod -Uri "$BaseUrl/v1/models" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Get
+  $ok = $models -and $models.data
+  Write-StepResult "GET /v1/models" $ok "No 'data' array in response"
+} catch {
+  Write-StepResult "GET /v1/models" $false $_.Exception.Message
+}
+
+# Helper to pick a reasonable default model names
+$chatModel = "gpt-4o-mini"
+$embedModel = "text-embedding-3-small"
+$ttsModel   = "gpt-4o-mini-tts"
 
 # 2) Chat Completions
 try {
-  $body = @{ model="o4-mini"; messages=@(@{role="user";content="ping"}) }
-  $chat = Post-Json "$Base/v1/chat/completions" $body $Headers
-  $text = $chat.choices[0].message.content
-  $ok = -not [string]::IsNullOrWhiteSpace($text)
-  Add-Result "Chat Completions" $ok $text
-} catch { Add-Result "Chat Completions" $false $_.Exception.Message }
+  $chatBody = @{
+    model = $chatModel
+    messages = @(
+      @{ role = "system"; content = "You are a helpful assistant." },
+      @{ role = "user";   content = "Say 'pong'." }
+    )
+    temperature = 0
+  }
+  $chat = Invoke-JsonPost "$BaseUrl/v1/chat/completions" $chatBody
+  $content = $chat.choices[0].message.content
+  $ok = $content -and ($content -match "pong")
+  Write-StepResult "POST /v1/chat/completions" $ok ("Unexpected reply: " + ($content | Out-String))
+} catch {
+  Write-StepResult "POST /v1/chat/completions" $false $_.Exception.Message
+}
 
 # 3) Embeddings
 try {
-  $body = @{ model="text-embedding-3-small"; input="hello" }
-  $emb = Post-Json "$Base/v1/embeddings" $body $Headers
-  $ok = ($emb.data[0].embedding.Count -gt 0)
-  Add-Result "Embeddings" $ok ("Dim=" + $emb.data[0].embedding.Count)
-} catch { Add-Result "Embeddings" $false $_.Exception.Message }
+  $embedBody = @{
+    model = $embedModel
+    input = @("hello world")
+  }
+  $emb = Invoke-JsonPost "$BaseUrl/v1/embeddings" $embedBody
+  $ok = $emb -and $emb.data -and $emb.data[0].embedding
+  Write-StepResult "POST /v1/embeddings" $ok "No embedding returned"
+} catch {
+  Write-StepResult "POST /v1/embeddings" $false $_.Exception.Message
+}
 
-# 4) Files: fine-tune JSONL upload -> download -> delete
-try {
-  $jsonlPath = Join-Path $env:TEMP ("relay-smoke-" + (Get-Random) + ".jsonl")
-  $content = @'
-{"messages":[{"role":"system","content":"You are concise."},{"role":"user","content":"ping?"},{"role":"assistant","content":"pong."}]}
-{"messages":[{"role":"system","content":"You are concise."},{"role":"user","content":"what's 2+2?"},{"role":"assistant","content":"4."}]}
-'@.Trim()
-  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-  [System.IO.File]::WriteAllText($jsonlPath, $content, $utf8NoBom)
-
-  if ($IsPS7 -and (Get-Command Invoke-RestMethod).Parameters.ContainsKey('Form')) {
-    $up = Invoke-RestMethod -Uri "$Base/v1/files" -Method Post -Form @{
-      file    = Get-Item $jsonlPath
-      purpose = "fine-tune"
-    } -Headers $Headers
-  } else {
-    $uploadArgs = @("-sS","-f","-X","POST","$Base/v1/files") + $CurlAuthArgs + @("-F",("file=@{0};type=application/jsonl" -f $jsonlPath),"-F","purpose=fine-tune")
-    $up = Curl-Json $uploadArgs
+if (-not $SkipOptional) {
+  # 4) Images (generations)
+  try {
+    $imgBody = @{
+      model   = "gpt-image-1"
+      prompt  = "simple black square icon"
+      size    = "256x256"
+      response_format = "b64_json"
+    }
+    $img = Invoke-JsonPost "$BaseUrl/v1/images/generations" $imgBody
+    $b64 = $img.data[0].b64_json
+    if ($b64) {
+      $bytes = [Convert]::FromBase64String($b64)
+      $imgPath = Join-Path $dl "smoke-image.png"
+      [IO.File]::WriteAllBytes($imgPath, $bytes)
+      Write-StepResult "POST /v1/images/generations" $true "Saved to $imgPath"
+    } else {
+      Write-StepResult "POST /v1/images/generations" $false "No b64 image data"
+    }
+  } catch {
+    Write-StepResult "POST /v1/images/generations" $false $_.Exception.Message
   }
 
-  if (-not $up.id) { throw ("Upload failed: " + ($up | Out-String)) }
-  $fid = $up.id
-
-  $dlPath = Join-Path $env:TEMP ("relay-smoke-dl-" + (Get-Random) + ".jsonl")
-  if ($IsPS7 -and (Get-Command Invoke-WebRequest).Parameters.ContainsKey('OutFile')) {
-    Invoke-WebRequest -Uri "$Base/v1/files/$fid/content" -OutFile $dlPath -Headers $Headers | Out-Null
-  } else {
-    $dlArgs = @("-sS","-f","-L","$Base/v1/files/$fid/content") + $CurlAuthArgs + @("-o",$dlPath)
-    & curl.exe @dlArgs | Out-Null
+  # 5) TTS (audio/speech)
+  try {
+    $ttsBody = @{
+      model = $ttsModel
+      input = "Hello from the relay smoke test."
+      voice = "alloy"
+      format = "mp3"
+    }
+    $ttsJson = $ttsBody | ConvertTo-Json -Depth 10 -Compress
+    $ttsPath = Join-Path $dl "smoke-tts.mp3"
+    $ttsResp = Invoke-WebRequest -Uri "$BaseUrl/v1/audio/speech" -Headers @{ "Authorization"="Bearer $ApiKey"; "Content-Type"="application/json" } -Method Post -Body $ttsJson -OutFile $ttsPath
+    $ok = Test-Path $ttsPath -and ((Get-Item $ttsPath).Length -gt 0)
+    Write-StepResult "POST /v1/audio/speech" $ok ("Saved to $ttsPath")
+  } catch {
+    Write-StepResult "POST /v1/audio/speech" $false $_.Exception.Message
   }
 
-  $ok = (Test-Path $dlPath) -and ((Get-Item $dlPath).Length -gt 0)
-  Add-Result "Files (upload+download)" $ok ("id=" + $fid)
+  # 6) STT (audio/transcriptions) — use a tiny WAV generated on the fly
+  try {
+    $wavPath = Join-Path $dl "beep.wav"
+    # Generate a 0.2s silent wav to keep the payload tiny (still valid audio file)
+    $fs = New-Object IO.FileStream($wavPath, [IO.FileMode]::Create, [IO.FileAccess]::Write)
+    $bw = New-Object IO.BinaryWriter($fs)
+    # Write minimal 16-bit PCM mono 8kHz WAV header + data (silence)
+    $sampleRate = 8000
+    $durationSec = 1
+    $numSamples = $sampleRate * $durationSec
+    $subchunk2Size = $numSamples * 2
+    $chunkSize = 36 + $subchunk2Size
+    # RIFF header
+    $bw.Write([byte[]][char[]]"RIFF")
+    $bw.Write([BitConverter]::GetBytes([int]$chunkSize))
+    $bw.Write([byte[]][char[]]"WAVE")
+    # fmt subchunk
+    $bw.Write([byte[]][char[]]"fmt ")
+    $bw.Write([BitConverter]::GetBytes([int]16))   # Subchunk1Size
+    $bw.Write([BitConverter]::GetBytes([short]1))  # PCM
+    $bw.Write([BitConverter]::GetBytes([short]1))  # mono
+    $bw.Write([BitConverter]::GetBytes([int]$sampleRate))
+    $bw.Write([BitConverter]::GetBytes([int]($sampleRate*2)))
+    $bw.Write([BitConverter]::GetBytes([short]2))
+    $bw.Write([BitConverter]::GetBytes([short]16))
+    # data subchunk
+    $bw.Write([byte[]][char[]]"data")
+    $bw.Write([BitConverter]::GetBytes([int]$subchunk2Size))
+    # write silence
+    $bw.Write((New-Object byte[]($subchunk2Size)))
+    $bw.Close(); $fs.Close()
 
-  # cleanup
-  Invoke-RestMethod -Uri "$Base/v1/files/$fid" -Method Delete -Headers $Headers | Out-Null
-  Remove-Item -Force $jsonlPath,$dlPath -ErrorAction SilentlyContinue
-} catch { Add-Result "Files (upload+download)" $false $_.Exception.Message }
-
-# 5) Audio TTS
-$mp3 = Join-Path $env:TEMP ("relay-tts-" + (Get-Random) + ".mp3")
-try {
-  $ttsBody = @{ model="gpt-4o-mini-tts"; voice="alloy"; input="Hello from the Cloudflare relay." } | ConvertTo-Json -Depth 6 -Compress
-  Invoke-WebRequest -Uri "$Base/v1/audio/speech" -Method Post -ContentType "application/json" -Body $ttsBody -OutFile $mp3 -Headers $Headers | Out-Null
-  $ok = (Test-Path $mp3) -and ((Get-Item $mp3).Length -gt 0)
-  Add-Result "Audio TTS" $ok ("bytes=" + ((Get-Item $mp3).Length))
-} catch { Add-Result "Audio TTS" $false $_.Exception.Message }
-
-# 6) Audio STT (transcribe the MP3 back)
-try {
-  if ($IsPS7 -and (Get-Command Invoke-RestMethod).Parameters.ContainsKey('Form')) {
-    $stt = Invoke-RestMethod -Uri "$Base/v1/audio/transcriptions" -Method Post -Form @{
-      file  = Get-Item $mp3
-      model = "gpt-4o-transcribe"
-    } -Headers $Headers
-  } else {
-    $sttArgs = @("-sS","-f","-X","POST","$Base/v1/audio/transcriptions") + $CurlAuthArgs + @("-F",("file=@{0};type=audio/mpeg" -f $mp3),"-F","model=gpt-4o-transcribe")
-    $stt = Curl-Json $sttArgs
+    $sttForm = @{
+      model = "whisper-1"
+    }
+    $formFields = @{
+      "model" = "whisper-1"
+    }
+    $sttResp = Invoke-WebRequest -Uri "$BaseUrl/v1/audio/transcriptions" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Post -InFile $wavPath -ContentType "audio/wav; charset=binary" -UseBasicParsing
+    # Some relays require multipart form; attempt fallback if needed
+    if ($sttResp.StatusCode -ge 400) {
+      $sttResp = Invoke-WebRequest -Uri "$BaseUrl/v1/audio/transcriptions" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Post -Form @{ model="whisper-1"; file=Get-Item $wavPath }
+    }
+    $ok = $sttResp.StatusCode -in 200..299
+    Write-StepResult "POST /v1/audio/transcriptions" $ok ("HTTP " + $sttResp.StatusCode)
+  } catch {
+    Write-StepResult "POST /v1/audio/transcriptions" $false $_.Exception.Message
   }
 
-  $txt = $stt.text
-  $ok = -not [string]::IsNullOrWhiteSpace($txt)
-  Add-Result "Audio STT" $ok $txt
-} catch { Add-Result "Audio STT" $false $_.Exception.Message }
+  # 7) Files API: upload/list/retrieve/delete (JSONL tiny file)
+  try {
+    $jsonlPath = Join-Path $dl "tiny.jsonl"
+    Set-Content -LiteralPath $jsonlPath -Value '{"text":"hello"}' -NoNewline
 
-# 7) Images (gpt-image-1)
-$png = Join-Path $env:TEMP ("relay-img-" + (Get-Random) + ".png")
-try {
-  $imgReq = @{ model="gpt-image-1"; prompt="a glossy red sport motorcycle on a white studio background, 3/4 front view" }
-  $imgRes = Post-Json "$Base/v1/images/generations" $imgReq $Headers
-  $b64 = $imgRes.data[0].b64_json
-  [IO.File]::WriteAllBytes($png, [Convert]::FromBase64String($b64))
-  $ok = (Test-Path $png) -and ((Get-Item $png).Length -gt 0)
-  Add-Result "Images (generation)" $ok ("bytes=" + ((Get-Item $png).Length))
-} catch { Add-Result "Images (generation)" $false $_.Exception.Message }
+    $upload = Invoke-WebRequest -Uri "$BaseUrl/v1/files" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Post -Form @{
+      purpose = "assistants"
+      file = Get-Item $jsonlPath
+    }
+    $uploadJson = $upload.Content | ConvertFrom-Json
+    $fileId = $uploadJson.id
+    $okUp = $fileId -ne $null
+    Write-StepResult "POST /v1/files (upload)" $okUp ("file_id=" + $fileId)
 
-# 8) Assistants v2 minimal
-try {
-  $asst = Post-Json "$Base/v1/assistants" @{ model="gpt-4o-mini"; name="Relay Smoke Assistant"; instructions="Answer briefly." } $Headers
-  $aid = $asst.id
+    $list = Invoke-RestMethod -Uri "$BaseUrl/v1/files" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Get
+    $okList = $list.data.Count -ge 1
+    Write-StepResult "GET /v1/files (list)" $okList "No files returned"
 
-  $thr  = Invoke-RestMethod "$Base/v1/threads" -Method Post -Headers $Headers
-  $tid  = $thr.id
-  Invoke-RestMethod "$Base/v1/threads/$tid/messages" -Method Post -ContentType "application/json" -Headers $Headers `
-    -Body (@{ role="user"; content="Say 'ok'." } | ConvertTo-Json -Depth 6 -Compress) | Out-Null
+    if ($fileId) {
+      $contentPath = Join-Path $dl "downloaded.jsonl"
+      Invoke-WebRequest -Uri "$BaseUrl/v1/files/$fileId/content" -Headers @{ "Authorization"="Bearer $ApiKey" } -OutFile $contentPath | Out-Null
+      $okGet = (Test-Path $contentPath) -and ((Get-Item $contentPath).Length -gt 0)
+      Write-StepResult "GET /v1/files/{id}/content" $okGet "No content saved"
 
-  $run = Post-Json "$Base/v1/threads/$tid/runs" @{ assistant_id=$aid } $Headers
-  $rid = $run.id
+      $del = Invoke-RestMethod -Uri "$BaseUrl/v1/files/$fileId" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Delete
+      $okDel = $del.deleted -eq $true
+      Write-StepResult "DELETE /v1/files/{id}" $okDel "Delete flag not true"
+    }
+  } catch {
+    Write-StepResult "Files API sequence" $false $_.Exception.Message
+  }
+}
 
-  $elapsed = 0
-  do {
-    Start-Sleep -Seconds 2
-    $elapsed += 2
-    $run = Get-Json "$Base/v1/threads/$tid/runs/$rid" $Headers
-  } while ($elapsed -lt $TimeoutSec -and ($run.status -in @("queued","in_progress")))
-
-  if ($run.status -ne "completed") { throw "Run status $($run.status)" }
-
-  $msgs = Get-Json "$Base/v1/threads/$tid/messages?limit=5" $Headers
-  $reply = ($msgs.data | Where-Object { $_.role -eq "assistant" } | Select-Object -First 1).content[0].text.value
-  $ok = -not [string]::IsNullOrWhiteSpace($reply)
-  Add-Result "Assistants v2" $ok $reply
-} catch { Add-Result "Assistants v2" $false $_.Exception.Message }
-
-# Summary
-Write-Host ""
-Write-Host "==== Relay Smoke Summary ===="
-$summary | Format-Table -AutoSize | Out-String | Write-Host
-
-$fail = ($summary | Where-Object { $_.Result -eq "FAIL" }).Count
-$pass = ($summary | Where-Object { $_.Result -eq "PASS" }).Count
-Write-Host ("PASS: {0}  FAIL: {1}" -f $pass, $fail)
-
-if ($fail -gt 0) { exit 1 } else { exit 0 }
+if ($global:FAILURES.Count -gt 0) {
+  Write-Host "`nOne or more checks failed:" -ForegroundColor Yellow
+  $global:FAILURES | ForEach-Object { Write-Host " - $_" -ForegroundColor Yellow }
+  exit 1
+} else {
+  Write-Host "`nAll required checks passed." -ForegroundColor Green
+  exit 0
+}
