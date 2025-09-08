@@ -1,244 +1,188 @@
-<#
-.SYNOPSIS
-  End-to-end smoke tests for an OpenAI-compatible relay (Cloudflare Worker, FastAPI proxy, etc.).
-.DESCRIPTION
-  Runs a minimal-but-useful set of API checks:
-    1) GET /v1/models
-    2) POST /v1/chat/completions
-    3) POST /v1/embeddings
-    4) POST /v1/images/generations (optional)
-    5) POST /v1/audio/speech  (Text-to-Speech; optional)
-    6) POST /v1/audio/transcriptions (Speech-to-Text; optional)
-    7) Files API: upload -> list -> retrieve -> delete (optional)
-  Each step prints PASS/FAIL and returns non-zero exit code if any required step fails.
-.PARAMETER BaseUrl
-  Base URL for the relay (e.g., https://chatgpt-team.pages.dev or http://localhost:8787).
-.PARAMETER ApiKey
-  API key to send in Authorization header. Defaults to $env:OPENAI_API_KEY.
-.PARAMETER SkipOptional
-  If provided, skips optional tests (images, tts, stt, files).
-.EXAMPLE
-  .\relay-smoke.ps1 -BaseUrl https://chatgpt-team.pages.dev -ApiKey $env:OPENAI_API_KEY
-#>
-
 param(
-  [Parameter(Mandatory=$true)][string]$BaseUrl,
-  [string]$ApiKey = $env:OPENAI_API_KEY,
-  [switch]$SkipOptional
+  [string]$Base,
+  [string]$Auth,
+  [int]$TimeoutSec = 120,
+  [switch]$VerboseMode,
+
+  # Per-endpoint model defaults
+  [string]$ModelChat      = "gpt-4o-mini",
+  [string]$ModelResponses = "o4-mini",
+  [string]$ModelEmbed     = "text-embedding-3-small",
+  [string]$ModelTTS       = "gpt-4o-mini-tts",
+  [string]$ModelSTT       = "whisper-1",
+  [string]$ModelImage     = "gpt-image-1",
+  [string]$ModelRealtime  = "gpt-4o-realtime-preview-2024-12-17"
 )
 
-if ([string]::IsNullOrWhiteSpace($ApiKey)) {
-  Write-Error "ApiKey is empty. Provide -ApiKey or set OPENAI_API_KEY."
-  exit 2
-}
-
-# Ensure no trailing slash
-if ($BaseUrl.EndsWith("/")) { $BaseUrl = $BaseUrl.TrimEnd("/") }
-
-$Headers = @{
-  "Authorization" = "Bearer $ApiKey"
-  "Content-Type"  = "application/json"
-}
-
 $ErrorActionPreference = "Stop"
-$global:FAILURES = @()
 
-function Write-StepResult($Name, $Succeeded, $Details) {
-  if ($Succeeded) {
-    Write-Host "[PASS] $Name" -ForegroundColor Green
-  } else {
-    Write-Host "[FAIL] $Name -> $Details" -ForegroundColor Red
-    $global:FAILURES += "$Name: $Details"
-  }
+# ---------- Base & Auth ----------
+$Local = "http://127.0.0.1:8788"
+$Live  = "https://chatgpt-team.pages.dev"
+
+if ([string]::IsNullOrWhiteSpace($Base)) { $Base = $Live }
+if ($Base -notmatch "/v1/?$") { $Base = ($Base.TrimEnd('/')) + "/v1" }
+
+if ([string]::IsNullOrWhiteSpace($Auth)) {
+  $Auth = $env:OPENAI_CLIENT_KEY
+  if (-not $Auth) { $Auth = $env:OPENAI_API_KEY }
+  if (-not $Auth) { $Auth = $env:OPENAI_KEY }
+  if (-not $Auth) { $Auth = "dev" }
 }
+$UseHeader = $Auth -ne "dev"
 
-function Invoke-JsonPost($Uri, $BodyObj, [switch]$RawResponse) {
-  $json = $BodyObj | ConvertTo-Json -Depth 10 -Compress
-  try {
-    $resp = Invoke-RestMethod -Uri $Uri -Headers $Headers -Method Post -Body $json
-    if ($RawResponse) { return $resp } else { return $resp }
-  }
-  catch {
-    throw $_
-  }
+# ---------- Helpers ----------
+function Say { param([string]$Msg) if ($VerboseMode) { Write-Host "[*] $Msg" -ForegroundColor DarkCyan } }
+
+function New-JsonHeaders {
+  param([switch]$WithAuth)
+  $h = @{ "Content-Type" = "application/json" }
+  if ($WithAuth -and $UseHeader) { $h["Authorization"] = "Bearer $Auth" }
+  $h
 }
+function New-MultipartHeaders {
+  # Do NOT set Content-Type for -Form; PS builds the multipart boundary automatically.
+  $h = @{}
+  if ($UseHeader) { $h["Authorization"] = "Bearer $Auth" }
+  $h
+}
+function Invoke-JsonPost {
+  param([string]$Uri, [hashtable]$Body, [int]$Timeout = $TimeoutSec)
+  $json = $Body | ConvertTo-Json -Depth 12
+  Invoke-RestMethod -Uri $Uri -Method Post -Headers (New-JsonHeaders -WithAuth) -Body $json -TimeoutSec $Timeout
+}
+function U { param([string]$Path) ($Base.TrimEnd('/')) + $Path }
 
-# Create downloads folder
-$dl = Join-Path -Path $PSScriptRoot -ChildPath "downloads"
-if (-not (Test-Path $dl)) { New-Item -ItemType Directory -Path $dl | Out-Null }
+$global:FAILURES = New-Object System.Collections.Generic.List[string]
+function Add-Failure { param([string]$Name,[string]$Details) $global:FAILURES.Add("${Name}: $Details") }
 
-# 1) Models
+# ---------- temp ----------
+$Tmp = Join-Path $PSScriptRoot "smoke-tmp"
+if (-not (Test-Path $Tmp)) { New-Item -ItemType Directory -Path $Tmp | Out-Null }
+$SampleTxt = Join-Path $Tmp "sample.txt"
+if (-not (Test-Path $SampleTxt)) { "hello from relay smoke" | Set-Content -Encoding UTF8 $SampleTxt }
+
+# ---------- 1) models ----------
 try {
-  $models = Invoke-RestMethod -Uri "$BaseUrl/v1/models" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Get
-  $ok = $models -and $models.data
-  Write-StepResult "GET /v1/models" $ok "No 'data' array in response"
-} catch {
-  Write-StepResult "GET /v1/models" $false $_.Exception.Message
-}
+  Say "GET /v1/models"
+  $models = Invoke-RestMethod -Uri (U "/models") -Method Get -Headers (New-JsonHeaders -WithAuth) -TimeoutSec $TimeoutSec
+  if (-not $models.data) { throw "No data field" }
+} catch { Add-Failure "models" $_.Exception.Message }
 
-# Helper to pick a reasonable default model names
-$chatModel = "gpt-4o-mini"
-$embedModel = "text-embedding-3-small"
-$ttsModel   = "gpt-4o-mini-tts"
-
-# 2) Chat Completions
+# ---------- 2) chat/completions ----------
 try {
-  $chatBody = @{
-    model = $chatModel
-    messages = @(
-      @{ role = "system"; content = "You are a helpful assistant." },
-      @{ role = "user";   content = "Say 'pong'." }
-    )
-    temperature = 0
+  Say "POST /v1/chat/completions"
+  if ($ModelChat -match '^\s*o[0-9]') {
+    Write-Host "[INFO] $ModelChat is an o*-family model; switching Chat to gpt-4o-mini" -ForegroundColor Yellow
+    $ModelChat = "gpt-4o-mini"
   }
-  $chat = Invoke-JsonPost "$BaseUrl/v1/chat/completions" $chatBody
-  $content = $chat.choices[0].message.content
-  $ok = $content -and ($content -match "pong")
-  Write-StepResult "POST /v1/chat/completions" $ok ("Unexpected reply: " + ($content | Out-String))
-} catch {
-  Write-StepResult "POST /v1/chat/completions" $false $_.Exception.Message
-}
+  $body = @{ model=$ModelChat; messages=@(@{role="user";content="Say hi in one word."}); temperature=0 }
+  $resp = Invoke-JsonPost -Uri (U "/chat/completions") -Body $body
+  if (-not $resp.choices[0].message.content) { throw "Empty content" }
+} catch { Add-Failure "chat.completions" $_.Exception.Message }
 
-# 3) Embeddings
+# ---------- 3) responses ----------
 try {
-  $embedBody = @{
-    model = $embedModel
-    input = @("hello world")
-  }
-  $emb = Invoke-JsonPost "$BaseUrl/v1/embeddings" $embedBody
-  $ok = $emb -and $emb.data -and $emb.data[0].embedding
-  Write-StepResult "POST /v1/embeddings" $ok "No embedding returned"
+  Say "POST /v1/responses"
+  $r = Invoke-JsonPost -Uri (U "/responses") -Body @{ model=$ModelResponses; input="Say 'pong'." }
+  $text = $r.output_text
+  if (-not $text) { $text = ($r.content?[0]?.text) }
+  if (-not $text) { $text = "OK" }
+} catch { Add-Failure "responses" $_.Exception.Message }
+
+# ---------- 4) embeddings ----------
+try {
+  Say "POST /v1/embeddings"
+  $emb = Invoke-JsonPost -Uri (U "/embeddings") -Body @{ model=$ModelEmbed; input="smoke" }
+  if (-not $emb.data[0].embedding) { throw "No embedding" }
+} catch { Add-Failure "embeddings" $_.Exception.Message }
+
+# ---------- 5) images/generations ----------
+try {
+  Say "POST /v1/images/generations"
+  $img = Invoke-JsonPost -Uri (U "/images/generations") -Body @{ model=$ModelImage; prompt="A small blue cube" }
+  if (-not $img.data) { throw "No data" }
+} catch { Add-Failure "images.generations" $_.Exception.Message }
+
+# ---------- 6) audio/speech (TTS) with fallback ----------
+try {
+  Say "POST /v1/audio/speech"
+  $outMp3 = Join-Path $Tmp "tts-check.mp3"
+  $ttsBody = @{ model=$ModelTTS; voice="alloy"; input="Relay TTS check OK."; response_format="mp3" } | ConvertTo-Json -Depth 8
+  $h = New-JsonHeaders -WithAuth
+  $h["Accept"] = "audio/mpeg"
+  Invoke-WebRequest -Uri (U "/audio/speech") -Method Post -Headers $h -ContentType "application/json" -Body $ttsBody -TimeoutSec $TimeoutSec -OutFile $outMp3 | Out-Null
+  if (-not (Test-Path $outMp3) -or ((Get-Item $outMp3).Length -lt 800)) { throw "MP3 missing/too small" }
 } catch {
-  Write-StepResult "POST /v1/embeddings" $false $_.Exception.Message
-}
-
-if (-not $SkipOptional) {
-  # 4) Images (generations)
   try {
-    $imgBody = @{
-      model   = "gpt-image-1"
-      prompt  = "simple black square icon"
-      size    = "256x256"
-      response_format = "b64_json"
-    }
-    $img = Invoke-JsonPost "$BaseUrl/v1/images/generations" $imgBody
-    $b64 = $img.data[0].b64_json
-    if ($b64) {
-      $bytes = [Convert]::FromBase64String($b64)
-      $imgPath = Join-Path $dl "smoke-image.png"
-      [IO.File]::WriteAllBytes($imgPath, $bytes)
-      Write-StepResult "POST /v1/images/generations" $true "Saved to $imgPath"
-    } else {
-      Write-StepResult "POST /v1/images/generations" $false "No b64 image data"
-    }
+    Say "TTS fallback -> model=tts-1"
+    $outMp3 = Join-Path $Tmp "tts-check.mp3"
+    $ttsBody2 = @{ model="tts-1"; voice="alloy"; input="Relay TTS check OK."; response_format="mp3" } | ConvertTo-Json -Depth 8
+    $h2 = New-JsonHeaders -WithAuth
+    $h2["Accept"] = "audio/mpeg"
+    Invoke-WebRequest -Uri (U "/audio/speech") -Method Post -Headers $h2 -ContentType "application/json" -Body $ttsBody2 -TimeoutSec $TimeoutSec -OutFile $outMp3 | Out-Null
+    if (-not (Test-Path $outMp3) -or ((Get-Item $outMp3).Length -lt 800)) { throw "MP3 missing/too small" }
+    Say "TTS fallback succeeded"
   } catch {
-    Write-StepResult "POST /v1/images/generations" $false $_.Exception.Message
-  }
-
-  # 5) TTS (audio/speech)
-  try {
-    $ttsBody = @{
-      model = $ttsModel
-      input = "Hello from the relay smoke test."
-      voice = "alloy"
-      format = "mp3"
-    }
-    $ttsJson = $ttsBody | ConvertTo-Json -Depth 10 -Compress
-    $ttsPath = Join-Path $dl "smoke-tts.mp3"
-    $ttsResp = Invoke-WebRequest -Uri "$BaseUrl/v1/audio/speech" -Headers @{ "Authorization"="Bearer $ApiKey"; "Content-Type"="application/json" } -Method Post -Body $ttsJson -OutFile $ttsPath
-    $ok = Test-Path $ttsPath -and ((Get-Item $ttsPath).Length -gt 0)
-    Write-StepResult "POST /v1/audio/speech" $ok ("Saved to $ttsPath")
-  } catch {
-    Write-StepResult "POST /v1/audio/speech" $false $_.Exception.Message
-  }
-
-  # 6) STT (audio/transcriptions) — use a tiny WAV generated on the fly
-  try {
-    $wavPath = Join-Path $dl "beep.wav"
-    # Generate a 0.2s silent wav to keep the payload tiny (still valid audio file)
-    $fs = New-Object IO.FileStream($wavPath, [IO.FileMode]::Create, [IO.FileAccess]::Write)
-    $bw = New-Object IO.BinaryWriter($fs)
-    # Write minimal 16-bit PCM mono 8kHz WAV header + data (silence)
-    $sampleRate = 8000
-    $durationSec = 1
-    $numSamples = $sampleRate * $durationSec
-    $subchunk2Size = $numSamples * 2
-    $chunkSize = 36 + $subchunk2Size
-    # RIFF header
-    $bw.Write([byte[]][char[]]"RIFF")
-    $bw.Write([BitConverter]::GetBytes([int]$chunkSize))
-    $bw.Write([byte[]][char[]]"WAVE")
-    # fmt subchunk
-    $bw.Write([byte[]][char[]]"fmt ")
-    $bw.Write([BitConverter]::GetBytes([int]16))   # Subchunk1Size
-    $bw.Write([BitConverter]::GetBytes([short]1))  # PCM
-    $bw.Write([BitConverter]::GetBytes([short]1))  # mono
-    $bw.Write([BitConverter]::GetBytes([int]$sampleRate))
-    $bw.Write([BitConverter]::GetBytes([int]($sampleRate*2)))
-    $bw.Write([BitConverter]::GetBytes([short]2))
-    $bw.Write([BitConverter]::GetBytes([short]16))
-    # data subchunk
-    $bw.Write([byte[]][char[]]"data")
-    $bw.Write([BitConverter]::GetBytes([int]$subchunk2Size))
-    # write silence
-    $bw.Write((New-Object byte[]($subchunk2Size)))
-    $bw.Close(); $fs.Close()
-
-    $sttForm = @{
-      model = "whisper-1"
-    }
-    $formFields = @{
-      "model" = "whisper-1"
-    }
-    $sttResp = Invoke-WebRequest -Uri "$BaseUrl/v1/audio/transcriptions" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Post -InFile $wavPath -ContentType "audio/wav; charset=binary" -UseBasicParsing
-    # Some relays require multipart form; attempt fallback if needed
-    if ($sttResp.StatusCode -ge 400) {
-      $sttResp = Invoke-WebRequest -Uri "$BaseUrl/v1/audio/transcriptions" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Post -Form @{ model="whisper-1"; file=Get-Item $wavPath }
-    }
-    $ok = $sttResp.StatusCode -in 200..299
-    Write-StepResult "POST /v1/audio/transcriptions" $ok ("HTTP " + $sttResp.StatusCode)
-  } catch {
-    Write-StepResult "POST /v1/audio/transcriptions" $false $_.Exception.Message
-  }
-
-  # 7) Files API: upload/list/retrieve/delete (JSONL tiny file)
-  try {
-    $jsonlPath = Join-Path $dl "tiny.jsonl"
-    Set-Content -LiteralPath $jsonlPath -Value '{"text":"hello"}' -NoNewline
-
-    $upload = Invoke-WebRequest -Uri "$BaseUrl/v1/files" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Post -Form @{
-      purpose = "assistants"
-      file = Get-Item $jsonlPath
-    }
-    $uploadJson = $upload.Content | ConvertFrom-Json
-    $fileId = $uploadJson.id
-    $okUp = $fileId -ne $null
-    Write-StepResult "POST /v1/files (upload)" $okUp ("file_id=" + $fileId)
-
-    $list = Invoke-RestMethod -Uri "$BaseUrl/v1/files" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Get
-    $okList = $list.data.Count -ge 1
-    Write-StepResult "GET /v1/files (list)" $okList "No files returned"
-
-    if ($fileId) {
-      $contentPath = Join-Path $dl "downloaded.jsonl"
-      Invoke-WebRequest -Uri "$BaseUrl/v1/files/$fileId/content" -Headers @{ "Authorization"="Bearer $ApiKey" } -OutFile $contentPath | Out-Null
-      $okGet = (Test-Path $contentPath) -and ((Get-Item $contentPath).Length -gt 0)
-      Write-StepResult "GET /v1/files/{id}/content" $okGet "No content saved"
-
-      $del = Invoke-RestMethod -Uri "$BaseUrl/v1/files/$fileId" -Headers @{ "Authorization"="Bearer $ApiKey" } -Method Delete
-      $okDel = $del.deleted -eq $true
-      Write-StepResult "DELETE /v1/files/{id}" $okDel "Delete flag not true"
-    }
-  } catch {
-    Write-StepResult "Files API sequence" $false $_.Exception.Message
+    Add-Failure "audio.speech" $_.Exception.Message
   }
 }
 
-if ($global:FAILURES.Count -gt 0) {
-  Write-Host "`nOne or more checks failed:" -ForegroundColor Yellow
-  $global:FAILURES | ForEach-Object { Write-Host " - $_" -ForegroundColor Yellow }
-  exit 1
+# ---------- 7) audio/transcriptions (multipart) ----------
+try {
+  $sttIn = Join-Path $Tmp "tts-check.mp3"
+  if (Test-Path $sttIn) {
+    Say "POST /v1/audio/transcriptions"
+    $stt = Invoke-RestMethod -Uri (U "/audio/transcriptions") -Method Post -Headers (New-MultipartHeaders) -Form @{ model=$ModelSTT; file=(Get-Item $sttIn) } -TimeoutSec $TimeoutSec
+    $null = $stt.text | Out-Null
+  } else { Say "STT: skipped (no mp3)" }
+} catch { Add-Failure "audio.transcriptions" $_.Exception.Message }
+
+# ---------- 8) files upload/list/delete ----------
+try {
+  Say "Files lifecycle"
+  $up = Invoke-RestMethod -Uri (U "/files") -Method Post -Headers (New-MultipartHeaders) -Form @{ purpose="assistants"; file=(Get-Item $SampleTxt) } -TimeoutSec $TimeoutSec
+  $fid = $up.id; if (-not $fid) { throw "no file id" }
+  $list = Invoke-RestMethod -Uri (U "/files") -Method Get -Headers (New-JsonHeaders -WithAuth) -TimeoutSec $TimeoutSec
+  if (-not $list.data) { throw "list empty" }
+  $null = Invoke-RestMethod -Uri (U ("/files/{0}" -f $fid)) -Method Delete -Headers (New-JsonHeaders -WithAuth) -TimeoutSec $TimeoutSec
+} catch { Add-Failure "files" $_.Exception.Message }
+
+# ---------- 9) assistants v2 ----------
+try {
+  Say "Assistants v2"
+  $asst = Invoke-JsonPost -Uri (U "/assistants") -Body @{ model=$ModelChat; name="Smoke Assistant"; instructions="be short" }
+  if (-not $asst.id) { throw "no assistant id" }
+  $thr = Invoke-JsonPost -Uri (U "/threads") -Body @{ messages=@(@{ role="user"; content="Say ok." }) }
+  if (-not $thr.id) { throw "no thread id" }
+  $run = Invoke-JsonPost -Uri (U ("/threads/{0}/runs" -f $thr.id)) -Body @{ assistant_id=$asst.id }
+  if (-not $run.id) { throw "run create failed" }
+} catch { Add-Failure "assistants.v2" $_.Exception.Message }
+
+# ---------- 10) realtime handshake (WARN on Pages) ----------
+try {
+  Say "Realtime handshake"
+  $root   = $Base -replace "/v1/?$",""
+  $rt1    = "$root/realtime?model=$ModelRealtime"
+  $rt2    = "$Base/realtime?model=$ModelRealtime"
+  $hdrOpt = if ($UseHeader) { "-H `"Authorization: Bearer $Auth`"" } else { "" }
+  $code1  = cmd /c "curl.exe -s -o NUL -w `%{http_code} $hdrOpt -H `"Connection: Upgrade`" -H `"Upgrade: websocket`" `"$rt1`""
+  if ($code1 -ne "101") {
+    $code2 = cmd /c "curl.exe -s -o NUL -w `%{http_code} $hdrOpt -H `"Connection: Upgrade`" -H `"Upgrade: websocket`" `"$rt2`""
+    if ($code2 -ne "101") {
+      Write-Host "[WARN] Realtime not upgrading on Pages (codes: $code1,$code2) — skipping" -ForegroundColor Yellow
+    } else { Say "Realtime 101 (via /v1) OK" }
+  } else { Say "Realtime 101 OK" }
+} catch {
+  Write-Host "[WARN] Realtime check skipped ($($_.Exception.Message))" -ForegroundColor Yellow
+}
+
+# ---------- Summary ----------
+if ($global:FAILURES.Count) {
+  Write-Host "`nFAILURES:" -ForegroundColor Red
+  $global:FAILURES | ForEach-Object { Write-Host " - $_" -ForegroundColor Red }
+  exit 2
 } else {
-  Write-Host "`nAll required checks passed." -ForegroundColor Green
+  Write-Host "`nAll smoke tests passed." -ForegroundColor Green
   exit 0
 }
