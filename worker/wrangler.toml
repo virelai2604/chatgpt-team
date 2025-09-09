@@ -1,0 +1,10 @@
+name = "chatgpt-team-realtime"
+main = "_worker.ts"
+compatibility_date = "2025-09-08"
+[vars]
+OPENAI_BETA = "assistants=v2"
+# Optional (or set in dashboard)
+# OPENAI_ORG_ID = "org-BE0YNlrYbCShFGQxMkW2f0fU"
+# OPENAI_PROJECT = "proj_sZ0J3FtvBLrNJic6pXlx56Mm"
+# Flip to "1" to proxy upstream realtime instead of loopback
+UPSTREAM_REALTIME = "1"
