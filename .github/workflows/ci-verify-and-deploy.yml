@@ -1,0 +1,47 @@
+name: CI – verify (and optional deploy)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "tools/**"
+      - "worker/**"
+      - ".github/workflows/**"
+      - "functions/**"
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install wrangler
+        run: npm i -g wrangler@4
+      - name: Smoke – live Pages + Worker
+        shell: pwsh
+        run: |
+          $Base = "https://chatgpt-team.pages.dev"
+          $WS   = "wss://chatgpt-team-realtime.virelai.workers.dev/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17"
+          pwsh -File .\tools\verify.ps1 -Base $Base -WS $WS -Key $env:OPENAI_API_KEY
+
+  # Uncomment to auto-deploy Worker on changes under /worker
+  # deploy:
+  #   needs: verify
+  #   if: ${{ always() && needs.verify.result == 'success' }}
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  #     CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with: { node-version: '20' }
+  #     - run: npm i -g wrangler@4
+  #     - name: Deploy worker
+  #       working-directory: worker
+  #       run: wrangler deploy
