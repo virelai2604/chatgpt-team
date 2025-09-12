@@ -1,15 +1,29 @@
-name: relay-smoke
+name: Relay Smoke
+
 on:
-  push: { branches: [ main ] }
-  workflow_dispatch: {}
+  push:
+  workflow_dispatch:
+  # optional: nightly check
+  # schedule:
+  #   - cron: "0 18 * * *"  # 01:00 WIB
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      RELAY_BASE: ${{ vars.RELAY_BASE }} # e.g. https://chatgpt-team.pages.dev/v1
     steps:
-      - uses: actions/checkout@v4
-      - name: Run smoke
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show config
         shell: pwsh
         run: |
-          ./tools/smoke-all.ps1 -BaseUrl "$RELAY_BASEURL" -NoClientAuth -Model gpt-4o-mini
-        env:
-          RELAY_BASEURL: ${{ secrets.RELAY_BASEURL }}
+          Write-Host "RELAY_BASE:" ($env:RELAY_BASE ?? "<not set>")
+
+      - name: Run smoke tests (PowerShell)
+        shell: pwsh
+        run: |
+          ./tools/relay-smoke.ps1
+
