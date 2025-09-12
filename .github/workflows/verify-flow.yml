@@ -14,12 +14,6 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-    - name: Print environment
-      run: |
-        "REST_ROOT = $env:REST_ROOT"
-        "REST_BASE = $env:REST_BASE"
-        "REALTIME_PROBE = $env:REALTIME_PROBE"
-        if (-not $env:OPENAI_API_KEY) { throw "OPENAI_API_KEY secret is missing." }
     - name: Health (root)
       run: |
         $r = Invoke-RestMethod -Uri "$env:REST_ROOT/health" -TimeoutSec 15
@@ -38,8 +32,7 @@ jobs:
         $h = @{ Authorization = "Bearer $env:OPENAI_API_KEY"; "Content-Type"="application/json" }
         $body = @{ model="gpt-4o-mini"; messages=@(@{role="user"; content="Say 'pong'."}); max_tokens=5 } | ConvertTo-Json -Depth 6
         $c = Invoke-RestMethod -Method POST -Uri "$env:REST_BASE/chat/completions" -Headers $h -Body $body -TimeoutSec 30
-        $txt = $c.choices[0].message.content
-        if ($txt -notmatch 'pong') { throw "Chat did not say pong" }
+        if ($c.choices[0].message.content -notmatch 'pong') { throw "Chat did not say pong" }
     - name: Realtime WS 101 (2s cap)
       run: |
         $key = [Convert]::ToBase64String((1..16 | % {Get-Random -Max 256}))
