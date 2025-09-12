@@ -2,8 +2,7 @@ export interface Env { OPENAI_KEY: string; OPENAI_ORG_ID?: string; OPENAI_PROJEC
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
-    
-    
+
     // CORS helper
     const cors = {
       'access-control-allow-origin': '*',
@@ -12,7 +11,7 @@ export default {
       'content-type': 'application/json'
     };
 
-    // Preflight
+    // Preflight for health
     if (req.method === 'OPTIONS' && (url.pathname === '/health-rt' || url.pathname === '/v1/health-rt')) {
       return new Response(null, { status: 204, headers: cors });
     }
@@ -90,5 +89,6 @@ if (url.pathname !== "/v1/realtime") return new Response("Not Found", { status: 
     return new Response(null, { status: 101, webSocket: client });
   }
 }
+
 
 
