@@ -56,3 +56,7 @@ jobs:
       run: |
         $r = Invoke-RestMethod -Uri "https://chatgpt-team-realtime.virelai.workers.dev/health-rt" -TimeoutSec 10
         if (-not $r.ok) { throw "/health-rt not ok" }
+    - name: Health-RT (worker)
+      run: |
+        $r = Invoke-RestMethod -Uri "https://chatgpt-team-realtime.virelai.workers.dev/health-rt" -TimeoutSec 10
+        if (-not $r.ok) { throw "/health-rt not ok" }
