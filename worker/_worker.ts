@@ -2,8 +2,36 @@ export interface Env { OPENAI_KEY: string; OPENAI_ORG_ID?: string; OPENAI_PROJEC
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
-    if (url.pathname !== "/v1/realtime") return new Response("Not Found", { status: 404 });
-    if ((req.headers.get("Upgrade")||"").toLowerCase() !== "websocket") return new Response("Expected WebSocket upgrade", { status: 426 });
+    
+    // CORS helper
+    const cors = {
+      'access-control-allow-origin': '*',
+      'access-control-allow-headers': 'authorization, content-type, accept',
+      'access-control-allow-methods': 'GET, OPTIONS',
+      'content-type': 'application/json'
+    };
+
+    // Preflight
+    if (req.method === 'OPTIONS' && (url.pathname === '/health-rt' || url.pathname === '/v1/health-rt')) {
+      return new Response(null, { status: 204, headers: cors });
+    }
+
+    // Plain HTTP health for the WS worker
+    if (url.pathname === '/health-rt' || url.pathname === '/v1/health-rt') {
+      const body = JSON.stringify({
+        ok: true,
+        service: 'realtime',
+        path: url.pathname,
+        ts: Date.now()
+      });
+      return new Response(body, { status: 200, headers: cors });
+    }
+if (url.pathname !== "/v1/realtime") return new Response("Not Found", { status: 404 });
+    if ((req.headers.get("Upgrade")||"").toLowerCase() !== "websocket") return new Response(JSON.stringify({
+  ok: false,
+  error: "expected websocket upgrade",
+  hint: "connect with a WebSocket client to /v1/realtime"
+}), { status: 426, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
 
     // @ts-ignore
     const pair = new WebSocketPair(); const [client, server] = Object.values(pair) as WebSocket[];
@@ -38,3 +66,4 @@ export default {
     return new Response(null, { status: 101, webSocket: client });
   }
 }
+
