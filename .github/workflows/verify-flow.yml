@@ -1,7 +1,5 @@
 name: verify-flow
-on:
-  push: { branches: [ main ] }
-  workflow_dispatch: {}
+on: { push: { branches: [ "main" ] }, workflow_dispatch: {} }
 defaults: { run: { shell: pwsh } }
 jobs:
   verify:
@@ -12,32 +10,33 @@ jobs:
       REALTIME_PROBE: https://chatgpt-team-realtime.virelai.workers.dev/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Health (root)
-      run: |
-        $r = Invoke-RestMethod -Uri "$env:REST_ROOT/health" -TimeoutSec 15
-        if (-not $r.ok) { throw "/health not ok" }
-    - name: Health (versioned)
-      run: |
-        $r = Invoke-RestMethod -Uri "$env:REST_BASE/health" -TimeoutSec 15
-        if (-not $r.ok) { throw "/v1/health not ok" }
-    - name: /v1/models
-      run: |
-        $h = @{ Authorization = "Bearer $env:OPENAI_API_KEY" }
-        $m = Invoke-RestMethod -Uri "$env:REST_BASE/models" -Headers $h -TimeoutSec 30
-        if ($m.data.Count -lt 1) { throw "No models returned" }
-    - name: /v1/chat/completions (pong)
-      run: |
-        $h = @{ Authorization = "Bearer $env:OPENAI_API_KEY"; "Content-Type"="application/json" }
-        $body = @{ model="gpt-4o-mini"; messages=@(@{role="user"; content="Say 'pong'."}); max_tokens=5 } | ConvertTo-Json -Depth 6
-        $c = Invoke-RestMethod -Method POST -Uri "$env:REST_BASE/chat/completions" -Headers $h -Body $body -TimeoutSec 30
-        if ($c.choices[0].message.content -notmatch 'pong') { throw "Chat did not say pong" }
-    - name: Realtime WS 101 (2s cap)
-      run: |
-        $key = [Convert]::ToBase64String((1..16 | % {Get-Random -Max 256}))
-        $code = & "/usr/bin/curl" --http1.1 -m 2 --connect-timeout 1 -s -o /dev/null -w "%{http_code}" `
-          -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" `
-          -H "Sec-WebSocket-Key: $key" -H "Authorization: Bearer $env:OPENAI_API_KEY" `
-          "$env:REALTIME_PROBE"
-        if ($code -ne "101") { throw "Realtime did not upgrade (got $code)" }
+      - uses: actions/checkout@v4
+      - run: |
+          "REST_ROOT=$env:REST_ROOT"; "REST_BASE=$env:REST_BASE"; "REALTIME_PROBE=$env:REALTIME_PROBE" | Write-Host
+          if (-not $env:OPENAI_API_KEY) { throw "OPENAI_API_KEY secret missing" }
+      - name: Health (root)
+        run: |
+          $r = Invoke-RestMethod "$env:REST_ROOT/health" -TimeoutSec 15
+          if (-not $r.ok) { throw "/health not ok" }
+      - name: Health (/v1/health)
+        run: |
+          $r = Invoke-RestMethod "$env:REST_BASE/health" -TimeoutSec 15
+          if (-not $r.ok) { throw "/v1/health not ok" }
+      - name: Models
+        run: |
+          $h = @{ Authorization = "Bearer $env:OPENAI_API_KEY" }
+          $m = Invoke-RestMethod "$env:REST_BASE/models" -Headers $h -TimeoutSec 30
+          if ($m.data.Count -lt 1) { throw "No models returned" }
+      - name: Chat pong
+        run: |
+          $h = @{ Authorization = "Bearer $env:OPENAI_API_KEY"; "Content-Type"="application/json" }
+          $b = @{ model="gpt-4o-mini"; messages=@(@{role="user";content="Say 'pong'."}); max_tokens=5 } | ConvertTo-Json -Depth 6
+          $c = Invoke-RestMethod "$env:REST_BASE/chat/completions" -Method POST -Headers $h -Body $b -TimeoutSec 30
+          if ($c.choices[0].message.content -notmatch 'pong') { throw "no pong" }
+      - name: Realtime 101
+        run: |
+          $k = [Convert]::ToBase64String((1..16 | % {Get-Random -Max 256}))
+          $code = & "/usr/bin/curl" --http1.1 -m 2 --connect-timeout 1 -s -o /dev/null -w "%{http_code}" `
+            -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: $k" `
+            -H "Authorization: Bearer $env:OPENAI_API_KEY" "$env:REALTIME_PROBE"
+          if ($code -ne "101") { throw "WS did not upgrade (got $code)" }
