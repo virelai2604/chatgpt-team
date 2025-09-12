@@ -39,4 +39,16 @@ jobs:
           $code = & "/usr/bin/curl" --http1.1 -m 2 --connect-timeout 1 -s -o /dev/null -w "%{http_code}" `
             -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: $k" `
             -H "Authorization: Bearer $env:OPENAI_API_KEY" "$env:REALTIME_PROBE"
-          if ($code -ne "101") { throw "WS did not upgrade (got $code)" }
+          if ($code -ne "101") { throw "WS did not upgrade (got $code)" }  deploy-worker:
+    needs: verify
+    if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy realtime worker
+        uses: cloudflare/wrangler-action@3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy
