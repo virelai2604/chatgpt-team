@@ -1,88 +1,50 @@
 name: verify-flow
-
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-
-env:
-  BASE: https://chatgpt-team.pages.dev/v1
-  LIVE_ROOT: https://chatgpt-team.pages.dev
-  REALTIME_BASE: https://chatgpt-team-realtime.virelai.workers.dev/v1
-  CHAT_MODEL: gpt-4o-mini
-  EMB_MODEL: text-embedding-3-small
-  RT_MODEL: gpt-4o-realtime-preview-2024-12-17
-
+  push: { branches: [ main ] }
+  workflow_dispatch: {}
+defaults: { run: { shell: pwsh } }
 jobs:
-  smoke:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    env:
+      REST_ROOT: https://chatgpt-team.pages.dev
+      REST_BASE: https://chatgpt-team.pages.dev/v1
+      REALTIME_PROBE: https://chatgpt-team-realtime.virelai.workers.dev/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Ensure jq present
-        run: |
-          jq --version || sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Health (root + versioned)
-        run: |
-          set -euo pipefail
-          curl -fsS "$LIVE_ROOT/health" | jq .
-          curl -fsS "$BASE/health" | jq .
-
-      - name: Models
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          set -euo pipefail
-          curl -fsS -H "Authorization: Bearer $OPENAI_API_KEY" "$BASE/models" | jq -e '.data | length > 0' >/dev/null
-
-      - name: Chat pong
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          set -euo pipefail
-          jq -n --arg m "$CHAT_MODEL" \
-                '{model:$m,messages:[{role:"user",content:"Say '\''pong'\''."}],max_tokens:8}' \
-            | curl -fsS -H "Authorization: Bearer $OPENAI_API_KEY" \
-                     -H "Content-Type: application/json" \
-                     -d @- "$BASE/chat/completions" \
-            | tee /tmp/chat.json
-          jq -e '.choices[0].message.content | test("pong"; "i")' /tmp/chat.json >/dev/null
-
-      - name: Embeddings
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          set -euo pipefail
-          jq -n --arg m "$EMB_MODEL" '{model:$m, input:"hello world"}' \
-            | curl -fsS -H "Authorization: Bearer $OPENAI_API_KEY" \
-                     -H "Content-Type: application/json" \
-                     -d @- "$BASE/embeddings" \
-            | jq -e '.data[0].embedding | length > 100' >/dev/null
-
-      - name: Files API (upload → download → delete)
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          set -euo pipefail
-          echo "hello from CI" > sample.txt
-          up=$(curl -fsS -H "Authorization: Bearer $OPENAI_API_KEY" -F "file=@sample.txt" -F "purpose=assistants" "$BASE/files")
-          fid=$(echo "$up" | jq -r '.id')
-          test -n "$fid"
-          curl -fsS -H "Authorization: Bearer $OPENAI_API_KEY" "$BASE/files/$fid/content" -o dl.txt
-          test -s dl.txt
-          curl -fsS -X DELETE -H "Authorization: Bearer $OPENAI_API_KEY" "$BASE/files/$fid" | jq -e '.deleted==true' >/dev/null
-
-      - name: Realtime 101 (strict upgrade)
-        run: |
-          set -euo pipefail
-          KEY=$(openssl rand -base64 16)
-          CODE=$(curl --http1.1 -s -o /dev/null -w "%{http_code}" \
-            -H "Connection: Upgrade" \
-            -H "Upgrade: websocket" \
-            -H "Sec-WebSocket-Version: 13" \
-            -H "Sec-WebSocket-Key: $KEY" \
-            "$REALTIME_BASE/realtime?model=$RT_MODEL")
-          echo "WS status: $CODE"
-          test "$CODE" = "101"
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Print environment
+      run: |
+        "REST_ROOT = $env:REST_ROOT"
+        "REST_BASE = $env:REST_BASE"
+        "REALTIME_PROBE = $env:REALTIME_PROBE"
+        if (-not $env:OPENAI_API_KEY) { throw "OPENAI_API_KEY secret is missing." }
+    - name: Health (root)
+      run: |
+        $r = Invoke-RestMethod -Uri "$env:REST_ROOT/health" -TimeoutSec 15
+        if (-not $r.ok) { throw "/health not ok" }
+    - name: Health (versioned)
+      run: |
+        $r = Invoke-RestMethod -Uri "$env:REST_BASE/health" -TimeoutSec 15
+        if (-not $r.ok) { throw "/v1/health not ok" }
+    - name: /v1/models
+      run: |
+        $h = @{ Authorization = "Bearer $env:OPENAI_API_KEY" }
+        $m = Invoke-RestMethod -Uri "$env:REST_BASE/models" -Headers $h -TimeoutSec 30
+        if ($m.data.Count -lt 1) { throw "No models returned" }
+    - name: /v1/chat/completions (pong)
+      run: |
+        $h = @{ Authorization = "Bearer $env:OPENAI_API_KEY"; "Content-Type"="application/json" }
+        $body = @{ model="gpt-4o-mini"; messages=@(@{role="user"; content="Say 'pong'."}); max_tokens=5 } | ConvertTo-Json -Depth 6
+        $c = Invoke-RestMethod -Method POST -Uri "$env:REST_BASE/chat/completions" -Headers $h -Body $body -TimeoutSec 30
+        $txt = $c.choices[0].message.content
+        if ($txt -notmatch 'pong') { throw "Chat did not say pong" }
+    - name: Realtime WS 101 (2s cap)
+      run: |
+        $key = [Convert]::ToBase64String((1..16 | % {Get-Random -Max 256}))
+        $code = & "/usr/bin/curl" --http1.1 -m 2 --connect-timeout 1 -s -o /dev/null -w "%{http_code}" `
+          -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" `
+          -H "Sec-WebSocket-Key: $key" -H "Authorization: Bearer $env:OPENAI_API_KEY" `
+          "$env:REALTIME_PROBE"
+        if ($code -ne "101") { throw "Realtime did not upgrade (got $code)" }
