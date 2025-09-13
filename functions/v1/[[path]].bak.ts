@@ -18,21 +18,13 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
         "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
         "Access-Control-Allow-Headers":
           "Authorization, Content-Type, OpenAI-Organization, OpenAI-Project, OpenAI-Beta, X-Requested-With, Accept",
-      }
+      },
+    });
+  }
+
   // Block moderation per policy
   if (url.pathname.startsWith("/v1/moderations")) {
     return new Response(JSON.stringify({ error: { message: "blocked" } }), {
-      status: 404,
-      headers: {
-        "content-type": "application/json",
-        "cache-control": "no-store",
-        "access-control-allow-origin": "*"
-      }
-    });
-  },
-    });
-  }
-), {
       status: 404,
       headers: {
         "content-type": "application/json",
