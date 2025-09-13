@@ -29,6 +29,15 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
         "access-control-allow-origin": "*"
       }
     });
+  }
+), {
+      status: 404,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "access-control-allow-origin": "*"
+      }
+    });
   },
     });
   }
