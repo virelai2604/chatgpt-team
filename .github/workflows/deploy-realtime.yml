@@ -1,22 +1,24 @@
-name: Deploy Realtime Worker
+name: deploy-realtime
+
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch: {}
 
 jobs:
   deploy:
+    name: Deploy Realtime Worker
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
 
-      # Deploy the Worker from the "worker" subfolder.
-      - name: Deploy (wrangler-action v3)
+      # Use official Wrangler Action v3 (installs wrangler and runs commands)
+      - name: Build & Deploy
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          apiToken:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: worker     # <-- points at worker/wrangler.toml and _worker.ts
-          command: deploy              # explicit; action defaults to deploy
+          workingDirectory: worker
+          wranglerVersion: "4"    # keep fresh wrangler in CI per docs
+          command: deploy
