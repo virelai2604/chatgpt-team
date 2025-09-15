@@ -31,7 +31,7 @@ export default {
     const proto = req.headers.get("Sec-WebSocket-Protocol") ?? undefined;
     const hdrs = new Headers({
       "Upgrade": "websocket",
-      "Authorization": `Bearer ${env.OPENAI_KEY}`,
+      "Authorization": `"Bearer ${env.OPENAI_KEY}`"
       "OpenAI-Beta": "realtime=v1"
     });
     if (proto) hdrs.set("Sec-WebSocket-Protocol", proto);
