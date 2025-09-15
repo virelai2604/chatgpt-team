@@ -1,37 +1,22 @@
 name: Deploy Realtime Worker
-
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [ "main" ]
+  workflow_dispatch: {}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      deployments: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy WS Worker
+      # Deploy the Worker from the "worker" subfolder.
+      - name: Deploy (wrangler-action v3)
         uses: cloudflare/wrangler-action@v3
         with:
-          # Auth to Cloudflare
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-          # Keep the worker build isolated to the worker/ folder
-          workingDirectory: worker
-
-          # Pin or float Wrangler; you’ve been using 4.37.0 locally
-          wranglerVersion: "4.37.0"
-
-          # Be explicit (defaults to deploy, but clearer)
-          command: deploy
-
-          # Set the Worker secret OPENAI_KEY at deploy time
-          secrets: |
-            OPENAI_KEY
-        env:
-          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          workingDirectory: worker     # <-- points at worker/wrangler.toml and _worker.ts
+          command: deploy              # explicit; action defaults to deploy
