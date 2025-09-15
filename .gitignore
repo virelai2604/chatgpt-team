@@ -65,3 +65,7 @@ tools/.out/
 tools/.out/
 
 tools/.out/
+tools/.out/
+tools/smoke-tmp/
+*.bak
+*.premerge
