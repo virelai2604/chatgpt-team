@@ -13,42 +13,13 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers":
-          "Authorization, Content-Type, OpenAI-Organization, OpenAI-Project, OpenAI-Beta, X-Requested-With, Accept",
-      }
+      headers: corsHeaders()
+    });
+  }
+
   // Block moderation per policy
   if (url.pathname.startsWith("/v1/moderations")) {
-    return new Response(JSON.stringify({ error: { message: "blocked" } }), {
-      status: 404,
-      headers: {
-        "content-type": "application/json",
-        "cache-control": "no-store",
-        "access-control-allow-origin": "*"
-      }
-    });
-  }
-), {
-      status: 404,
-      headers: {
-        "content-type": "application/json",
-        "cache-control": "no-store",
-        "access-control-allow-origin": "*"
-      }
-    });
-  },
-    });
-  }
-), {
-      status: 404,
-      headers: {
-        "content-type": "application/json",
-        "cache-control": "no-store",
-        "access-control-allow-origin": "*",
-      },
-    });
+    return json({ error: { message: "blocked" } }, 404, corsHeaders());
   }
 
   // Only handle /v1/*
@@ -58,23 +29,18 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   // Upstream target
   const base = env.BASE || "https://api.openai.com";
-  const upstream = new URL(base + url.pathname + url.search);
+  const upstream = base + url.pathname + url.search;
 
   // Forward headers and inject server-side auth
   const out = new Headers(request.headers);
   if (!out.has("authorization") && env.OPENAI_KEY) {
     out.set("authorization", `Bearer ${env.OPENAI_KEY}`);
   }
-  if (env.OPENAI_ORG_ID && !out.has("openai-organization")) {
-    out.set("openai-organization", env.OPENAI_ORG_ID);
-  }
-  if (env.OPENAI_PROJECT && !out.has("openai-project")) {
-    out.set("openai-project", env.OPENAI_PROJECT);
-  }
-  if (env.OPENAI_BETA && !out.has("openai-beta")) {
-    out.set("openai-beta", env.OPENAI_BETA);
-  }
-  // Strip hop-by-hop headers; let the platform compute length/host
+  if (env.OPENAI_ORG_ID && !out.has("openai-organization")) out.set("openai-organization", env.OPENAI_ORG_ID);
+  if (env.OPENAI_PROJECT && !out.has("openai-project")) out.set("openai-project", env.OPENAI_PROJECT);
+  if (env.OPENAI_BETA && !out.has("openai-beta")) out.set("openai-beta", env.OPENAI_BETA);
+
+  // Strip hop-by-hop headers
   out.delete("host"); out.delete("content-length"); out.delete("connection");
   out.delete("transfer-encoding"); out.delete("keep-alive"); out.delete("upgrade");
 
@@ -84,7 +50,6 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   let init: RequestInit;
   if (isMultipart) {
-    // Rebuild multipart to preserve boundaries
     const form = await request.formData();
     const f = new FormData();
     for (const [k, v] of form.entries()) f.append(k, v as any);
@@ -94,20 +59,27 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     if (out.get("openai-beta")) mh.set("openai-beta", out.get("openai-beta")!);
     init = { method, headers: mh, body: f, redirect: "manual" };
   } else {
-    init = {
-      method,
-      headers: out,
-      body: (method === "GET" || method === "HEAD") ? undefined : request.body,
-      redirect: "manual",
-    };
+    init = { method, headers: out, body: (method === "GET" || method === "HEAD") ? undefined : request.body, redirect: "manual" };
   }
 
-  const resp = await fetch(upstream.toString(), init);
+  const resp = await fetch(upstream, init);
   const rh = new Headers(resp.headers);
   rh.set("Access-Control-Allow-Origin", "*");
-  rh.set("Access-Control-Expose-Headers",
-    "OpenAI-Processing-Ms, OpenAI-Organization, OpenAI-Version, OpenAI-Model, X-Request-Id");
+  rh.set("Access-Control-Expose-Headers", "OpenAI-Processing-Ms, OpenAI-Organization, OpenAI-Version, OpenAI-Model, X-Request-Id");
   rh.set("Cache-Control", "no-store");
 
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: rh });
 };
+
+function corsHeaders(): Record<string,string> {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, OpenAI-Organization, OpenAI-Project, OpenAI-Beta, X-Requested-With, Accept"
+  };
+}
+
+function json(data: unknown, status = 200, headers: Record<string,string> = {}) {
+  const h = new Headers({ "content-type": "application/json; charset=utf-8", ...headers });
+  return new Response(JSON.stringify(data), { status, headers: h });
+}
