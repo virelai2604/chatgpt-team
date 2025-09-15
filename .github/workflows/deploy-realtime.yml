@@ -1,24 +1,30 @@
-name: deploy-realtime
+name: Deploy Realtime Worker
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
+    paths:
+      - "worker/**"
+      - ".github/workflows/deploy-realtime.yml"
+
+concurrency:
+  group: realtime-worker
+  cancel-in-progress: true
 
 jobs:
   deploy:
-    name: Deploy Realtime Worker
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      deployments: write
     steps:
       - uses: actions/checkout@v4
-
-      # Use official Wrangler Action v3 (installs wrangler and runs commands)
-      - name: Build & Deploy
+      - name: Deploy (Wrangler Action)
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: worker
-          wranglerVersion: "4"    # keep fresh wrangler in CI per docs
+          # optional: pin wrangler if you want
+          # wranglerVersion: "4.37.0"
           command: deploy
