@@ -1,16 +1,15 @@
+// Minimal WS relay for OpenAI Realtime
 export interface Env {
   OPENAI_KEY: string;
   OPENAI_ORG_ID?: string;
   OPENAI_PROJECT?: string;
-  OPENAI_BETA?: string; // optional; defaulted below to realtime=v1
+  OPENAI_BETA?: string; // optional; default below to realtime=v1
 }
 
-// Minimal WS relay for OpenAI Realtime
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
 
-    // Health
     if (url.pathname === "/health-rt" || url.pathname === "/v1/health-rt") {
       return new Response(JSON.stringify({ ok: true, service: "realtime", ts: Date.now() }), {
         headers: { "content-type": "application/json", "access-control-allow-origin": "*" }
