@@ -3,28 +3,18 @@ name: Deploy Realtime Worker
 on:
   push:
     branches: [ main ]
-    paths:
-      - "worker/**"
-      - ".github/workflows/deploy-realtime.yml"
-
-concurrency:
-  group: realtime-worker
-  cancel-in-progress: true
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      deployments: write
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy (Wrangler Action)
-        uses: cloudflare/wrangler-action@v3
+      - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: worker
-          # optional: pin wrangler if you want
-          # wranglerVersion: "4.37.0"
           command: deploy
