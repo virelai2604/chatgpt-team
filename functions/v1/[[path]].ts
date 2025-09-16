@@ -3,7 +3,7 @@ type Env = {
   OPENAI_ORG_ID?: string;
   OPENAI_PROJECT?: string;
   OPENAI_BETA?: string;
-  BASE?: string; // default api.openai.com
+  BASE?: string; // optional: override upstream (defaults to https://api.openai.com)
 };
 
 export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
@@ -14,7 +14,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
 
-  // Block moderation per policy
+  // Hard block Moderations by policy
   if (url.pathname.startsWith("/v1/moderations")) {
     return json({ error: { message: "blocked" } }, 404, corsHeaders());
   }
@@ -24,34 +24,27 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return new Response("Not found", { status: 404 });
   }
 
-  // Hard-fail when no Authorization would be sent upstream
-  const incomingAuth = request.headers.get("authorization");
-  if (!incomingAuth && !env.OPENAI_KEY) {
-    return json({
-      ok: false,
-      error: {
-        code: "missing_openai_key",
-        message: "No client Authorization header and OPENAI_KEY secret is not set on Pages. Set it and redeploy."
-      }
-    }, 500, { ...corsHeaders(), "cache-control": "no-store" });
-  }
+  // Compute upstream URL
+  const upstreamBase = (env.BASE && env.BASE.trim()) || "https://api.openai.com";
+  const upstreamUrl = upstreamBase + url.pathname + url.search;
 
-  // Upstream target
-  const base = env.BASE || "https://api.openai.com";
-  const upstream = base + url.pathname + url.search;
-
-  // Forward headers and inject server-side auth
+  // Build outbound headers
   const out = new Headers(request.headers);
-  if (!out.has("authorization") && env.OPENAI_KEY) {
-    out.set("authorization", `Bearer ${env.OPENAI_KEY}`);
-  }
-  if (env.OPENAI_ORG_ID && !out.has("openai-organization")) out.set("openai-organization", env.OPENAI_ORG_ID);
-  if (env.OPENAI_PROJECT && !out.has("openai-project")) out.set("openai-project", env.OPENAI_PROJECT);
-  if (env.OPENAI_BETA && !out.has("openai-beta")) out.set("openai-beta", env.OPENAI_BETA);
+
+  // Always use the server-side key; ignore any client Authorization
+  out.set("Authorization", `Bearer ${env.OPENAI_KEY}`);
+
+  if (env.OPENAI_ORG_ID)  out.set("OpenAI-Organization", env.OPENAI_ORG_ID);
+  if (env.OPENAI_PROJECT) out.set("OpenAI-Project",      env.OPENAI_PROJECT);
+  if (env.OPENAI_BETA)    out.set("OpenAI-Beta",         env.OPENAI_BETA);
 
   // Strip hop-by-hop headers
-  out.delete("host"); out.delete("content-length"); out.delete("connection");
-  out.delete("transfer-encoding"); out.delete("keep-alive"); out.delete("upgrade");
+  out.delete("host");
+  out.delete("content-length");
+  out.delete("connection");
+  out.delete("transfer-encoding");
+  out.delete("keep-alive");
+  out.delete("upgrade");
 
   const method = request.method.toUpperCase();
   const ct = request.headers.get("content-type") || "";
@@ -62,20 +55,21 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     const form = await request.formData();
     const f = new FormData();
     for (const [k, v] of form.entries()) f.append(k, v as any);
-    const mh = new Headers({ authorization: out.get("authorization")! });
-    if (out.get("openai-organization")) mh.set("openai-organization", out.get("openai-organization")!);
-    if (out.get("openai-project"))      mh.set("openai-project",      out.get("openai-project")!);
-    if (out.get("openai-beta"))         mh.set("openai-beta",         out.get("openai-beta")!);
-    init = { method, headers: mh, body: f, redirect: "manual" };
+    init = { method, headers: out, body: f };
   } else {
-    init = { method, headers: out, body: (method === "GET" || method === "HEAD") ? undefined : request.body, redirect: "manual" };
+    init = { method, headers: out, body: ["GET","HEAD"].includes(method) ? undefined : request.body };
   }
 
-  const resp = await fetch(upstream, init);
+  const resp = await fetch(upstreamUrl, init);
+
+  // Prepare response headers (no hop-by-hop) + CORS
   const rh = new Headers(resp.headers);
-  rh.set("Access-Control-Allow-Origin", "*");
-  rh.set("Access-Control-Expose-Headers", "OpenAI-Processing-Ms, OpenAI-Organization, OpenAI-Version, OpenAI-Model, X-Request-Id");
-  rh.set("Cache-Control", "no-store");
+  rh.delete("content-length");
+  rh.delete("connection");
+  rh.delete("transfer-encoding");
+  rh.delete("keep-alive");
+  rh.delete("upgrade");
+  for (const [k,v] of Object.entries(corsHeaders())) rh.set(k,v);
 
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: rh });
 };
