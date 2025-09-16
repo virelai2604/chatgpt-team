@@ -1,12 +1,9 @@
 name = "chatgpt-team-realtime"
 main = "_worker.ts"
-compatibility_date = "2025-09-16"
+compatibility_date = "2025-09-14"  # keep current and valid
+workers_dev = true
 
 [vars]
-Keep these plaintext to match your UI setup (you can also manage in the CF dashboard).
+# plain (non-secret) vars are OK in TOML
 OPENAI_BETA = "realtime=v1"
-# Optional (plaintext). If you use them, fill actual values or set them in the CF UI:
-OPENAI_ORG_ID = "org-BE0YNlrYbCShFGQxMkW2f0fU"
-OPENAI_PROJECT = "proj_sZ0J3FtvBLrNJic6pXlx56Mm"
 UPSTREAM_REALTIME = "1"
-ACCOUNT_ID = "1dc38975abee1e2dcec7e95cd519075a"
