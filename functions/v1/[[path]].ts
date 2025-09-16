@@ -11,10 +11,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   // CORS preflight
   if (request.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: corsHeaders()
-    });
+    return new Response(null, { status: 204, headers: corsHeaders() });
   }
 
   // Block moderation per policy
@@ -25,6 +22,18 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   // Only handle /v1/*
   if (!url.pathname.startsWith("/v1/")) {
     return new Response("Not found", { status: 404 });
+  }
+
+  // Hard-fail when no Authorization would be sent upstream
+  const incomingAuth = request.headers.get("authorization");
+  if (!incomingAuth && !env.OPENAI_KEY) {
+    return json({
+      ok: false,
+      error: {
+        code: "missing_openai_key",
+        message: "No client Authorization header and OPENAI_KEY secret is not set on Pages. Set it and redeploy."
+      }
+    }, 500, { ...corsHeaders(), "cache-control": "no-store" });
   }
 
   // Upstream target
@@ -55,8 +64,8 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     for (const [k, v] of form.entries()) f.append(k, v as any);
     const mh = new Headers({ authorization: out.get("authorization")! });
     if (out.get("openai-organization")) mh.set("openai-organization", out.get("openai-organization")!);
-    if (out.get("openai-project")) mh.set("openai-project", out.get("openai-project")!);
-    if (out.get("openai-beta")) mh.set("openai-beta", out.get("openai-beta")!);
+    if (out.get("openai-project"))      mh.set("openai-project",      out.get("openai-project")!);
+    if (out.get("openai-beta"))         mh.set("openai-beta",         out.get("openai-beta")!);
     init = { method, headers: mh, body: f, redirect: "manual" };
   } else {
     init = { method, headers: out, body: (method === "GET" || method === "HEAD") ? undefined : request.body, redirect: "manual" };

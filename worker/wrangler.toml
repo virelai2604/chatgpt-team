@@ -1,10 +1,9 @@
 name = "chatgpt-team-realtime"
 main = "_worker.ts"
-compatibility_date = "2025-09-16"  # keep current and valid
+compatibility_date = "2025-09-16"
 workers_dev = true
 
 [vars]
-# plain (non-secret) vars are OK in TOML
 OPENAI_BETA = "realtime=v1"
 UPSTREAM_REALTIME = "1"
 OPENAI_ORG_ID = "org-BE0YNlrYbCShFGQxMkW2f0fU"

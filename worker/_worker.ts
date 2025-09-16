@@ -1,59 +1,63 @@
 export interface Env {
-  OPENAI_KEY: string;            // Secret
-  OPENAI_BETA?: string;          // "realtime=v1"
-  OPENAI_ORG_ID?: string;        // optional
-  OPENAI_PROJECT?: string;       // optional
+  OPENAI_KEY: string;
+  OPENAI_ORG_ID?: string;
+  OPENAI_PROJECT?: string;
+  OPENAI_BETA?: string; // default set below to realtime=v1
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
+  async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(req.url);
 
-    // Only handle the realtime path
-    if (!url.pathname.startsWith("/v1/realtime")) {
-      return new Response("Not Found (realtime)", { status: 404 });
-    }
-
-    // WebSocket handshake required
-    const upgrade = (request.headers.get("Upgrade") || "").toLowerCase();
-    if (upgrade !== "websocket") {
-      return new Response("Expected WebSocket upgrade", { status: 426 });
-    }
-
-    // Build upstream URL: keep /v1/realtime and query (model, voice, etc.)
-    const upstream = new URL("https://api.openai.com" + url.pathname + url.search);
-
-    // Create WS pair and accept the server side before proxying
-    const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
-    server.accept();
-
-    // Required OpenAI headers for Realtime WS
-    const h = new Headers();
-    h.set("Authorization", `Bearer ${env.OPENAI_KEY}`);
-    h.set("OpenAI-Beta", env.OPENAI_BETA || "realtime=v1"); // per Realtime docs
-    if (env.OPENAI_ORG_ID) h.set("OpenAI-Organization", env.OPENAI_ORG_ID);
-    if (env.OPENAI_PROJECT) h.set("OpenAI-Project", env.OPENAI_PROJECT);
-    // Tell CF we're upgrading this request to WS
-    h.set("Connection", "Upgrade");
-    h.set("Upgrade", "websocket");
-
-    // Bridge our server socket to OpenAI’s socket
-    const upstreamResp = await fetch(upstream, {
-      headers: h,
-      webSocket: server,
-    });
-
-    // If OpenAI didn’t accept (101), surface that error
-    if (upstreamResp.status !== 101) {
-      try { server.close(); } catch {}
-      const body = await upstreamResp.text().catch(() => "");
-      return new Response(`Upstream WS refused (${upstreamResp.status})\n${body}`, {
-        status: 502,
-        headers: { "content-type": "text/plain" },
+    // HTTP health for quick checks
+    if (url.pathname === "/health-rt" || url.pathname === "/v1/health-rt") {
+      return new Response(JSON.stringify({ ok: true, service: "realtime", ts: Date.now() }), {
+        headers: { "content-type": "application/json", "access-control-allow-origin": "*" }
       });
     }
 
-    // Handshake OK — return the client side to the caller
+    // Serve only the WS endpoint
+    if (url.pathname !== "/v1/realtime") {
+      return new Response("Not Found (realtime worker)", { status: 404 });
+    }
+
+    // Require WebSocket upgrade
+    if ((req.headers.get("Upgrade") || "").toLowerCase() !== "websocket") {
+      return new Response("Expected WebSocket upgrade", { status: 426 });
+    }
+
+    // Cloudflare WS pair
+    // @ts-ignore Cloudflare runtime
+    const pair = new WebSocketPair();
+    // @ts-ignore
+    const [client, server] = Object.values(pair);
+    // @ts-ignore
+    server.accept();
+
+    // Upstream OpenAI Realtime WS
+    const model = url.searchParams.get("model") ?? "gpt-4o-realtime-preview-2024-12-17";
+    const upstreamUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
+
+    const headers = new Headers({
+      "Authorization": `Bearer ${env.OPENAI_KEY}`,
+      "OpenAI-Beta": (env.OPENAI_BETA && env.OPENAI_BETA.trim()) || "realtime=v1"
+    });
+    if (env.OPENAI_ORG_ID)  headers.set("OpenAI-Organization", env.OPENAI_ORG_ID);
+    if (env.OPENAI_PROJECT) headers.set("OpenAI-Project",      env.OPENAI_PROJECT);
+
+    // Preserve subprotocol (OpenAI suggests "oai-realtime" for event schema)
+    const proto = req.headers.get("Sec-WebSocket-Protocol");
+    const upstream = new WebSocket(upstreamUrl, proto ? [proto] : [], { headers } as any);
+
+    // Bridge frames both directions
+    upstream.addEventListener("message", (ev: MessageEvent) => server.send(ev.data));
+    server  .addEventListener("message", (ev: MessageEvent) => upstream.send(ev.data));
+    upstream.addEventListener("close", () => server.close());
+    server  .addEventListener("close", () => upstream.close());
+    upstream.addEventListener("error", () => server.close());
+    server  .addEventListener("error", () => upstream.close());
+
+    // Hand back the client socket
     return new Response(null, { status: 101, webSocket: client });
-  },
+  }
 };
