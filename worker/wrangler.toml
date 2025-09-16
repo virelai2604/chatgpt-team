@@ -7,3 +7,5 @@ workers_dev = true
 # plain (non-secret) vars are OK in TOML
 OPENAI_BETA = "realtime=v1"
 UPSTREAM_REALTIME = "1"
+OPENAI_ORG_ID = "org-BE0YNlrYbCShFGQxMkW2f0fU"
+OPENAI_PROJECT = proj_sZ0J3FtvBLrNJic6pXlx56Mm
