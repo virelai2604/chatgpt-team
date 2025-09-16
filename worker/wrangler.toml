@@ -4,3 +4,6 @@ compatibility_date = "2025-09-16"
 [vars]
 OPENAI_BETA = "realtime=v1"
 # OPENAI_ORG_ID / OPENAI_PROJECT can be set in Dashboard or via `wrangler variables`
+
+
+
