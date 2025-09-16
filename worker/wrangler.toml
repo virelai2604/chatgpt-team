@@ -1,6 +1,6 @@
 name = "chatgpt-team-realtime"
 main = "_worker.ts"
-compatibility_date = "2025-09-10"
+compatibility_date = "2025-09-16"
 
 [vars]
 Keep these plaintext to match your UI setup (you can also manage in the CF dashboard).
