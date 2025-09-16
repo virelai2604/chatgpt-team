@@ -1,6 +1,6 @@
 name = "chatgpt-team-realtime"
 main = "_worker.ts"
-compatibility_date = "2025-09-14"  # keep current and valid
+compatibility_date = "2025-09-16"  # keep current and valid
 workers_dev = true
 
 [vars]
@@ -8,4 +8,4 @@ workers_dev = true
 OPENAI_BETA = "realtime=v1"
 UPSTREAM_REALTIME = "1"
 OPENAI_ORG_ID = "org-BE0YNlrYbCShFGQxMkW2f0fU"
-OPENAI_PROJECT = proj_sZ0J3FtvBLrNJic6pXlx56Mm
+OPENAI_PROJECT = "proj_sZ0J3FtvBLrNJic6pXlx56Mm"
