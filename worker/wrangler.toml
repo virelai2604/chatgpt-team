@@ -4,7 +4,5 @@ compatibility_date = "2025-09-16"
 workers_dev = true
 
 [vars]
+# Keep realtime header on by default; org/project optional
 OPENAI_BETA = "realtime=v1"
-UPSTREAM_REALTIME = "1"
-OPENAI_ORG_ID = "org-BE0YNlrYbCShFGQxMkW2f0fU"
-OPENAI_PROJECT = "proj_sZ0J3FtvBLrNJic6pXlx56Mm"
