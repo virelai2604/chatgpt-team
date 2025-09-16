@@ -1,72 +1,87 @@
 export interface Env {
   OPENAI_KEY: string;
-  OPENAI_BETA?: string;       // e.g. "realtime=v1"
-  OPENAI_ORG_ID?: string;     // optional
-  OPENAI_PROJECT?: string;    // optional
+  OPENAI_ORG_ID?: string;
+  OPENAI_PROJECT?: string;
+  OPENAI_BETA?: string; // e.g. "realtime=v1"
 }
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
 
-    // Simple health check
-    if (url.pathname === "/health") {
-      return new Response(JSON.stringify({ ok: true, env: { OPENAI_KEY: !!env.OPENAI_KEY, OPENAI_BETA: env.OPENAI_BETA ?? null, OPENAI_ORG_ID: !!env.OPENAI_ORG_ID, OPENAI_PROJECT: !!env.OPENAI_PROJECT } }), {
+    // lightweight health for WS worker
+    if (url.pathname === "/v1/health-rt" || url.pathname === "/health-rt") {
+      return new Response(JSON.stringify({ ok: true, service: "realtime", ts: Date.now() }), {
+        status: 200,
         headers: { "content-type": "application/json", "access-control-allow-origin": "*" }
       });
     }
 
-    // WebSocket gateway: /v1/realtime?model=...
-    if (url.pathname.startsWith("/v1/realtime")) {
-      if ((req.headers.get("Upgrade") || "").toLowerCase() !== "websocket") {
-        return new Response("Expected WebSocket upgrade", {
-          status: 426,
-          headers: { "connection": "Upgrade", "upgrade": "websocket" }
-        });
-      }
-
-      const model = url.searchParams.get("model") || "gpt-4o-realtime-preview-2024-12-17";
-      const upstreamUrl = `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
-
-      // Connect from Worker -> OpenAI (upstream) as a WebSocket client
-      const upstreamResp = await fetch(upstreamUrl, {
-        headers: {
-          "Authorization": `Bearer ${env.OPENAI_KEY}`,
-          "OpenAI-Beta": env.OPENAI_BETA || "realtime=v1",
-          ...(env.OPENAI_ORG_ID ? { "OpenAI-Organization": env.OPENAI_ORG_ID } : {}),
-          ...(env.OPENAI_PROJECT ? { "OpenAI-Project": env.OPENAI_PROJECT } : {}),
-          "Connection": "Upgrade",
-          "Upgrade": "websocket",
-        }
-      });
-
-      if (!upstreamResp.webSocket) {
-        return new Response("Upstream WebSocket failed", { status: 502 });
-      }
-      const upstream = upstreamResp.webSocket;
-      upstream.accept();
-
-      // Create a pair: client <-> (CF Worker) <-> upstream
-      // @ts-ignore
-      const pair = new WebSocketPair();
-      const client = pair[0];
-      const server = pair[1];
-      // @ts-ignore
-      server.accept();
-
-      // Pump data both ways
-      server.addEventListener("message", (evt: MessageEvent) => upstream.send(evt.data));
-      upstream.addEventListener("message", (evt: MessageEvent) => server.send(evt.data));
-
-      server.addEventListener("close", (evt: CloseEvent) => upstream.close(evt.code, evt.reason));
-      upstream.addEventListener("close", (evt: CloseEvent) => server.close(evt.code, evt.reason));
-
-      server.addEventListener("error", () => upstream.close(1011, "cf-error"));
-      upstream.addEventListener("error", () => server.close(1011, "upstream-error"));
-
-      return new Response(null, { status: 101, webSocket: client });
+    // enforce /v1/realtime + websocket upgrade
+    if (url.pathname !== "/v1/realtime")
+      return new Response("Not Found (realtime worker)", { status: 404 });
+    if ((req.headers.get("Upgrade") || "").toLowerCase() !== "websocket") {
+      return new Response("Expected WebSocket upgrade", { status: 426 });
     }
 
-    return new Response("Not Found (realtime worker)", { status: 404 });
+    // downstream socket pair for the client
+    // @ts-ignore Cloudflare runtime
+    const pair = new WebSocketPair();
+    // @ts-ignore Cloudflare runtime
+    const [client, server] = Object.values(pair);
+    // @ts-ignore Cloudflare runtime
+    server.accept();
+
+    // model (keep client ?model=…)
+    const model = url.searchParams.get("model") ?? "gpt-4o-realtime-preview-2024-12-17";
+    const upstreamUrl = `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
+
+    // choose beta: env or safe fallback
+    const beta = (env.OPENAI_BETA && env.OPENAI_BETA.trim()) ? env.OPENAI_BETA : "realtime=v1";
+
+    // build upstream headers
+    const h = new Headers({
+      "Authorization": `Bearer ${env.OPENAI_KEY}`,
+      "OpenAI-Beta": beta,
+      "Upgrade": "websocket"
+    });
+    if (env.OPENAI_ORG_ID)   h.set("OpenAI-Organization", env.OPENAI_ORG_ID);
+    if (env.OPENAI_PROJECT)  h.set("OpenAI-Project",      env.OPENAI_PROJECT);
+
+    // preserve client subprotocol if any
+    const proto = (req.headers.get("Sec-WebSocket-Protocol") || "").trim();
+    if (proto) h.set("Sec-WebSocket-Protocol", proto);
+
+    // connect to OpenAI (Workers exposes response.webSocket on success)
+    const upstreamResp = await fetch(upstreamUrl, { headers: h });
+    // @ts-ignore Cloudflare runtime
+    const upstream = (upstreamResp as any).webSocket as WebSocket | undefined;
+    if (!upstream) {
+      server.close(1011, "Upstream unavailable");
+      return new Response("Failed to connect upstream", { status: 502 });
+    }
+    // @ts-ignore Cloudflare runtime
+    upstream.accept();
+
+    // bridge messages in both directions
+    server.addEventListener("message", (ev: MessageEvent) => { try { upstream.send(ev.data); } catch {} });
+    upstream.addEventListener("message", (ev: MessageEvent) => { try { server.send(ev.data); } catch {} });
+    server.addEventListener("close",  (ev: CloseEvent) => { try { upstream.close(ev.code, ev.reason || "client closed"); } catch {} });
+    upstream.addEventListener("close",(ev: CloseEvent) => { try { server.close(ev.code, ev.reason || "upstream closed"); } catch {} });
+    server.addEventListener("error", () => { try { upstream.close(1011, "client error"); } catch {} });
+    upstream.addEventListener("error", () => { try { server.close(1011, "upstream error"); } catch {} });
+
+    // keep-alive ping
+    const ping = setInterval(() => { try { server.send(JSON.stringify({ type: "ping", t: Date.now() })); } catch { clearInterval(ping); } }, 30000);
+    ctx.waitUntil(new Promise<void>((resolve) => {
+      const done = () => { clearInterval(ping); resolve(); };
+      server.addEventListener("close", done);
+      upstream.addEventListener("close", done);
+    }));
+
+    // return 101 with the client socket (preserve protocol)
+    const rh = new Headers();
+    if (proto) rh.set("Sec-WebSocket-Protocol", proto);
+    return new Response(null, { status: 101, webSocket: client, headers: rh });
   }
 };
