@@ -1,4 +1,3 @@
-// functions/v1/health.ts
 export const onRequestGet: PagesFunction = async (ctx) => {
   const { request, env } = ctx;
   const origin = new URL(request.url).origin;
