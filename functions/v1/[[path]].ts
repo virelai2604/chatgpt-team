@@ -6,6 +6,22 @@ type Env = {
   BASE?: string; // default https://api.openai.com
 };
 
+function corsHeaders() {
+  return {
+    "access-control-allow-origin": "*",
+    "access-control-allow-headers": "*",
+    "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    "cache-control": "no-store"
+  };
+}
+
+function json(body: unknown, status = 200, extra: Record<string,string> = {}) {
+  return new Response(JSON.stringify(body, null, 2), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8", ...corsHeaders(), ...extra }
+  });
+}
+
 export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
 
@@ -16,7 +32,13 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   // Policy: block moderations on this relay
   if (url.pathname.startsWith("/v1/moderations")) {
-    return json({ error: { message: "blocked" } }, 404, corsHeaders());
+    return json({ error: { message: "blocked" } }, 404);
+  }
+
+  // Hint users that /v1/realtime must use the Worker (WS upgrade)
+  if (url.pathname.startsWith("/v1/realtime")) {
+    const hint = { error: { message: "Use the Realtime Worker for WebSocket upgrades (wss). This Pages relay is HTTP-only." } };
+    return json(hint, 426); // 426 Expected WebSocket Upgrade
   }
 
   // Only relay /v1/*
@@ -44,35 +66,23 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   const ct = request.headers.get("content-type") || "";
   const isMultipart = ct.includes("multipart/form-data");
 
-  let init: RequestInit;
-  if (isMultipart) {
-    const inForm = await request.formData();
-    const outForm = new FormData();
-    for (const [k, v] of inForm.entries()) outForm.append(k, v as any);
-    const h = new Headers({ authorization: out.get("authorization")! });
-    if (out.get("openai-organization")) h.set("openai-organization", out.get("openai-organization")!);
-    if (out.get("openai-project"))      h.set("openai-project",      out.get("openai-project")!);
-    if (out.get("openai-beta"))         h.set("openai-beta",         out.get("openai-beta")!);
-    init = { method, headers: h, body: outForm, redirect: "manual" };
+  // If multipart (files/audio), reconstruct to preserve boundaries
+  let body: BodyInit | null = null;
+  if (["GET","HEAD"].includes(method)) {
+    body = null;
+  } else if (isMultipart) {
+    const form = await request.formData();
+    const copy = new FormData();
+    for (const [k, v] of form.entries()) copy.append(k, v as any);
+    body = copy;
+    out.delete("content-type"); // boundary will be set by fetch from FormData
   } else {
-    init = { method, headers: out, body: (method === "GET" || method === "HEAD") ? undefined : request.body, redirect: "manual" };
+    body = request.body; // stream JSON/bytes through
   }
 
-  const resp = await fetch(upstreamUrl, init);
-  const rh = new Headers(resp.headers);
-  rh.set("Access-Control-Allow-Origin", "*");
-  rh.set("Access-Control-Expose-Headers", "OpenAI-Processing-Ms, OpenAI-Organization, OpenAI-Version, OpenAI-Model, X-Request-Id");
-  rh.set("Cache-Control", "no-store");
-  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: rh });
+  const upstream = await fetch(upstreamUrl, { method, headers: out, body });
+  // Mirror upstream status/headers; keep CORS/cache headers
+  const headers = new Headers(upstream.headers);
+  for (const [k,v] of Object.entries(corsHeaders())) headers.set(k, v);
+  return new Response(upstream.body, { status: upstream.status, headers });
 };
-
-function corsHeaders(): Record<string,string> {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type, OpenAI-Organization, OpenAI-Project, OpenAI-Beta, X-Requested-With, Accept"
-  };
-}
-function json(data: unknown, status = 200, headers: Record<string,string> = {}) {
-  return new Response(JSON.stringify(data), { status, headers: new Headers({ "content-type": "application/json; charset=utf-8", ...headers }) });
-}
