@@ -3,7 +3,7 @@ type Env = {
   OPENAI_ORG_ID?: string;
   OPENAI_PROJECT?: string;
   OPENAI_BETA?: string;
-  BASE?: string; // default https://api.openai.com
+  BASE?: string; // optional override, default https://api.openai.com
 };
 
 export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
@@ -19,59 +19,63 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return json({ ok: false, error: "Not Found" }, 404, corsHeaders());
   }
 
-  // Relay policy: hard‑block Moderations at the edge
+  // Block Moderations by policy (intentional)
   if (url.pathname.startsWith("/v1/moderations")) {
-    return json({ error: "endpoint disabled at relay" }, 404, corsHeaders());
+    return json({ error: { message: "blocked" } }, 404, corsHeaders());
   }
 
   // Build upstream URL
   const base = (env.BASE || "https://api.openai.com").replace(/\/$/, "");
   const upstreamUrl = base + url.pathname + url.search;
 
-  // Prepare outbound headers
+  // Prepare outbound headers (copy only what's needed)
   const out = new Headers();
-  for (const [k, v] of request.headers.entries()) {
+  const fwd = request.headers;
+  for (const [k, v] of fwd.entries()) {
     const lower = k.toLowerCase();
     if (lower === "content-type" || lower === "accept" || lower === "accept-language" || lower === "range") {
       out.set(k, v);
     }
   }
 
-  // Always set auth from env — never trust client
+  // Server-side auth and optional org/project/beta
   out.set("authorization", `Bearer ${env.OPENAI_KEY}`);
   if (env.OPENAI_ORG_ID) out.set("OpenAI-Organization", env.OPENAI_ORG_ID);
   if (env.OPENAI_PROJECT) out.set("OpenAI-Project", env.OPENAI_PROJECT);
   if (env.OPENAI_BETA)    out.set("OpenAI-Beta", env.OPENAI_BETA!);
 
   const canHaveBody = !(request.method === "GET" || request.method === "HEAD");
-  const init: RequestInit = { method: request.method, headers: out, body: canHaveBody ? request.body : undefined };
 
+  // Stream through; do not re-construct multipart
   let resp: Response;
-  try { resp = await fetch(upstreamUrl, init); }
-  catch (err: any) { return json({ ok: false, error: String(err) }, 502, corsHeaders()); }
+  try {
+    resp = await fetch(upstreamUrl, {
+      method: request.method,
+      headers: out,
+      body: canHaveBody ? request.body : undefined
+    });
+  } catch (err: any) {
+    return json({ ok: false, error: String(err) }, 502, corsHeaders());
+  }
 
-  // Mirror upstream response, add permissive CORS
-  const headers = new Headers(resp.headers);
-  const cors = corsHeaders();
-  for (const [k, v] of Object.entries(cors)) headers.set(k, v);
+  // CORS + no-store passthrough
+  const rh = new Headers(resp.headers);
+  rh.set("Access-Control-Allow-Origin", "*");
+  rh.set("Access-Control-Expose-Headers", "OpenAI-*, X-Request-Id");
+  rh.set("Cache-Control", "no-store");
 
-  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers });
+  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: rh });
 };
 
-function corsHeaders(): Record<string, string> {
+function corsHeaders(): Record<string,string> {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Authorization, Content-Type, OpenAI-Organization, OpenAI-Project, OpenAI-Beta, X-Requested-With, Accept",
-    "Access-Control-Expose-Headers":
-      "Content-Type, X-Request-Id, OpenAI-Organization, OpenAI-Project",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, OpenAI-Organization, OpenAI-Project, OpenAI-Beta, X-Requested-With, Accept"
   };
 }
 
-function json(data: unknown, status = 200, extra: Record<string, string> = {}) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8", ...extra },
-  });
+function json(data: unknown, status = 200, extra: Record<string,string> = {}) {
+  const h = new Headers({ "content-type": "application/json; charset=utf-8", ...extra });
+  return new Response(JSON.stringify(data, null, 2), { status, headers: h });
 }
