@@ -13,5 +13,8 @@
   "dependencies": {
     "ws": "^8.18.3",
     "wscat": "^6.1.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.37.1"
   }
 }
