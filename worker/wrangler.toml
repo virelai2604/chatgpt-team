@@ -6,5 +6,5 @@ workers_dev = true
 [vars]
 OPENAI_BETA = "realtime=v1"
 # Optionally set these here as plain text (or via Dashboard/API):
-# OPENAI_ORG_ID = "org-xxxxxxxxxxxxxxxxxxxxxxx"
-# OPENAI_PROJECT = "proj_xxxxxxxxxxxxxxxxxxxxx"
+OPENAI_ORG_ID = "org-BE0YNlrYbCShFGQxMkW2f0fU"
+OPENAI_PROJECT = "proj_sZ0J3FtvBLrNJic6pXlx56Mm"
