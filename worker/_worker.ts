@@ -1,61 +1,67 @@
+// Minimal WS bridge: requires Upgrade: websocket; negotiates/echoes "oai-realtime"; forwards Authorization and OpenAI-Beta upstream.
 export interface Env {
   OPENAI_KEY: string;
   OPENAI_ORG_ID?: string;
   OPENAI_PROJECT?: string;
-  OPENAI_BETA?: string; // defaulted below to realtime=v1
+  OPENAI_BETA?: string; // keep 'realtime=v1' as plaintext default at Worker level
 }
 
 export default {
-  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
+    if (!url.pathname.startsWith("/v1/realtime")) return new Response("Not Found (realtime worker)", { status: 404 });
 
-    // Health
-    if (url.pathname === "/health-rt" || url.pathname === "/v1/health-rt") {
-      return new Response(JSON.stringify({ ok: true, service: "realtime", ts: Date.now() }), {
-        headers: { "content-type": "application/json", "access-control-allow-origin": "*" }
-      });
+    if ((req.headers.get("Upgrade") || "").toLowerCase() !== "websocket") {
+      return new Response("Expected WebSocket upgrade", { status: 426 });
     }
 
-    if (url.pathname !== "/v1/realtime") return new Response("Not Found (realtime worker)", { status: 404 });
-    if ((req.headers.get("Upgrade") || "").toLowerCase() !== "websocket") return new Response("Expected WebSocket upgrade", { status: 426 });
-
-    // Cloudflare WS pair
+    // Client <-> Worker sockets
     // @ts-ignore
-    const pair = new WebSocketPair();
+    const pair = new WebSocketPair(); 
     // @ts-ignore
     const [client, server] = Object.values(pair);
     // @ts-ignore
     server.accept();
 
-    // Upstream OpenAI Realtime
+    // Subprotocol: default to 'oai-realtime' if client didn't send one
+    const clientProto = (req.headers.get("Sec-WebSocket-Protocol") || "").trim();
+    const subproto = clientProto || "oai-realtime";
+
     const model = url.searchParams.get("model") ?? "gpt-4o-realtime-preview-2024-12-17";
-    const upstreamUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
+    const upstream = `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`;
 
-    const headers = new Headers({
+    const headers: Record<string,string> = {
       "Authorization": `Bearer ${env.OPENAI_KEY}`,
-      "OpenAI-Beta": (env.OPENAI_BETA && env.OPENAI_BETA.trim()) || "realtime=v1"
+      "OpenAI-Beta": (env.OPENAI_BETA || "realtime=v1"),
+      "Connection": "upgrade",
+      "Upgrade": "websocket",
+    };
+    if (env.OPENAI_ORG_ID) headers["OpenAI-Organization"] = env.OPENAI_ORG_ID;
+    if (env.OPENAI_PROJECT) headers["OpenAI-Project"] = env.OPENAI_PROJECT;
+
+    const upstreamResp = await fetch(upstream, {
+      method: "GET",
+      headers,
+      // Pass through the negotiated subprotocol to upstream:
+      webSocket: { protocol: subproto } as any
     });
-    if (env.OPENAI_ORG_ID) headers.set("OpenAI-Organization", env.OPENAI_ORG_ID);
-    if (env.OPENAI_PROJECT) headers.set("OpenAI-Project", env.OPENAI_PROJECT);
 
-    // Default subprotocol if client didn't send one; pass it upstream too
-    const proto = req.headers.get("Sec-WebSocket-Protocol") || "oai-realtime";
-    headers.set("Sec-WebSocket-Protocol", proto);
+    if (upstreamResp.status !== 101 || !upstreamResp.webSocket) {
+      const txt = await upstreamResp.text();
+      return new Response("Upstream WS failed: " + upstreamResp.status + " " + txt, { status: 502 });
+    }
 
-    // Connect upstream and bridge
-    // @ts-ignore - CF runtime supports WebSocket(url, protocols, { headers })
-    const upstream = new WebSocket(upstreamUrl, [proto], { headers } as any);
+    const upstreamWS = upstreamResp.webSocket as WebSocket;
 
-    upstream.addEventListener("message", (ev: MessageEvent) => server.send(ev.data));
-    server  .addEventListener("message", (ev: MessageEvent) => upstream.send(ev.data));
-    upstream.addEventListener("close", (ev: any) => server.close(ev.code, ev.reason || "upstream closed"));
-    server  .addEventListener("close", (ev: any) => upstream.close(ev.code, ev.reason || "client closed"));
-    upstream.addEventListener("error", () => server.close(1011, "upstream error"));
-    server  .addEventListener("error", () => upstream.close(1011, "client error"));
+    // Pump bytes both ways
+    server.addEventListener("message", (e) => upstreamWS.send(e.data));
+    upstreamWS.addEventListener("message", (e) => server.send(e.data));
+    server.addEventListener("close", () => upstreamWS.close(1000, "client closed"));
+    upstreamWS.addEventListener("close", () => server.close(1000, "upstream closed"));
+    server.addEventListener("error", () => upstreamWS.close(1011, "client error"));
+    upstreamWS.addEventListener("error", () => server.close(1011, "upstream error"));
 
-    // Echo the negotiated subprotocol back to the client per spec
-    const respHeaders = new Headers();
-    respHeaders.set("Sec-WebSocket-Protocol", proto);
-    return new Response(null, { status: 101, webSocket: client, headers: respHeaders });
+    // Return 101 with the echoed subprotocol
+    return new Response(null, { status: 101, webSocket: client, headers: { "Sec-WebSocket-Protocol": subproto } });
   }
 };
