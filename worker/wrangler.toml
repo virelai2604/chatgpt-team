@@ -4,7 +4,7 @@ compatibility_date = "2025-09-16"
 workers_dev = true
 
 [vars]
-OPENAI_BETA   = "realtime=v1"
-OPENAI_ORG_ID = "org-BE0YNlrYbCShFGQxMkW2f0fU"
-# If you have a project id, keep it here; otherwise leave unset:
+OPENAI_BETA = "realtime=v1"
+# Optionally set these here as plain text (or via Dashboard/API):
+# OPENAI_ORG_ID = "org-xxxxxxxxxxxxxxxxxxxxxxx"
 # OPENAI_PROJECT = "proj_xxxxxxxxxxxxxxxxxxxxx"
