@@ -1,7 +1,10 @@
 name = "chatgpt-team-realtime"
 main = "_worker.ts"
 compatibility_date = "2025-09-16"
+workers_dev = true
 
 [vars]
-OPENAI_BETA = "realtime=v1"
-# OPENAI_ORG_ID / OPENAI_PROJECT can be set in Dashboard or via `wrangler variables`
+OPENAI_BETA   = "realtime=v1"
+OPENAI_ORG_ID = "org-BE0YNlrYbCShFGQxMkW2f0fU"
+# If you have a project id, keep it here; otherwise leave unset:
+# OPENAI_PROJECT = "proj_xxxxxxxxxxxxxxxxxxxxx"
