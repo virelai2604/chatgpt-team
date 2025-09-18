@@ -1,51 +1,301 @@
 openapi: 3.1.0
 info:
-  title: Cloudflare → OpenAI Relay
-  version: 1.5.1
-  description: Cloudflare Pages relay that proxies /v1/* to OpenAI with server-side auth and CORS.
+  title: ChatGPT Team Relay (Cloudflare Pages + Worker)
+  version: 2025-09-18
+  description: |
+    HTTPS relay for OpenAI /v1/* endpoints, with credentials injected at the edge.
+    - **Moderations** are intentionally **blocked** at the relay (no /v1/moderations path).
+    - **Realtime** is served via a separate Worker over **WSS** (documented below).
+
+    Realtime WS server (out-of-band for ChatGPT Actions):
+    x-realtime-ws-server: wss://chatgpt-team-realtime.virelai.workers.dev
+
 servers:
   - url: https://chatgpt-team.pages.dev
-    description: Production (Pages)
-  - url: http://localhost:8788
-    description: Local (wrangler pages dev)
+    description: Cloudflare Pages (HTTPS)
+
+security:
+  - ApiKeyAuth: []
 
 components:
   securitySchemes:
-    bearer:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: 'Use "Bearer test" for ChatGPT Actions; the relay injects the real key.'
+  parameters:
+    OpenAIBeta:
+      name: OpenAI-Beta
+      in: header
+      required: false
+      schema: { type: string }
+    OpenAIOrg:
+      name: OpenAI-Organization
+      in: header
+      required: false
+      schema: { type: string }
+    OpenAIProject:
+      name: OpenAI-Project
+      in: header
+      required: false
+      schema: { type: string }
 
-security:
-  - bearer: []
+  schemas:
+    ChatCompletionRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model: { type: string }
+        messages:
+          type: array
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role: { type: string, enum: [system, user, assistant, tool] }
+              content: { oneOf: [ { type: string }, { type: array, items: { type: object } } ] }
+        temperature: { type: number, minimum: 0, maximum: 2 }
+    ChatCompletionResponse:
+      type: object
+      additionalProperties: true
+    ResponsesRequest:
+      type: object
+      required: [model, input]
+      properties:
+        model: { type: string }
+        input:
+          oneOf:
+            - type: string
+            - type: array
+              items: { type: object }
+      additionalProperties: true
 
 paths:
+  /v1/health:
+    get:
+      summary: Relay health
+      operationId: getHealth
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: { schema: { type: object, additionalProperties: true } }
+
   /v1/models:
     get:
       summary: List models
       operationId: listModels
+      parameters: [ { $ref: '#/components/parameters/OpenAIBeta' }, { $ref: '#/components/parameters/OpenAIOrg' }, { $ref: '#/components/parameters/OpenAIProject' } ]
       responses:
-        "200":
+        '200':
           description: OK
           content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
+            application/json: { schema: { type: object, additionalProperties: true } }
 
   /v1/chat/completions:
     post:
-      summary: Chat Completions
+      summary: Create chat completion
       operationId: createChatCompletion
+      parameters: [ { $ref: '#/components/parameters/OpenAIBeta' }, { $ref: '#/components/parameters/OpenAIOrg' }, { $ref: '#/components/parameters/OpenAIProject' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChatCompletionRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/ChatCompletionResponse' } }
+
+  /v1/responses:
+    post:
+      summary: Unified Responses API (recommended)
+      description: See OpenAI Responses reference for canonical schema.
+      operationId: createResponse
+      parameters: [ { $ref: '#/components/parameters/OpenAIBeta' }, { $ref: '#/components/parameters/OpenAIOrg' }, { $ref: '#/components/parameters/OpenAIProject' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResponsesRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: { schema: { type: object, additionalProperties: true } }
+
+  /v1/background:
+    post:
+      summary: Background job (long-running)
+      description: Creates a background job for long-running tasks; poll according to job status.
+      operationId: createBackgroundJob
+      parameters: [ { $ref: '#/components/parameters/OpenAIBeta' }, { $ref: '#/components/parameters/OpenAIOrg' }, { $ref: '#/components/parameters/OpenAIProject' } ]
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [model, messages]
+              required: [model, input]
+              properties:
+                model: { type: string }
+                input:
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items: { type: object }
               additionalProperties: true
       responses:
-        "200":
+        '200':
+          description: Accepted/Created
+          content:
+            application/json: { schema: { type: object, additionalProperties: true } }
+
+  /v1/images/generations:
+    post:
+      summary: Create images
+      operationId: createImage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                model: { type: string }
+                prompt: { type: string }
+              additionalProperties: true
+      responses:
+        '200':
           description: OK
           content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
+            application/json: { schema: { type: object, additionalProperties: true } }
+
+  /v1/embeddings:
+    post:
+      summary: Create embeddings
+      operationId: createEmbedding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, input]
+              properties:
+                model: { type: string }
+                input:
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items: { type: string }
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: { schema: { type: object, additionalProperties: true } }
+
+  /v1/audio/transcriptions:
+    post:
+      summary: Transcribe audio
+      operationId: createTranscription
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, model]
+              properties:
+                file: { type: string, format: binary }
+                model: { type: string }
+                temperature: { type: number }
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: { schema: { type: object, additionalProperties: true } }
+
+  /v1/audio/speech:
+    post:
+      summary: Text-to-Speech (audio)
+      operationId: ttsSpeech
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, voice, input]
+              properties:
+                model: { type: string }
+                voice: { type: string }
+                input: { type: string }
+              additionalProperties: true
+      responses:
+        '200':
+          description: MP3/Audio data
+          content:
+            audio/mpeg: { schema: { type: string, format: binary } }
+
+  /v1/files:
+    get:
+      summary: List files
+      operationId: listFiles
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: { schema: { type: object, additionalProperties: true } }
+    post:
+      summary: Upload a file
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, purpose]
+              properties:
+                purpose: { type: string }
+                file: { type: string, format: binary }
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: { schema: { type: object, additionalProperties: true } }
+
+  /v1/files/{file_id}:
+    get:
+      summary: Retrieve a file
+      operationId: getFile
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: { schema: { type: object, additionalProperties: true } }
+    delete:
+      summary: Delete a file
+      operationId: deleteFile
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: { schema: { type: object, additionalProperties: true } }

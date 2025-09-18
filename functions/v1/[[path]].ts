@@ -2,87 +2,80 @@ type Env = {
   OPENAI_KEY: string;
   OPENAI_ORG_ID?: string;
   OPENAI_PROJECT?: string;
-  OPENAI_BETA?: string; // e.g., assistants=v2
-  BASE?: string;        // default https://api.openai.com
+  OPENAI_BETA?: string;   // e.g., "assistants=v2" or "realtime=v1"
+  BASE?: string;          // default https://api.openai.com
 };
 
 function cors() {
   return {
-    "access-control-allow-origin": "*",
-    "access-control-allow-headers": "*",
-    "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-    "cache-control": "no-store"
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers":
+      "Authorization, Content-Type, OpenAI-Organization, OpenAI-Project, OpenAI-Beta, X-Requested-With, Accept",
+    "Cache-Control": "no-store"
   };
 }
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body, null, 2), {
+function json(data: unknown, status = 200, extra?: HeadersInit) {
+  return new Response(JSON.stringify(data), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", ...cors() }
+    headers: { "content-type": "application/json; charset=utf-8", ...cors(), ...(extra||{}) }
   });
 }
 
 export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
-
-  // CORS preflight
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors() });
 
-  // Health (versioned)
-  if (url.pathname === "/v1/health") {
-    return json({
-      ok: true, now: new Date().toISOString(), origin: url.origin, relay: "/v1/*",
-      env: {
-        OPENAI_KEY: !!env.OPENAI_KEY,
-        OPENAI_PROJECT: !!env.OPENAI_PROJECT,
-        OPENAI_ORG_ID: !!env.OPENAI_ORG_ID,
-        OPENAI_BETA: env.OPENAI_BETA ?? null
-      }
-    });
+  // Only proxy /v1/*
+  if (!url.pathname.startsWith("/v1/")) {
+    return new Response("Not Found", { status: 404, headers: cors() });
   }
 
-  // Policy: BLOCK moderation endpoint
+  // Policy: keep Moderations blocked (or use upstream directly if you ever opt-in)
   if (url.pathname.startsWith("/v1/moderations")) {
     return json({ error: { message: "blocked" } }, 404);
   }
 
-  // WS must use the Worker
-  if (url.pathname.startsWith("/v1/realtime")) {
-    return json({ error: { message: "Use the realtime Worker (HTTP 426)" } }, 426);
-  }
-
-  if (!url.pathname.startsWith("/v1/")) return new Response("Not Found", { status: 404 });
-
-  // Build upstream
+  // HTTPS upstream by default
   const base = (env.BASE || "https://api.openai.com").replace(/\/$/, "");
-  const upstream = base + url.pathname + url.search;
+  const upstreamUrl = base + url.pathname + url.search;
 
-  // Prepare headers
-  const h = new Headers(request.headers);
-  if (!h.has("authorization") && env.OPENAI_KEY) h.set("authorization", `Bearer ${env.OPENAI_KEY}`);
-  if (env.OPENAI_ORG_ID && !h.has("openai-organization")) h.set("openai-organization", env.OPENAI_ORG_ID);
-  if (env.OPENAI_PROJECT && !h.has("openai-project")) h.set("openai-project", env.OPENAI_PROJECT);
-  if (env.OPENAI_BETA && !h.has("openai-beta")) h.set("openai-beta", env.OPENAI_BETA);
-  for (const x of ["host","connection","keep-alive","transfer-encoding","upgrade","content-length"]) h.delete(x);
+  // Prepare outbound headers (inject server-side auth & ids if client omitted)
+  const out = new Headers(request.headers);
+  if (!out.get("authorization") && env.OPENAI_KEY) {
+    out.set("authorization", `Bearer ${env.OPENAI_KEY}`);
+  }
+  if (env.OPENAI_ORG_ID && !out.has("openai-organization")) out.set("openai-organization", env.OPENAI_ORG_ID);
+  if (env.OPENAI_PROJECT && !out.has("openai-project"))       out.set("openai-project", env.OPENAI_PROJECT);
+  if (env.OPENAI_BETA && !out.has("openai-beta"))             out.set("openai-beta", env.OPENAI_BETA);
+
+  for (const h of ["host","content-length","connection","transfer-encoding","keep-alive","upgrade"]) out.delete(h);
 
   const method = request.method.toUpperCase();
   const ct = request.headers.get("content-type") || "";
   const isMultipart = ct.includes("multipart/form-data");
 
-  let body: BodyInit | null = null;
-  if (["GET","HEAD"].includes(method)) {
-    body = null;
-  } else if (isMultipart) {
+  let init: RequestInit;
+  if (isMultipart) {
     const inForm = await request.formData();
     const outForm = new FormData();
     for (const [k, v] of inForm.entries()) outForm.append(k, v as any);
-    body = outForm;
-    h.delete("content-type"); // boundary set by fetch
+
+    const h = new Headers({ authorization: out.get("authorization")! });
+    if (out.get("openai-organization")) h.set("openai-organization", out.get("openai-organization")!);
+    if (out.get("openai-project"))       h.set("openai-project",       out.get("openai-project")!);
+    if (out.get("openai-beta"))          h.set("openai-beta",          out.get("openai-beta")!);
+
+    init = { method, headers: h, body: outForm, redirect: "manual" };
   } else {
-    body = request.body;
+    init = { method, headers: out, body: (method === "GET" || method === "HEAD") ? undefined : request.body, redirect: "manual" };
   }
 
-  const resp = await fetch(upstream, { method, headers: h, body });
+  const resp = await fetch(upstreamUrl, init);
   const rh = new Headers(resp.headers);
-  for (const [k,v] of Object.entries(cors())) rh.set(k, v as string);
+  rh.set("Access-Control-Allow-Origin", "*");
+  rh.set("Access-Control-Expose-Headers", "OpenAI-*, X-Request-Id");
+  rh.set("Cache-Control", "no-store");
+
   return new Response(resp.body, { status: resp.status, headers: rh });
 };
