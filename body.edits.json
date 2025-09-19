@@ -1,5 +1,1 @@
-{
-  "model": "text-davinci-edit-001",
-  "input": "Fix teh speling mistake.",
-  "instruction": "Correct the spelling."
-}
+{ "model": "gpt-4o", "input": "example", "instruction": "Uppercase" }

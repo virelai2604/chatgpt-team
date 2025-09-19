@@ -1,4 +1,1 @@
-{
-  "model": "gpt-4o-mini",
-  "input": "Return the text BG_OK only."
-}
+{ "model": "o3-mini", "input": "Write a haiku about deployment.", "reasoning":{ "effort":"medium" } }

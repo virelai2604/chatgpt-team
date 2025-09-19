@@ -1,13 +1,13 @@
 openapi: 3.1.0
 info:
   title: ChatGPT Team Relay (Cloudflare Pages)
-  version: 1.3.0
+  version: 1.3.1
   description: |
-    HTTPS relay for OpenAI /v1 endpoints. Credentials (Authorization / OpenAI-Organization / OpenAI-Project / OpenAI-Beta) are injected server-side.
-    Moderations are intentionally **blocked** at the relay (no /v1/moderations path).
+    HTTPS relay for OpenAI /v1 endpoints. Credentials are injected server-side.
+    Moderations are intentionally **blocked** (no /v1/moderations path).
 servers:
   - url: https://chatgpt-team.pages.dev/v1
-x-realtime-ws-server: wss://chatgpt-team-realtime.virelai.workers.dev/v1/realtime
+x-realtime-ws-server: wss://chatgpt-team-realtime.virelai.workers.dev/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17
 x-model-examples:
   - gpt-4o-mini-2024-07-18
   - gpt-4o-realtime-preview-2024-12-17
@@ -17,214 +17,20 @@ x-model-examples:
   - gpt-3.5-turbo
   - o1
   - o3-mini
-
 paths:
-  /health:
-    get:
-      summary: Relay health
-      responses:
-        '200': { description: OK }
-
-  /models:
-    get:
-      summary: List models
-      responses:
-        '200': { description: OK }
-
+  /health: { get: { summary: Relay health, responses: { '200': { description: OK } } } }
+  /models: { get: { summary: List models, responses: { '200': { description: OK } } } }
   /chat/completions:
-    post:
-      summary: Chat Completions (modern chat)
-      description: See OpenAI API reference for shape.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, messages]
-              properties:
-                model: { type: string }
-                messages:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      role: { type: string }
-                      content: { oneOf: [{type: string}, {type: array}] }
-              additionalProperties: true
-      responses:
-        '200': { description: OK }
-
+    post: { summary: Chat Completions, requestBody: { required: true, content: { application/json: { schema: { type: object, required: [model, messages] } } } }, responses: { '200': { description: OK } } }
   /completions:
-    post:
-      summary: Text Completions (legacy)
-      description: Legacy completions endpoint.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, prompt]
-              properties:
-                model:  { type: string }
-                prompt: { oneOf: [{ type: string }, { type: array, items: { type: string } }] }
-              additionalProperties: true
-      responses:
-        '200': { description: OK }
-
+    post: { summary: Text Completions (legacy shim), requestBody: { required: true, content: { application/json: { schema: { type: object, required: [model, prompt] } } } }, responses: { '200': { description: OK } } }
   /edits:
-    post:
-      summary: Edits (instruction-based; legacy)
-      description: Requires an edit-capable model (e.g., text-davinci-edit-001).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, instruction]
-              properties:
-                model: { type: string }
-                input: { type: string }
-                instruction: { type: string }
-              additionalProperties: true
-      responses:
-        '200': { description: OK }
-
+    post: { summary: Edits (legacy shim), requestBody: { required: true, content: { application/json: { schema: { type: object, required: [model, input, instruction] } } } }, responses: { '200': { description: OK } } }
   /responses:
-    post:
-      summary: Responses (unified; modern)
-      description: Unified endpoint for stateful interactions (see OpenAI docs).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, input]
-              properties:
-                model: { type: string }
-                input: { oneOf: [{type: string},{type: array}] }
-                background: { type: boolean }
-              additionalProperties: true
-      responses:
-        '200': { description: OK }
-
+    post: { summary: Responses (unified endpoint), responses: { '200': { description: OK } } }
   /background:
-    post:
-      summary: Background mode compatibility
-      description: Compatibility route -> forwards to /v1/responses with background:true.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model]
-              properties:
-                model: { type: string }
-                input: { oneOf: [{type: string},{type: array}], nullable: true }
-              additionalProperties: true
-      responses:
-        '200': { description: OK }
-
-  /images/generations:
-    post:
-      summary: Image generation
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [prompt]
-              properties:
-                model: { type: string }
-                prompt: { type: string }
-              additionalProperties: true
-      responses:
-        '200': { description: OK }
-
-  /embeddings:
-    post:
-      summary: Embeddings
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, input]
-              properties:
-                model: { type: string }
-                input: { oneOf: [{type: string}, {type: array, items: {type: string}}] }
-              additionalProperties: true
-      responses:
-        '200': { description: OK }
-
-  /audio/transcriptions:
-    post:
-      summary: Speech-to-text (multipart)
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file, model]
-              properties:
-                file: { type: string, format: binary }
-                model: { type: string }
-              additionalProperties: true
-      responses:
-        '200': { description: OK }
-
-  /audio/speech:
-    post:
-      summary: Text-to-speech (returns audio/mpeg)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, voice, input]
-              properties:
-                model: { type: string }
-                voice: { type: string }
-                input: { type: string }
-              additionalProperties: true
-      responses:
-        '200':
-          description: OK (MP3)
-
-  /files:
-    get:  { summary: List files, responses: { '200': { description: OK } } }
-    post:
-      summary: Upload file (multipart)
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file, purpose]
-              properties:
-                file:    { type: string, format: binary }
-                purpose: { type: string }
-              additionalProperties: true
-      responses:
-        '200': { description: OK }
-
-  /files/{file_id}:
-    get:    { summary: Retrieve file,  responses: { '200': { description: OK } } }
-    delete: { summary: Delete file,    responses: { '200': { description: OK } } }
-
-components:
-  securitySchemes:
-    ApiKeyAuth:
-      type: http
-      scheme: bearer
-security:
-  - ApiKeyAuth: []
+    post: { summary: Background (maps to Responses background:true), responses: { '200': { description: OK } } }
+  /images/generations: { post: { summary: Images create, responses: { '200': { description: OK } } } }
+  /embeddings: { post: { summary: Embeddings, responses: { '200': { description: OK } } } }
+  /audio/speech: { post: { summary: TTS, responses: { '200': { description: OK } } } }
+  /audio/transcriptions: { post: { summary: STT, responses: { '200': { description: OK } } } }

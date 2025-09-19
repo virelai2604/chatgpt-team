@@ -62,3 +62,94 @@
 [PASS] GET /v1/models -> count=90
 [FAIL] POST /v1/completions -> empty output
 [FAIL] POST /v1/edits -> empty output
+=== 2025-09-20T02:21:32 BEGIN NEW CHECKS ===
+[PASS] GET /v1/health -> {
+  "ok": true,
+  "now": "2025-09-19T19:21:32.307Z",
+  "origin": "https://chatgpt-team.pages.dev",
+  "relay": "/v1/*",
+  "env": {
+    "OPENAI_KEY": true,
+    "OPENAI_ORG_ID": true,
+    "OPENAI_PROJECT": true,
+    "OPENAI_BETA": "assistants=v2"
+  }
+}
+[PASS] GET /v1/models -> count=90
+[FAIL] POST /v1/completions -> empty output
+[FAIL] POST /v1/edits -> empty output
+[FAIL] POST /v1/responses (tools) -> Response status code does not indicate success: 400 (Bad Request).
+[PASS] /v1/background -> id=resp_68cdad445c88819fbbe3e1813e49105704cb23ffbb54d8f4 status=queued
+[PASS] POST /v1/moderations -> blocked (exception indicates block)
+=== 2025-09-20T02:21:42 END NEW CHECKS ===
+[WARN] WS /v1/realtime probe -> Exception calling "GetResult" with "0" argument(s): "The WebSocket client request requested '' protocol(s), but server is only accepting 'oai-realtime' protocol(s)."
+=== 2025-09-20T02:57:40 BEGIN RECHECK ===
+[PASS] GET /v1/health -> {
+  "ok": true,
+  "now": "2025-09-19T19:57:39.938Z",
+  "origin": "https://chatgpt-team.pages.dev",
+  "relay": "/v1/*",
+  "env": {
+    "OPENAI_KEY": true,
+    "OPENAI_ORG_ID": true,
+    "OPENAI_PROJECT": true,
+    "OPENAI_BETA": "assistants=v2"
+  }
+}
+[PASS] GET /v1/models -> count=90
+[FAIL] HEAD /v1/models -> Exception calling "GetResponse" with "0" argument(s): "The remote server returned an error: (500) Internal Server Error."
+[FAIL] /v1/completions -> A positional parameter cannot be found that accepts argument 'POST'.
+[FAIL] /v1/edits -> A positional parameter cannot be found that accepts argument 'POST'.
+[PASS] curl /v1/completions
+[PASS] curl /v1/edits
+[FAIL] /v1/responses(tools) -> A positional parameter cannot be found that accepts argument 'POST'.
+[FAIL] /v1/background -> A positional parameter cannot be found that accepts argument 'POST'.
+[PASS] /v1/audio/speech -> saved tts-test.mp3
+[INFO] STT skipped (no sample.wav)
+[PASS] /v1/responses stream=true -> received chunks
+[PASS] WS 101 (oai-realtime)
+[PASS] WS 101 (realtime)
+=== 2025-09-20T02:57:49 END RECHECK ===
+=== 2025-09-20T03:00:40 BEGIN RECHECK ===
+[FAIL] GET /v1/health -> No such host is known. (chatgpt-team.pages.dev:443)
+[FAIL] GET /v1/models -> No such host is known. (chatgpt-team.pages.dev:443)
+[FAIL] HEAD /v1/models -> Exception calling "GetResponse" with "0" argument(s): "No such host is known. (chatgpt-team.pages.dev:443)"
+[FAIL] /v1/completions -> A positional parameter cannot be found that accepts argument 'POST'.
+[FAIL] /v1/edits -> A positional parameter cannot be found that accepts argument 'POST'.
+[PASS] curl /v1/completions
+[PASS] curl /v1/edits
+[FAIL] /v1/responses(tools) -> A positional parameter cannot be found that accepts argument 'POST'.
+[FAIL] /v1/background -> A positional parameter cannot be found that accepts argument 'POST'.
+[WARN] /v1/audio/speech -> No such host is known. (chatgpt-team.pages.dev:443)
+[INFO] STT skipped (no sample.wav)
+[WARN] /v1/responses stream=true -> no chunks observed
+[FAIL] WS (oai-realtime) -> Exception calling "GetResult" with "0" argument(s): "Unable to connect to the remote server"
+[FAIL] WS (realtime) -> Exception calling "GetResult" with "0" argument(s): "Unable to connect to the remote server"
+=== 2025-09-20T03:00:41 END RECHECK ===
+=== 2025-09-20T03:03:11 BEGIN RECHECK ===
+[PASS] GET /v1/health -> {
+  "ok": true,
+  "now": "2025-09-19T20:03:10.679Z",
+  "origin": "https://chatgpt-team.pages.dev",
+  "relay": "/v1/*",
+  "env": {
+    "OPENAI_KEY": true,
+    "OPENAI_ORG_ID": true,
+    "OPENAI_PROJECT": true,
+    "OPENAI_BETA": "assistants=v2"
+  }
+}
+[PASS] GET /v1/models -> count=90
+[FAIL] HEAD /v1/models -> Exception calling "GetResponse" with "0" argument(s): "The remote server returned an error: (500) Internal Server Error."
+[FAIL] /v1/completions -> A positional parameter cannot be found that accepts argument 'POST'.
+[FAIL] /v1/edits -> A positional parameter cannot be found that accepts argument 'POST'.
+[PASS] curl /v1/completions
+[PASS] curl /v1/edits
+[FAIL] /v1/responses(tools) -> A positional parameter cannot be found that accepts argument 'POST'.
+[FAIL] /v1/background -> A positional parameter cannot be found that accepts argument 'POST'.
+[PASS] /v1/audio/speech -> saved tts-test.mp3
+[INFO] STT skipped (no sample.wav)
+[PASS] /v1/responses stream=true -> received chunks
+[PASS] WS 101 (oai-realtime)
+[PASS] WS 101 (realtime)
+=== 2025-09-20T03:03:18 END RECHECK ===

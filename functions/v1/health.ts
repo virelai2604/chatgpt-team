@@ -1,8 +1,9 @@
 export const onRequestGet: PagesFunction = async ({ env, request }) => {
+  const origin = new URL(request.url).origin;
   const body = {
     ok: true,
     now: new Date().toISOString(),
-    origin: new URL(request.url).origin,
+    origin,
     relay: "/v1/*",
     env: {
       OPENAI_KEY: !!env.OPENAI_KEY,
@@ -13,6 +14,10 @@ export const onRequestGet: PagesFunction = async ({ env, request }) => {
   };
   return new Response(JSON.stringify(body), {
     status: 200,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" }
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "access-control-allow-origin": "*"
+    }
   });
 };
