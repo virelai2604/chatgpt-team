@@ -1,0 +1,4 @@
+{
+  "model": "gpt-4o-mini",
+  "input": "Return the text BG_OK only."
+}

@@ -1,0 +1,5 @@
+{
+  "model": "text-davinci-003",
+  "prompt": "Say this is a test.",
+  "max_tokens": 8
+}
