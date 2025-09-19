@@ -46,3 +46,19 @@
 2025-09-20T02:01:22 [PASS] Relay /v1/moderations blocked (expected 404)
 === 2025-09-20T02:01:22 END WALKTHROUGH ===
 
+=== 2025-09-20T02:20:48 BEGIN NEW CHECKS ===
+[PASS] GET /v1/health -> {
+  "ok": true,
+  "now": "2025-09-19T19:20:48.441Z",
+  "origin": "https://chatgpt-team.pages.dev",
+  "relay": "/v1/*",
+  "env": {
+    "OPENAI_KEY": true,
+    "OPENAI_ORG_ID": true,
+    "OPENAI_PROJECT": true,
+    "OPENAI_BETA": "assistants=v2"
+  }
+}
+[PASS] GET /v1/models -> count=90
+[FAIL] POST /v1/completions -> empty output
+[FAIL] POST /v1/edits -> empty output
