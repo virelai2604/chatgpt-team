@@ -1,81 +1,96 @@
-type Env = {
-  OPENAI_KEY: string;
-  OPENAI_ORG_ID?: string;
-  OPENAI_PROJECT?: string;
-  OPENAI_BETA?: string;   // e.g., "assistants=v2" or "realtime=v1"
-  BASE?: string;          // default https://api.openai.com
-};
+/* Universal proxy for /v1/* with:
+ * - Moderations hard-block
+ * - Beta header gating (assistants only)
+ * - Legacy shims:
+ *   /v1/completions -> /v1/responses
+ *   /v1/edits       -> /v1/responses
+ */
+export const onRequest: PagesFunction = async (ctx) => {
+  const req = ctx.request;
+  const url = new URL(req.url);
+  const path = url.pathname.replace(/\/+$/, ""); // strip trailing slash
+  const method = req.method.toUpperCase();
 
-function cors() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Authorization, Content-Type, OpenAI-Organization, OpenAI-Project, OpenAI-Beta, X-Requested-With, Accept",
-    "Cache-Control": "no-store"
+  // 1) Block moderations by policy
+  if (path === "/v1/moderations") {
+    return new Response(JSON.stringify({ error: { message: "blocked" }}), {
+      status: 404, headers: { "content-type": "application/json", "access-control-allow-origin": "*" }
+    });
+  }
+
+  // Utility: build upstream headers safely and gate OpenAI-Beta
+  const buildHeaders = (targetPath: string) => {
+    const h = new Headers(req.headers);
+    // CORS + hop-by-hop
+    h.delete("host"); h.delete("content-length");
+
+    // Inject server-side secrets if not provided (Pages env)
+    const env = ctx.env as any || {};
+    if (!h.get("authorization") && env.OPENAI_KEY) h.set("authorization", `Bearer ${env.OPENAI_KEY}`);
+    if (!h.get("openai-organization") && env.OPENAI_ORG_ID) h.set("openai-organization", env.OPENAI_ORG_ID);
+    if (!h.get("openai-project") && env.OPENAI_PROJECT) h.set("openai-project", env.OPENAI_PROJECT);
+
+    // Gate OpenAI-Beta: only attach for Assistants family
+    const needsAssistantsBeta = /^\/v1\/(assistants|threads|runs)/.test(targetPath);
+    if (needsAssistantsBeta) {
+      const v = env.OPENAI_BETA || "assistants=v2";
+      h.set("openai-beta", v.includes("assistants=") ? v : "assistants=v2");
+    } else {
+      h.delete("openai-beta"); // do not leak beta to Responses/Chat/etc.
+    }
+    return h;
   };
-}
-function json(data: unknown, status = 200, extra?: HeadersInit) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8", ...cors(), ...(extra||{}) }
-  });
-}
 
-export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
-  const url = new URL(request.url);
-  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors() });
+  // Helper: forward JSON body
+  const forwardJSON = async (targetPath: string, bodyObj: any) => {
+    const upstream = new URL(`https://api.openai.com${targetPath}`);
+    const headers = buildHeaders(targetPath);
+    headers.set("content-type", "application/json");
+    return fetch(upstream, { method: "POST", headers, body: JSON.stringify(bodyObj) });
+  };
 
-  // Only proxy /v1/*
-  if (!url.pathname.startsWith("/v1/")) {
-    return new Response("Not Found", { status: 404, headers: cors() });
+  // Helper: pass-through (JSON or multipart)
+  const passthrough = async (targetPath: string) => {
+    const upstream = new URL(`https://api.openai.com${targetPath}`);
+    const headers = buildHeaders(targetPath);
+    const ct = req.headers.get("content-type") || "";
+    if (method === "GET" || method === "DELETE") {
+      return fetch(upstream, { method, headers });
+    }
+    if (ct.includes("multipart/form-data")) {
+      const form = await req.formData();
+      return fetch(upstream, { method, headers, body: form });
+    }
+    // default: JSON/text
+    let body: any = undefined;
+    try { body = await req.text(); } catch {}
+    return fetch(upstream, { method, headers, body });
+  };
+
+  // 2) Legacy shim: /v1/completions  -> /v1/responses (prompt -> input)
+  if (path === "/v1/completions" && method === "POST") {
+    let body:any = {};
+    try { body = await req.json(); } catch {}
+    // Map legacy -> modern
+    const input = Array.isArray(body.prompt) ? body.prompt.join("\n") : (body.prompt ?? "");
+    const model = (typeof body.model === "string" && body.model.trim()) ? body.model : "gpt-4o-mini";
+    const max_output_tokens = body.max_tokens ?? undefined;
+    const mapped = { model, input };
+    if (typeof max_output_tokens === "number") (mapped as any).max_output_tokens = max_output_tokens;
+    return forwardJSON("/v1/responses", mapped);
   }
 
-  // Policy: keep Moderations blocked (or use upstream directly if you ever opt-in)
-  if (url.pathname.startsWith("/v1/moderations")) {
-    return json({ error: { message: "blocked" } }, 404);
+  // 3) Legacy shim: /v1/edits -> /v1/responses (instruction+input -> input)
+  if (path === "/v1/edits" && method === "POST") {
+    let body:any = {};
+    try { body = await req.json(); } catch {}
+    const instruction = body.instruction ?? "";
+    const input = body.input ?? "";
+    const composed = `Apply the following instruction to the text.\nInstruction:\n${instruction}\n\nText:\n${input}`;
+    const model = (typeof body.model === "string" && body.model.trim()) ? body.model : "gpt-4o-mini";
+    return forwardJSON("/v1/responses", { model, input: composed });
   }
 
-  // HTTPS upstream by default
-  const base = (env.BASE || "https://api.openai.com").replace(/\/$/, "");
-  const upstreamUrl = base + url.pathname + url.search;
-
-  // Prepare outbound headers (inject server-side auth & ids if client omitted)
-  const out = new Headers(request.headers);
-  if (!out.get("authorization") && env.OPENAI_KEY) {
-    out.set("authorization", `Bearer ${env.OPENAI_KEY}`);
-  }
-  if (env.OPENAI_ORG_ID && !out.has("openai-organization")) out.set("openai-organization", env.OPENAI_ORG_ID);
-  if (env.OPENAI_PROJECT && !out.has("openai-project"))       out.set("openai-project", env.OPENAI_PROJECT);
-  if (env.OPENAI_BETA && !out.has("openai-beta"))             out.set("openai-beta", env.OPENAI_BETA);
-
-  for (const h of ["host","content-length","connection","transfer-encoding","keep-alive","upgrade"]) out.delete(h);
-
-  const method = request.method.toUpperCase();
-  const ct = request.headers.get("content-type") || "";
-  const isMultipart = ct.includes("multipart/form-data");
-
-  let init: RequestInit;
-  if (isMultipart) {
-    const inForm = await request.formData();
-    const outForm = new FormData();
-    for (const [k, v] of inForm.entries()) outForm.append(k, v as any);
-
-    const h = new Headers({ authorization: out.get("authorization")! });
-    if (out.get("openai-organization")) h.set("openai-organization", out.get("openai-organization")!);
-    if (out.get("openai-project"))       h.set("openai-project",       out.get("openai-project")!);
-    if (out.get("openai-beta"))          h.set("openai-beta",          out.get("openai-beta")!);
-
-    init = { method, headers: h, body: outForm, redirect: "manual" };
-  } else {
-    init = { method, headers: out, body: (method === "GET" || method === "HEAD") ? undefined : request.body, redirect: "manual" };
-  }
-
-  const resp = await fetch(upstreamUrl, init);
-  const rh = new Headers(resp.headers);
-  rh.set("Access-Control-Allow-Origin", "*");
-  rh.set("Access-Control-Expose-Headers", "OpenAI-*, X-Request-Id");
-  rh.set("Cache-Control", "no-store");
-
-  return new Response(resp.body, { status: resp.status, headers: rh });
+  // 4) Everything else: pass-through to upstream
+  return passthrough(path);
 };
