@@ -1,0 +1,17 @@
+export const onRequestPost: PagesFunction = async (ctx) => {
+  const req = ctx.request;
+  const upstream = new URL("https://api.openai.com/v1/responses");
+  const out = new Headers(req.headers);
+  out.delete("openai-beta"); // Responses doesn't require assistants beta
+  const ct = req.headers.get("content-type") || "";
+  if (ct.includes("multipart/form-data")) {
+    const form = await req.formData();
+    if (!form.has("background")) form.append("background","true");
+    return fetch(upstream, { method:"POST", headers: out, body: form });
+  }
+  let body:any = {}; try { body = await req.json(); } catch {}
+  if (!body || typeof body !== "object") body = {};
+  if (body.background === undefined) body.background = true;
+  out.set("content-type","application/json");
+  return fetch(upstream, { method:"POST", headers: out, body: JSON.stringify(body) });
+};

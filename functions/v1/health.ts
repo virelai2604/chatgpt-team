@@ -1,6 +1,9 @@
 export const onRequestGet: PagesFunction = async ({ env, request }) => {
   const body = {
-    ok: true, now: new Date().toISOString(), origin: new URL(request.url).origin, relay: "/v1/*",
+    ok: true,
+    now: new Date().toISOString(),
+    origin: new URL(request.url).origin,
+    relay: "/v1/*",
     env: {
       OPENAI_KEY: !!env.OPENAI_KEY,
       OPENAI_ORG_ID: !!env.OPENAI_ORG_ID,

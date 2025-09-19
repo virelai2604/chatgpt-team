@@ -1,0 +1,19 @@
+{
+  "model": "gpt-4o-mini",
+  "input": "Please add 40 and 2 using the available tool.",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "add_two_numbers",
+        "description": "Adds two integers",
+        "parameters": {
+          "type": "object",
+          "properties": { "a": { "type": "integer" }, "b": { "type": "integer" } },
+          "required": ["a","b"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto"
+}

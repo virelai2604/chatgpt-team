@@ -1,0 +1,5 @@
+{
+  "model": "text-davinci-edit-001",
+  "input": "Fix teh speling mistake.",
+  "instruction": "Correct the spelling."
+}
