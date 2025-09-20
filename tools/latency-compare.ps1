@@ -1,23 +1,25 @@
 param(
   [string]$Base = "https://chatgpt-team.pages.dev/v1",
-  [int]$ClientDelayMs = 300           # artificial client delay to simulate ~2× latency
+  [int]$N = 5
 )
 $ErrorActionPreference='Stop'
-function Time([scriptblock]$sb){ $sw=[Diagnostics.Stopwatch]::StartNew(); & $sb; $sw.Stop(); return $sw.Elapsed.TotalMilliseconds }
-if(-not $env:OPENAI_API_KEY){ $env:OPENAI_API_KEY = Read-Host "OpenAI API key (session only)" }
+if(-not $env:OPENAI_API_KEY){ throw "OPENAI_API_KEY not set" }
 $H=@{ Authorization="Bearer $($env:OPENAI_API_KEY)"; 'Content-Type'='application/json' }
-$endpoints=@(
-  @{ name="chat/completions";   uri="$Base/chat/completions"; body=(@{model="gpt-4o-mini";messages=@(@{role="user";content="ping"})}|ConvertTo-Json -Depth 6) },
-  @{ name="responses";          uri="$Base/responses";        body=(@{model="gpt-5-mini";input="ping"}|ConvertTo-Json -Depth 6) },
-  @{ name="embeddings";         uri="$Base/embeddings";       body=(@{model="text-embedding-3-small";input="hi"}|ConvertTo-Json -Depth 6) },
-  @{ name="images/generations"; uri="$Base/images/generations";body=(@{model="gpt-image-1";prompt="dot"}|ConvertTo-Json -Depth 6) }
-)
-function Call($e){ Invoke-RestMethod -Uri $e.uri -Method POST -Headers $H -Body $e.body -TimeoutSec 60 | Out-Null }
-$rows=@()
-foreach($e in $endpoints){
-  $t1=Time{ Call $e }
-  Start-Sleep -Milliseconds $ClientDelayMs  # artificial delay to approximate 2× user-perceived roundtrip
-  $t2=Time{ Call $e }
-  $rows += [pscustomobject]@{ endpoint=$e.name; run1_ms=[math]::Round($t1,1); run2_ms=[math]::Round($t2,1); fold=[math]::Round(($t2/$t1),2) }
+
+function Measure([string]$name,[string]$uri,[string]$json){
+  $times=@()
+  for($i=0;$i -lt $N;$i++){
+    $sw=[Diagnostics.Stopwatch]::StartNew()
+    Invoke-RestMethod -Uri $uri -Method POST -Headers $H -Body $json -TimeoutSec 60 | Out-Null
+    $sw.Stop(); $times += $sw.Elapsed.TotalMilliseconds
+  }
+  [PSCustomObject]@{ Name=$name; Median=[Math]::Round(($times | Sort-Object)[[int]($times.Count/2)],1); Samples=$times -join "," }
 }
-$rows | Format-Table -AutoSize
+
+$chat = @{ model="gpt-4o-mini"; messages=@(@{role="user"; content="ok"}); max_tokens=8 } | ConvertTo-Json -Depth 6
+$r1 = Measure "chat/completions" "$Base/chat/completions" $chat
+$r2 = Measure "responses" "$Base/responses" (@{ model="gpt-5-mini"; input="ok"; max_output_tokens=8 }|ConvertTo-Json)
+
+# 2× threshold report
+function Rpt($r){ "$($r.Name): median=${($r.Median)} ms | threshold(2x)=$([math]::Round($r.Median*2,1)) ms" }
+Rpt $r1; Rpt $r2

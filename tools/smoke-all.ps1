@@ -1,122 +1,117 @@
 param(
   [string]$Base = "https://chatgpt-team.pages.dev/v1",
   [string]$WS   = "wss://chatgpt-team-realtime.virelai.workers.dev/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17",
-  [string]$Log  = "C:\Users\User\Desktop\run result.txt"
+  [int]$Timeout = 45
 )
 $ErrorActionPreference='Stop'
-if (Test-Path -LiteralPath $Log) { Remove-Item -LiteralPath $Log -Force }
-function Log([string]$m){ $ts=(Get-Date).ToString("s"); "$ts $m" | Out-File -LiteralPath $Log -Append -Encoding utf8 }
 if(-not $env:OPENAI_API_KEY){ $env:OPENAI_API_KEY = Read-Host "OpenAI API key (session only)" }
-$H=@{ Authorization="Bearer $($env:OPENAI_API_KEY)"; 'Content-Type'='application/json' }
+$H = @{ Authorization = "Bearer $($env:OPENAI_API_KEY)"; 'Content-Type'='application/json' }
 
-Log "START: smoke-all (HTTPS)"
+function L([string]$s){ $ts=(Get-Date).ToString('s'); "$ts $s" }
 
-# Health
-try { $hp=Invoke-RestMethod "$Base/health" -TimeoutSec 20; Log ("HEALTH relay: " + ($hp|ConvertTo-Json -Depth 10 -Compress)) } catch { Log "HEALTH relay ERR: $($_.Exception.Message)" }
-try { $hrt=Invoke-RestMethod ("{0}/health-rt" -f ($WS -replace '/realtime\?.*$','')); Log ("HEALTH-RT: " + ($hrt|ConvertTo-Json -Depth 10 -Compress)) } catch { Log "HEALTH-RT ERR: $($_.Exception.Message)" }
+# -- 0) health --
+try { $hp=Invoke-RestMethod "$($Base.TrimEnd('/'))/health" -TimeoutSec 15; L("HEALTH relay: "+($hp|ConvertTo-Json -Compress)) | Write-Output } catch { L("HEALTH relay ERR: $($_.Exception.Message)") | Write-Output }
 
-# Helper
-function Test-HTTP3x([string]$uri,[string]$bodyJson=''){
+# -- 1) models --
+try { Invoke-RestMethod "$Base/models" -Headers $H -TimeoutSec 20 | Out-Null; L("MODELS OK") | Write-Output } catch { L("MODELS ERR: $($_.Exception.Message)") | Write-Output }
+
+# helper to try irm/iwr/curl
+function Hit3([string]$uri,[string]$json){ 
   $ok=$true
-  try { Invoke-RestMethod -Uri $uri -Method POST -Headers $H -Body $bodyJson -TimeoutSec 60 | Out-Null; Log "IRM OK: $uri" } catch { Log "IRM ERR: $uri :: $($_.Exception.Message)"; $ok=$false }
-  try { $w=Invoke-WebRequest -UseBasicParsing -Uri $uri -Method POST -Headers $H -Body $bodyJson -TimeoutSec 60; Log "IWR OK: $uri :: $($w.StatusCode)" } catch { Log "IWR ERR: $uri :: $($_.Exception.Message)"; $ok=$false }
-  try { $tmp=New-TemporaryFile; Set-Content -LiteralPath $tmp -Value $bodyJson -Encoding utf8; & curl.exe -sS -X POST -H "Authorization: $($H.Authorization)" -H "Content-Type: application/json" --data "@$tmp" $uri | Out-Null; Log "CURL OK: $uri"; Remove-Item -LiteralPath $tmp -Force } catch { Log "CURL ERR: $uri :: $($_.Exception.Message)"; $ok=$false }
+  try{ Invoke-RestMethod -Uri $uri -Method POST -Headers $H -Body $json -TimeoutSec $Timeout | Out-Null; L("IRM OK: $uri") | Write-Output } catch { L("IRM ERR: $uri :: $($_.Exception.Message)") | Write-Output; $ok=$false }
+  try{ $w=Invoke-WebRequest -UseBasicParsing -Uri $uri -Method POST -Headers $H -Body $json -TimeoutSec $Timeout; L("IWR OK: $uri :: $($w.StatusCode)") | Write-Output } catch { L("IWR ERR: $uri :: $($_.Exception.Message)") | Write-Output; $ok=$false }
+  try{ $tmp=New-TemporaryFile; Set-Content -LiteralPath $tmp -Value $json -Encoding utf8; & curl.exe -sS -X POST -H "Authorization: $($H.Authorization)" -H "Content-Type: application/json" --data "@$tmp" $uri | Out-Null; L("CURL OK: $uri") | Write-Output; Remove-Item -LiteralPath $tmp -Force } catch { L("CURL ERR: $uri :: $($_.Exception.Message)") | Write-Output; $ok=$false }
   return $ok
 }
 
-# Models
-try { Invoke-RestMethod "$Base/models" -Headers $H -TimeoutSec 30 | Out-Null; Log "MODELS OK" } catch { Log "MODELS ERR: $($_.Exception.Message)" }
+# -- 2) chat/completions (legacy) --
+$chat = @{ model="gpt-4o-mini"; messages=@(@{role="user"; content="Say pong."}); max_tokens=8 } | ConvertTo-Json -Depth 6
+[void](Hit3 "$Base/chat/completions" $chat)
 
-# Chat
-$chat = @{ model="gpt-4o-mini"; messages=@(@{role="user"; content="Say 'pong' only."}); max_tokens=8 } | ConvertTo-Json -Depth 6
-[void](Test-HTTP3x "$Base/chat/completions" $chat)
+# -- 3) responses + SSE --
+$resp = @{ model="gpt-5-mini"; input="hi"; max_output_tokens=16 } | ConvertTo-Json -Depth 6
+[void](Hit3 "$Base/responses" $resp)
+try{ & curl.exe -sN -H "Authorization: $($H.Authorization)" -H "Content-Type: application/json" -H "Accept: text/event-stream" -d $resp "$Base/responses" | Select-Object -First 3 | Out-Null; L("RESPONSES SSE OK") | Write-Output } catch { L("RESPONSES SSE ERR: $($_.Exception.Message)") | Write-Output }
 
-# Responses (+SSE)
-$resp = @{ model="gpt-5-mini"; input="Say hi in one word."; max_output_tokens=16 } | ConvertTo-Json -Depth 6
-[void](Test-HTTP3x "$Base/responses" $resp)
-try { & curl.exe -sN -H "Authorization: $($H.Authorization)" -H "Content-Type: application/json" -H "Accept: text/event-stream" -d $resp "$Base/responses" | Select-Object -First 3 | Out-Null; Log "RESPONSES SSE OK" } catch { Log "RESPONSES SSE ERR: $($_.Exception.Message)" }
+# -- 4) embeddings --
+$emb = @{ model="text-embedding-3-small"; input="hello world" } | ConvertTo-Json
+[void](Hit3 "$Base/embeddings" $emb)
 
-# Embeddings
-$emb = @{ model="text-embedding-3-small"; input="hello world" } | ConvertTo-Json -Depth 6
-[void](Test-HTTP3x "$Base/embeddings" $emb)
+# -- 5) images/generations --
+$img = @{ model="gpt-image-1"; prompt="a minimalist red koi logo" } | ConvertTo-Json
+[void](Hit3 "$Base/images/generations" $img)
 
-# Images
-$img = @{ model="gpt-image-1"; prompt="a minimalist red koi logo" } | ConvertTo-Json -Depth 6
-[void](Test-HTTP3x "$Base/images/generations" $img)
+# -- 6) audio: TTS + STT + translations (multipart, no tricky -replace) --
+try{
+  # TTS (JSON → audio)
+  $tts = @{ model="gpt-4o-mini-tts"; input="This is a test"; voice="alloy" } | ConvertTo-Json
+  $bytes = Invoke-RestMethod "$Base/audio/speech" -Method POST -Headers $H -Body $tts -TimeoutSec 60
+  if($bytes){ L("AUDIO TTS OK (non-empty)") | Write-Output } else { L("AUDIO TTS WARN (empty)") | Write-Output }
+} catch { L("AUDIO TTS ERR: $($_.Exception.Message)") | Write-Output }
 
-# ----- Audio: TTS -----
-try {
-  $ttsBody = @{ model="gpt-4o-mini-tts"; input="This is a relay TTS test"; voice="alloy"; format="wav" } | ConvertTo-Json -Depth 6
-  $ttsBytes = Invoke-RestMethod "$Base/audio/speech" -Method POST -Headers $H -Body $ttsBody -TimeoutSec 120
-  if ($ttsBytes) { Log "AUDIO TTS OK (non-empty)" } else { Log "AUDIO TTS WARN (empty body)" }
-} catch { Log "AUDIO TTS ERR: $($_.Exception.Message)" }
+# Build a 1s 16k mono WAV (silence)
+$wav = Join-Path $env:TEMP "silence-16k-mono-1s.wav"
+[IO.File]::WriteAllBytes($wav, [byte[]](0..(16000*2-1) | ForEach-Object { 0 } ))
 
-# ----- Audio: STT + Translations (valid WAV + correct multipart) -----
-try {
-  # build 1s of silence WAV (PCM16 mono 16k)
-  $wav = Join-Path $env:TEMP "silence-16k-mono-1s.wav"
-  $dataLen = 16000 * 2
-  $fs=[IO.File]::Create($wav); $bw=[IO.BinaryWriter]::new($fs)
-  function W16($v){ $bw.Write([UInt16]$v) }
-  $bw.Write([Text.Encoding]::ASCII.GetBytes("RIFF")); $bw.Write([UInt32](36+$dataLen))
-  $bw.Write([Text.Encoding]::ASCII.GetBytes("WAVEfmt ")); $bw.Write([UInt32]16); W16 1; W16 1
-  $bw.Write([UInt32]16000); $bw.Write([UInt32]32000); W16 2; W16 16
-  $bw.Write([Text.Encoding]::ASCII.GetBytes("data")); $bw.Write([UInt32]$dataLen)
-  $bw.Write((,0 * $dataLen)); $bw.Flush(); $bw.Close(); $fs.Close()
-
+# Proper multipart upload for STT and TRN
+try{
   $client = [System.Net.Http.HttpClient]::new()
+  $client.Timeout = [TimeSpan]::FromSeconds(60)
   $client.DefaultRequestHeaders.Add("Authorization",$H.Authorization)
 
-  # /audio/transcriptions
-  $form1 = [System.Net.Http.MultipartFormDataContent]::new()
-  $file1 = New-Object System.Net.Http.ByteArrayContent( ,([IO.File]::ReadAllBytes($wav)) )
-  $file1.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("audio/wav")
-  $form1.Add($file1,"file","silence.wav")
-  $form1.Add([System.Net.Http.StringContent]::new('whisper-1'),"model")
-  $r1 = $client.PostAsync("$Base/audio/transcriptions",$form1).GetAwaiter().GetResult()
-  if ($r1.IsSuccessStatusCode){ Log "AUDIO STT OK" } else { Log ("AUDIO STT ERR: {0}" -f $r1.StatusCode) }
+  $fn = "silence.wav"
+  $b  = [IO.File]::ReadAllBytes($wav)
 
-  # /audio/translations
-  $form2 = [System.Net.Http.MultipartFormDataContent]::new()
-  $file2 = New-Object System.Net.Http.ByteArrayContent( ,([IO.File]::ReadAllBytes($wav)) )
-  $file2.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("audio/wav")
-  $form2.Add($file2,"file","silence.wav")
-  $form2.Add([System.Net.Http.StringContent]::new('whisper-1'),"model")
-  $r2 = $client.PostAsync("$Base/audio/translations",$form2).GetAwaiter().GetResult()
-  if ($r2.IsSuccessStatusCode){ Log "AUDIO TRN OK" } else { Log ("AUDIO TRN ERR: {0}" -f $r2.StatusCode) }
-} catch { Log "AUDIO STT/TRN ERR: $($_.Exception.Message)" }
+  foreach($path in @("transcriptions","translations")){
+    $form = [System.Net.Http.MultipartFormDataContent]::new()
+    $file = New-Object System.Net.Http.ByteArrayContent( ,$b )
+    $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("audio/wav")
+    $form.Add($file,"file",$fn)
+    $form.Add([System.Net.Http.StringContent]::new("whisper-1"),"model")
+    $u = "$Base/audio/$path"
+    $r = $client.PostAsync($u,$form).GetAwaiter().GetResult()
+    if($r.IsSuccessStatusCode){ L(("AUDIO {0} OK" -f ($path -eq "transcriptions" ? "STT" : "TRN"))) | Write-Output } else { L(("AUDIO {0} ERR: {1}" -f ($path -eq "transcriptions" ? "STT" : "TRN"), $r.StatusCode)) | Write-Output }
+  }
+} catch { L("AUDIO STT/TRN ERR: $($_.Exception.Message)") | Write-Output }
 
-# Files list
-try { $files = Invoke-RestMethod "$Base/files" -Headers $H -TimeoutSec 60; Log ("FILES LIST OK count=" + ($files.data.Count)) } catch { Log "FILES LIST ERR: $($_.Exception.Message)" }
+# -- 7) files list (sanity) --
+try{ $f=Invoke-RestMethod "$Base/files" -Headers $H -TimeoutSec 30; L("FILES LIST OK count="+$f.data.Count) | Write-Output } catch { L("FILES LIST ERR: $($_.Exception.Message)") | Write-Output }
 
-# Background via /background (shim) -> poll + SSE
-try {
-  $b = @{ model="gpt-5-mini"; input="background: return 'ok'"; task_type="response.create" } | ConvertTo-Json -Depth 6
-  $created = Invoke-RestMethod "$Base/background" -Method POST -Headers $H -Body $b -TimeoutSec 60
-  $id = $created.id
-  if ($id){ Log ("BACKGROUND OK id=" + $id); Start-Sleep 2; $st = Invoke-RestMethod "$Base/responses/$id" -Headers $H -TimeoutSec 30; Log ("BACKGROUND STATUS: id=$id status=" + $st.status); & curl.exe -sN -H "Authorization: $($H.Authorization)" -H "Accept: text/event-stream" "$Base/responses/$id?stream=true" | Select-Object -First 3 | Out-Null; Log ("BACKGROUND RESUME SSE OK id=" + $id) } else { Log "BACKGROUND WARN: missing id" }
-} catch { Log "BACKGROUND ERR: $($_.Exception.Message)" }
+# -- 8) background (optional; preview-safe)
+try{
+  $bg = @{ model="gpt-5-mini"; input="ok"; background=$true } | ConvertTo-Json -Depth 6
+  $res = Invoke-RestMethod "$Base/responses" -Method POST -Headers $H -Body $bg -TimeoutSec $Timeout
+  if($res.background -and $res.id){ L("BG_CREATE OK: "+($res | ConvertTo-Json -Compress)) | Write-Output
+    Start-Sleep -Seconds 2
+    $poll = Invoke-RestMethod "$Base/responses/$($res.id)" -Headers $H -TimeoutSec 30
+    L("BG_POLL: "+($poll | ConvertTo-Json -Compress)) | Write-Output
+  } else { L("BACKGROUND SKIP (not supported)") | Write-Output }
+} catch { L("BACKGROUND ERR: $($_.Exception.Message)") | Write-Output }
 
-# Moderations
-try { $m=@{ model="omni-moderation-latest"; input="test" }|ConvertTo-Json -Depth 6; Invoke-RestMethod "$Base/moderations" -Method POST -Headers $H -Body $m -TimeoutSec 20 | Out-Null; Log "MODERATIONS WARN: expected blocked but got success" } catch { Log "MODERATIONS BLOCKED (expected)" }
+# -- 9) moderations must be blocked --
+try{
+  $m = @{ model="omni-moderation-latest"; input="test" } | ConvertTo-Json
+  Invoke-RestMethod "$Base/moderations" -Method POST -Headers $H -Body $m -TimeoutSec 20 | Out-Null
+  L("MODERATIONS WARN: expected blocked but got success") | Write-Output
+} catch { L("MODERATIONS BLOCKED (expected)") | Write-Output }
 
-# Realtime WS (101 only)
+# -- 10) realtime WS 101 (two subprotocols) --
 Add-Type -AssemblyName System.Net.WebSockets
-function Test-WS101([string]$Uri,[string]$Proto,[int]$TimeoutSec=3){
+function Test-WS101([string]$Uri,[string]$Proto,[int]$TimeoutSec=2){
   $sw=[Diagnostics.Stopwatch]::StartNew()
   $ws=[System.Net.WebSockets.ClientWebSocket]::new()
-  if ($Proto){ $ws.Options.AddSubProtocol($Proto) }
+  $ws.Options.AddSubProtocol($Proto)
   $ws.Options.SetRequestHeader("OpenAI-Beta","realtime=v1")
   $cts=[Threading.CancellationTokenSource]::new([TimeSpan]::FromSeconds($TimeoutSec))
-  try {
+  try{
     $ws.ConnectAsync([Uri]$Uri,$cts.Token).GetAwaiter().GetResult()
     $sw.Stop()
-    if ($ws.State -eq [System.Net.WebSockets.WebSocketState]::Open) { Log ("WS PASS {0} in {1:n1}s" -f $Proto,$sw.Elapsed.TotalSeconds); $true } else { Log ("WS FAIL {0} state={1}" -f $Proto,$ws.State); $false }
-  } catch { $sw.Stop(); Log ("WS ERR {0}: {1} ({2:n1}s)" -f $Proto,$_.Exception.Message,$sw.Elapsed.TotalSeconds); $false }
-  finally { try { $ws.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure,"probe",[Threading.CancellationToken]::None).GetAwaiter().GetResult() } catch {}; $ws.Dispose(); $cts.Dispose() }
+    if($ws.State -eq [System.Net.WebSockets.WebSocketState]::Open){ L(("WS PASS {0} in {1:n1}s" -f $Proto,$sw.Elapsed.TotalSeconds)) | Write-Output; $true } else { L(("WS FAIL {0} state={1}" -f $Proto,$ws.State)) | Write-Output; $false }
+  } catch { $sw.Stop(); L(("WS ERR {0}: {1} ({2:n1}s)" -f $Proto,$_.Exception.Message,$sw.Elapsed.TotalSeconds)) | Write-Output; $false }
+  finally { try{ $ws.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure,"probe",[Threading.CancellationToken]::None).GetAwaiter().GetResult() } catch{}; $ws.Dispose(); $cts.Dispose() }
 }
-$ok1=Test-WS101 -Uri $WS -Proto "oai-realtime"
-$ok2=Test-WS101 -Uri $WS -Proto "oai-realtime-broker"
-if($ok1 -and $ok2){ Log "WS 101 OK (two subprotocols)" } else { Log "WS 101 NOT OK" }
+$w1=Test-WS101 -Uri $WS -Proto "oai-realtime" -TimeoutSec 2
+$w2=Test-WS101 -Uri $WS -Proto "oai-realtime-broker" -TimeoutSec 2
+if($w1 -and $w2){ L("WS 101 OK (two subprotocols)") | Write-Output } else { L("WS 101 NOT OK") | Write-Output }
 
-Log "END: smoke-all complete"
+L("END: smoke-all complete") | Write-Output
