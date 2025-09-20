@@ -1,36 +1,55 @@
 openapi: 3.1.0
 info:
-  title: ChatGPT Team Relay (Cloudflare Pages)
-  version: 1.3.1
-  description: |
-    HTTPS relay for OpenAI /v1 endpoints. Credentials are injected server-side.
-    Moderations are intentionally **blocked** (no /v1/moderations path).
+  title: ChatGPT Team Relay
+  version: 1.6
 servers:
-  - url: https://chatgpt-team.pages.dev/v1
-x-realtime-ws-server: wss://chatgpt-team-realtime.virelai.workers.dev/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17
-x-model-examples:
-  - gpt-4o-mini-2024-07-18
-  - gpt-4o-realtime-preview-2024-12-17
-  - gpt-image-1
-  - text-embedding-3-small
-  - gpt-4o
-  - gpt-3.5-turbo
-  - o1
-  - o3-mini
+  - url: https://chatgpt-team.pages.dev
 paths:
-  /health: { get: { summary: Relay health, responses: { '200': { description: OK } } } }
-  /models: { get: { summary: List models, responses: { '200': { description: OK } } } }
-  /chat/completions:
-    post: { summary: Chat Completions, requestBody: { required: true, content: { application/json: { schema: { type: object, required: [model, messages] } } } }, responses: { '200': { description: OK } } }
-  /completions:
-    post: { summary: Text Completions (legacy shim), requestBody: { required: true, content: { application/json: { schema: { type: object, required: [model, prompt] } } } }, responses: { '200': { description: OK } } }
-  /edits:
-    post: { summary: Edits (legacy shim), requestBody: { required: true, content: { application/json: { schema: { type: object, required: [model, input, instruction] } } } }, responses: { '200': { description: OK } } }
-  /responses:
-    post: { summary: Responses (unified endpoint), responses: { '200': { description: OK } } }
-  /background:
-    post: { summary: Background (maps to Responses background:true), responses: { '200': { description: OK } } }
-  /images/generations: { post: { summary: Images create, responses: { '200': { description: OK } } } }
-  /embeddings: { post: { summary: Embeddings, responses: { '200': { description: OK } } } }
-  /audio/speech: { post: { summary: TTS, responses: { '200': { description: OK } } } }
-  /audio/transcriptions: { post: { summary: STT, responses: { '200': { description: OK } } } }
+  /v1/responses:
+    post:
+      summary: OpenAI Responses API (create; supports background)
+      operationId: createResponse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, input]
+              properties:
+                model: { type: string }
+                input:
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items: { type: object }
+                background: { type: boolean, description: "If true, returns a queued id to poll later." }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Response created
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /v1/responses/{id}:
+    get:
+      summary: Get response status/result
+      operationId: getResponse
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Response status/result
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+security:
+  - bearerAuth: []
