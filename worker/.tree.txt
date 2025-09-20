@@ -1,9 +1,0 @@
-[DIR] .github/
-[DIR] .wrangler/
-[DIR] node_modules/
-_worker.ts
-.gitignore
-package-lock.json
-package.json
-test_realtime.js
-wrangler.toml
