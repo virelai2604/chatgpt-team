@@ -1,49 +1,15 @@
 openapi: 3.1.0
 info:
   title: ChatGPT Team Relay
-  version: 1.6.1
-  description: >
-    Cloudflare Pages relay (REST) + Workers Realtime bridge. Pass-through to OpenAI Platform.
-    Preferred endpoint is /v1/responses. Background jobs use POST /v1/responses with { background: true } 
-    and are retrieved with GET /v1/responses/{id}. Moderations are blocked by policy at the relay.
+  version: 1.4
 servers:
   - url: https://chatgpt-team.pages.dev
-security:
-  - bearerAuth: []
-components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-
 paths:
-  /v1/health:
-    get:
-      summary: Relay health
-      description: Relay-only health check.
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-
-  /v1/models:
-    get:
-      summary: List models
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-
+  /v1/chat/completions:
+    post: { summary: Legacy Chat Completions (pass-through), operationId: createChatCompletion, requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
   /v1/responses:
     post:
-      summary: Responses API (preferred; supports background)
-      description: >
-        Unified generation endpoint. To run jobs asynchronously, include { "background": true }.
-        Streaming via SSE is available when Accept: text/event-stream is used.
+      summary: OpenAI Responses API (recommended; supports background)
       operationId: createResponse
       requestBody:
         required: true
@@ -53,159 +19,52 @@ paths:
               type: object
               required: [model, input]
               properties:
-                model: { type: string, description: "e.g., gpt-5, gpt-4o, gpt-5-mini" }
+                model: { type: string }
                 input:
-                  description: Prompt/messages/content as accepted by Responses API
                   oneOf:
                     - type: string
                     - type: array
                       items: { type: object }
-                background: { type: boolean, description: "If true, create an async job and return an id to poll." }
+                background: { type: boolean, description: "Run in background and poll via GET /v1/responses/{id} or resume with stream=true" }
               additionalProperties: true
       responses:
-        "200":
-          description: Created/Status
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-
+        "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
   /v1/responses/{id}:
     get:
-      summary: Retrieve response or background job status
+      summary: Get status/result for a background response
       operationId: getResponse
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Response object (in_progress/completed/failed/cancelled)
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-
-  /v1/chat/completions:
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { name: stream, in: query, required: false, schema: { type: boolean } }]
+      responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } }, text/event-stream: { schema: { type: string, description: "SSE stream" } } } } }
+  /v1/background:
     post:
-      summary: Chat Completions (legacy interop)
-      operationId: createChatCompletion
+      summary: Compatibility shim that forwards to /v1/responses with background=true
+      operationId: createBackgroundJob
       requestBody:
         required: true
         content:
           application/json:
             schema: { type: object, additionalProperties: true }
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-
-  /v1/images/generations:
-    post:
-      summary: Images (generations)
-      operationId: createImage
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, additionalProperties: true }
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-
+      responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
   /v1/embeddings:
-    post:
-      summary: Embeddings
-      operationId: createEmbedding
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, additionalProperties: true }
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-
+    post: { summary: Embeddings, operationId: createEmbedding, requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
+  /v1/images/generations:
+    post: { summary: Images, operationId: createImage, requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
   /v1/audio/speech:
-    post:
-      summary: Text-to-Speech
-      operationId: synthesizeSpeech
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, additionalProperties: true }
-      responses:
-        "200":
-          description: Audio
-          content:
-            audio/mpeg:
-              schema: { type: string, format: binary }
-
+    post: { summary: Text-to-Speech, operationId: createSpeech, requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: audio bytes } } }
+  /v1/audio/transcriptions:
+    post: { summary: Speech-to-Text (multipart/form-data), operationId: createTranscription, requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
+  /v1/audio/translations:
+    post: { summary: Speech-to-Text translate (multipart/form-data), operationId: createTranslation, requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
   /v1/files:
-    get:
-      summary: List files
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-    post:
-      summary: Upload file (multipart)
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema: { type: object, additionalProperties: true }
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-
+    get: { summary: List files, operationId: listFiles, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
+    post: { summary: Upload file (multipart/form-data), operationId: uploadFile, requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
   /v1/files/{file_id}:
-    get:
-      summary: Retrieve file
-      parameters:
-        - { name: file_id, in: path, required: true, schema: { type: string } }
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { type: object, additionalProperties: true }
-    delete:
-      summary: Delete file
-      parameters:
-        - { name: file_id, in: path, required: true, schema: { type: string } }
-      responses:
-        "200": { description: OK }
-
-  /v1/files/{file_id}/content:
-    get:
-      summary: Download file content
-      parameters:
-        - { name: file_id, in: path, required: true, schema: { type: string } }
-      responses:
-        "200":
-          description: File content
-          content:
-            application/octet-stream:
-              schema: { type: string, format: binary }
-
-  /v1/moderations:
-    post:
-      summary: Moderations (blocked by relay policy)
-      description: This relay intentionally blocks access to Moderations.
-      responses:
-        "404":
-          description: Blocked in relay
+    get: { summary: Retrieve file, operationId: retrieveFile, parameters: [{ name: file_id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+    delete: { summary: Delete file, operationId: deleteFile, parameters: [{ name: file_id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+  /v1/vector-stores:
+    get: { summary: List vector stores, operationId: listVectorStores, responses: { "200": { description: ok } } }
+    post: { summary: Create vector store, operationId: createVectorStore, requestBody: { required: false }, responses: { "200": { description: ok } } }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+security: [ { bearerAuth: [] } ]
