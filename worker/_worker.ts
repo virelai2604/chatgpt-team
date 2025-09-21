@@ -2,35 +2,28 @@ export default {
   async fetch(req: Request, env: any, ctx: ExecutionContext): Promise<Response> {
     const { pathname, search } = new URL(req.url);
 
-    // Health
     if (pathname === "/v1/health-rt") {
       return new Response(JSON.stringify({ ok: true, service: "realtime", ts: Date.now() }), {
-        headers: {
-          "content-type": "application/json; charset=utf-8",
-          "cache-control": "no-store",
-          "access-control-allow-origin": "*"
-        }
+        headers: { "content-type": "application/json; charset=utf-8",
+                   "cache-control": "no-store",
+                   "access-control-allow-origin": "*" }
       });
     }
 
-    // WebSocket Realtime
     if (pathname === "/v1/realtime") {
       const upgrade = req.headers.get("upgrade") || "";
-      if (upgrade.toLowerCase() !== "websocket") {
+      if (upgrade.toLowerCase() !== "websocket")
         return new Response("Expected WebSocket", { status: 426 });
-      }
 
       const pair = new WebSocketPair();
       const [client, server] = [pair[0], pair[1]];
 
-      // Subprotocol negotiation
       const clientProtocols = (req.headers.get("sec-websocket-protocol") || "")
         .split(",").map(s => s.trim()).filter(Boolean);
       const chosen = clientProtocols.find(p => p) || "oai-realtime";
       // @ts-ignore
       server.accept(chosen);
 
-      // Upstream connect
       const upstreamUrl = `wss://api.openai.com${pathname}${search}`;
       const upstreamHeaders: Record<string,string> = {
         "Authorization": `Bearer ${env.OPENAI_KEY}`,
@@ -40,12 +33,8 @@ export default {
       if (env.OPENAI_PROJECT) upstreamHeaders["OpenAI-Project"] = env.OPENAI_PROJECT;
 
       const upstreamResp = await fetch(upstreamUrl, {
-        headers: {
-          "Upgrade": "websocket",
-          "Connection": "Upgrade",
-          "Sec-WebSocket-Protocol": chosen,
-          ...upstreamHeaders
-        }
+        headers: { "Upgrade": "websocket", "Connection": "Upgrade",
+                   "Sec-WebSocket-Protocol": chosen, ...upstreamHeaders }
       });
 
       // @ts-ignore
@@ -57,12 +46,11 @@ export default {
       // @ts-ignore
       upstreamSocket.accept();
 
-      // Bridge messages
+      // Bridge traffic
       // @ts-ignore
       server.addEventListener("message", (e: MessageEvent) => upstreamSocket.send(e.data));
       // @ts-ignore
       upstreamSocket.addEventListener("message", (e: MessageEvent) => server.send(e.data));
-
       server.addEventListener("close", () => upstreamSocket.close());
       upstreamSocket.addEventListener("close", () => server.close());
       server.addEventListener("error", () => upstreamSocket.close(1011, "client error"));
