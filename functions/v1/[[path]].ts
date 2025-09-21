@@ -1,80 +1,102 @@
-// Catch-all relay for REST
-type Env = {
-  OPENAI_KEY: string;
-  OPENAI_ORG_ID?: string;
-  OPENAI_PROJECT?: string;
-  OPENAI_BETA?: string;
-  BASE?: string;
+import files from "./files";
+import { httpRequestWithRetry } from "../../lib/httpClient";
+import audioTranscription from "./audio_transcription";
+import { httpRequestWithRetry } from "../../lib/httpClient";
+import audioSpeech from "./audio_speech";
+import { httpRequestWithRetry } from "../../lib/httpClient";
+import imagesGenerations from "./images_generations";
+import { httpRequestWithRetry } from "../../lib/httpClient";
+import chatCompletions from "./chat_completions";
+import { httpRequestWithRetry } from "../../lib/httpClient";
+import assistants from "./assistants";
+import { httpRequestWithRetry } from "../../lib/httpClient";
+import threads from "./threads";
+import { httpRequestWithRetry } from "../../lib/httpClient";
+import runs from "./runs";
+import { httpRequestWithRetry } from "../../lib/httpClient";
+import vectorStores from "./vector_stores";
+import { httpRequestWithRetry } from "../../lib/httpClient";
+import vectorStoresSearch from "./vector_stores_search";
+import { httpRequestWithRetry } from "../../lib/httpClient";
+import vectorStoresFiles from "./vector_stores_files";
+import { httpRequestWithRetry } from "../../lib/httpClient";
+
+export const config = {
+  runtime: "edge",
 };
 
-export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
-  const url = new URL(request.url);
+export default {
+  async httpRequestWithRetry(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const pathname = url.pathname;
 
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: cors() });
-  }
+    if (pathname.startsWith("/v1/files")) {
+      return await files.httpRequestWithRetry(request);
+    }
 
-  if (!url.pathname.startsWith("/v1/")) {
-    return new Response("Not Found", { status: 404, headers: cors() });
-  }
+    if (pathname === "/v1/audio/transcriptions") {
+      return await audioTranscription.httpRequestWithRetry(request);
+    }
 
-  if (url.pathname.startsWith("/v1/moderations")) {
-    return json({ error: { message: "blocked" } }, 404, cors());
-  }
+    if (pathname === "/v1/audio/speech") {
+      return await audioSpeech.httpRequestWithRetry(request);
+    }
 
-  const base = (env.BASE || "https://api.openai.com").replace(/\/$/, "");
-  const upstreamUrl = base + url.pathname + url.search;
+    if (pathname === "/v1/images/generations") {
+      return await imagesGenerations.httpRequestWithRetry(request);
+    }
 
-  const out = new Headers(request.headers);
-  if (!out.get("authorization") && env.OPENAI_KEY) {
-    out.set("authorization", `Bearer ${env.OPENAI_KEY}`);
-  }
-  if (env.OPENAI_ORG_ID) out.set("openai-organization", env.OPENAI_ORG_ID);
-  if (env.OPENAI_PROJECT) out.set("openai-project", env.OPENAI_PROJECT);
-  if (env.OPENAI_BETA) out.set("openai-beta", env.OPENAI_BETA);
+    if (pathname === "/v1/chat/completions") {
+      return await chatCompletions.httpRequestWithRetry(request);
+    }
 
-  for (const h of ["host","content-length","connection","transfer-encoding","keep-alive","upgrade"]) {
-    out.delete(h);
-  }
+    if (pathname.startsWith("/v1/assistants")) {
+      return await assistants.httpRequestWithRetry(request);
+    }
 
-  const method = request.method.toUpperCase();
-  const ct = request.headers.get("content-type") || "";
-  const isMultipart = ct.includes("multipart/form-data");
+    if (pathname.startsWith("/v1/threads")) {
+      if (pathname.includes("/runs")) return await runs.httpRequestWithRetry(request);
+      return await threads.httpRequestWithRetry(request);
+    }
 
-  let init: RequestInit;
-  if (isMultipart) {
-    const inForm = await request.formData();
-    const outForm = new FormData();
-    for (const [k, v] of inForm.entries()) outForm.append(k, v as any);
-    init = { method, headers: out, body: outForm, redirect: "manual" };
-  } else {
-    init = { method, headers: out, body: (method -in ["GET","HEAD"]) ? undefined : request.body, redirect: "manual" };
-  }
+    if (pathname.startsWith("/v1/vector_stores")) {
+      if (pathname.match(/^\/v1\/vector_stores\/[^\/]+\/search$/)) {
+        return await vectorStoresSearch.httpRequestWithRetry(request);
+      }
+      if (pathname.match(/^\/v1\/vector_stores\/[^\/]+\/files$/)) {
+        return await vectorStoresFiles.httpRequestWithRetry(request);
+      }
+      return await vectorStores.httpRequestWithRetry(request);
+    }
 
-  const resp = await fetch(upstreamUrl, init);
-  const rh = new Headers(resp.headers);
-  rh.set("Access-Control-Allow-Origin", "*");
-  rh.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
-  rh.set("Access-Control-Expose-Headers", "OpenAI-Organization, OpenAI-Project, OpenAI-Beta, X-Request-Id");
-  rh.set("Cache-Control", "no-store");
+    if (pathname.startsWith("/v1/moderations")) {
+      return new Response(JSON.stringify({ error: "moderation blocked" }), {
+        status: 403,
+      });
+    }
 
-  return new Response(resp.body, { status: resp.status, headers: rh });
+    const upstream = "https://api.openai.com" + pathname + url.search;
+    const headers = new Headers(request.headers);
+    const relayHeaders = new Headers();
+    for (const [k, v] of headers.entries()) {
+      if (!["content-length"].includes(k.toLowerCase())) {
+        relayHeaders.set(k, v);
+      }
+    }
+
+    const init: RequestInit = {
+      method: request.method,
+      headers: relayHeaders,
+      body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+    };
+
+    const resp = await httpRequestWithRetry(upstream, init);
+    return new Response(resp.body, {
+      status: resp.status,
+      headers: resp.headers,
+    });
+  },
 };
 
-function cors(): Record<string,string> {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
-    "Access-Control-Allow-Headers": "Authorization,Content-Type,OpenAI-Organization,OpenAI-Project,OpenAI-Beta,Accept",
-    "Cache-Control": "no-store"
-  };
-}
-
-function json(data: unknown, status = 200, headers: Record<string,string> = {}) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: new Headers({ "content-type": "application/json; charset=utf-8", ...headers })
-  });
-}
 
 

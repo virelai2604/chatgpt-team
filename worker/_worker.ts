@@ -1,57 +1,43 @@
 export default {
-  async fetch(req: Request, env: any): Promise<Response> {
-    const { pathname, search } = new URL(req.url);
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+// --- Realtime WS Patch Start ---
+if (url.pathname.startsWith("/v1/realtime")) {
+  if (request.headers.get("Upgrade") !== "websocket") {
+    return new Response("Expected WebSocket", { status: 426 });
+  }
+  const { socket, response } = Deno.upgradeWebSocket(request);
+  socket.onopen = () => {
+    socket.send(JSON.stringify({ type: "system", message: "Realtime WS connected" }));
+  };
+  socket.onmessage = (event) => {
+    socket.send(JSON.stringify({ type: "echo", data: event.data }));
+  };
+  return response;
+}
+// --- Realtime WS Patch End ---
+    const method = request.method;
+    const pathname = url.pathname;
 
-    if (pathname === "/v1/health-rt") {
-      return new Response(JSON.stringify({ ok: true, service: "realtime", ts: Date.now() }), {
-        headers: {
-          "content-type": "application/json; charset=utf-8",
-          "cache-control": "no-store",
-          "access-control-allow-origin": "*"
-        }
-      });
+    if (pathname.startsWith("/v1/realtime")) {
+      // Your WS logic stays here...
+      return new Response("Realtime WS not yet implemented.", { status: 501 });
     }
 
-    if (pathname === "/v1/realtime") {
-      const upgrade = req.headers.get("upgrade") || "";
-      if (upgrade.toLowerCase() !== "websocket") return new Response("Expected WebSocket", { status: 426 });
-
-      const pair = new WebSocketPair();
-      const [client, server] = [pair[0], pair[1]];
-      const protocols = (req.headers.get("sec-websocket-protocol") || "").split(",").map(p => p.trim()).filter(Boolean);
-      const chosen = protocols.find(p => p) || "oai-realtime";
-      // @ts-ignore
-      server.accept(chosen);
-
-      const upstreamUrl = `wss://api.openai.com${pathname}${search}`;
-      const headers: Record<string,string> = {
-        "Authorization": `Bearer ${env.OPENAI_KEY}`,
-        "OpenAI-Beta": env.OPENAI_BETA || "realtime=v1"
-      };
-      if (env.OPENAI_ORG_ID) headers["OpenAI-Organization"] = env.OPENAI_ORG_ID;
-      if (env.OPENAI_PROJECT) headers["OpenAI-Project"] = env.OPENAI_PROJECT;
-
-      const upstreamResp = await fetch(upstreamUrl, {
-        headers: { "Upgrade": "websocket", "Connection": "Upgrade", "Sec-WebSocket-Protocol": chosen, ...headers }
+    if (pathname.startsWith("/v1/")) {
+      const proxyUrl = "https://chatgpt-team.pages.dev" + pathname + url.search;
+      const resp = await fetch(proxyUrl, {
+        method,
+        headers: request.headers,
+        body: method !== "GET" && method !== "HEAD" ? request.body : undefined,
       });
-
-      // @ts-ignore
-      const upstream = upstreamResp.webSocket;
-      if (!upstream) { server.close(1011, "Upstream failed"); return new Response("Upstream failed", { status: 502 }); }
-      // @ts-ignore
-      upstream.accept();
-
-      // Pipe
-      // @ts-ignore
-      server.addEventListener("message", (e: MessageEvent) => upstream.send(e.data));
-      // @ts-ignore
-      upstream.addEventListener("message", (e: MessageEvent) => server.send(e.data));
-      server.addEventListener("close", () => upstream.close());
-      upstream.addEventListener("close", () => server.close());
-
-      return new Response(null, { status: 101, webSocket: client });
+      return new Response(resp.body, {
+        status: resp.status,
+        headers: resp.headers,
+      });
     }
 
     return new Response("Not Found", { status: 404 });
   }
-} satisfies ExportedHandler;
+}
+

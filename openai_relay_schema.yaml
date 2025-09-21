@@ -1,70 +1,277 @@
 openapi: 3.1.0
 info:
-  title: OpenAI Relay (Full SDK Surface + Custom)
+  title: ChatGPT Relay Full Schema
   version: 1.0.0
 servers:
-  - url: https://chatgpt-team.pages.dev/v1
+- url: https://chatgpt-team.pages.dev
 paths:
-  /health:
-    get: { summary: Relay Health, responses: { "200": { description: OK } } }
-  /health-rt:
-    get: { summary: Worker Health, responses: { "200": { description: OK } } }
-  /background:
-    get: { summary: Background Health, responses: { "200": { description: OK } } }
-  /models:
-    get: { summary: List Models, responses: { "200": { description: OK } } }
-  /completions:
-    post: { summary: Legacy Completions, responses: { "200": { description: OK } } }
-  /chat/completions:
-    post: { summary: Create Chat Completion, responses: { "200": { description: OK } } }
-  /responses:
-    post: { summary: Create Response, responses: { "200": { description: OK } } }
-  /embeddings:
-    post: { summary: Create Embedding, responses: { "200": { description: OK } } }
-  /files:
-    get: { summary: List Files, responses: { "200": { description: OK } } }
-    post: { summary: Upload File, responses: { "200": { description: OK } } }
-  /files/{file_id}:
-    get: { summary: Retrieve File, responses: { "200": { description: OK } } }
-    delete: { summary: Delete File, responses: { "200": { description: OK } } }
-  /files/{file_id}/content:
-    get: { summary: Download File Content, responses: { "200": { description: OK } } }
-  /fine-tunes:
-    get: { summary: List Fine-Tunes, responses: { "200": { description: OK } } }
-    post: { summary: Create Fine-Tune, responses: { "200": { description: OK } } }
-  /fine-tunes/{fine_tune_id}:
-    get: { summary: Retrieve Fine-Tune, responses: { "200": { description: OK } } }
-  /fine-tunes/{fine_tune_id}/cancel:
-    post: { summary: Cancel Fine-Tune, responses: { "200": { description: OK } } }
-  /assistants:
-    get: { summary: List Assistants, responses: { "200": { description: OK } } }
-    post: { summary: Create Assistant, responses: { "200": { description: OK } } }
-  /assistants/{assistant_id}:
-    get: { summary: Retrieve Assistant, responses: { "200": { description: OK } } }
-    post: { summary: Modify Assistant, responses: { "200": { description: OK } } }
-    delete: { summary: Delete Assistant, responses: { "200": { description: OK } } }
-  /threads:
-    post: { summary: Create Thread, responses: { "200": { description: OK } } }
-  /threads/{thread_id}:
-    get: { summary: Retrieve Thread, responses: { "200": { description: OK } } }
-  /threads/{thread_id}/messages:
-    get: { summary: List Thread Messages, responses: { "200": { description: OK } } }
-    post: { summary: Create Thread Message, responses: { "200": { description: OK } } }
-  /threads/{thread_id}/messages/{message_id}:
-    get: { summary: Retrieve Thread Message, responses: { "200": { description: OK } } }
-  /threads/{thread_id}/runs:
-    post: { summary: Create Run, responses: { "200": { description: OK } } }
-  /threads/{thread_id}/runs/{run_id}:
-    get: { summary: Retrieve Run, responses: { "200": { description: OK } } }
-  /images/generations:
-    post: { summary: Generate Image, responses: { "200": { description: OK } } }
-  /audio/speech:
-    post: { summary: Generate Speech (TTS), responses: { "200": { description: OK } } }
-  /audio/transcriptions:
-    post: { summary: Transcribe Audio, responses: { "200": { description: OK } } }
-  /audio/translations:
-    post: { summary: Translate Audio, responses: { "200": { description: OK } } }
-  /moderations:
-    post: { summary: Moderations (blocked by relay), responses: { "403": { description: Blocked } } }
-  /realtime:
-    get: { summary: Realtime WebSocket, responses: { "101": { description: Switching Protocols } } }
+  /v1/responses:
+    post:
+      summary: Responses API – unified chat / assistant interface
+      description: Uses `input` array instead of `messages` (per OpenAI Responses API)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model:
+                  type: string
+                input:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                        enum: [user, assistant, system, developer]
+                      content:
+                        type: string
+              required:
+                - model
+                - input
+      responses:
+        '200':
+          description: Valid Responses API outcome
+
+  /v1/models:
+    get:
+      summary: List available models
+      responses:
+        '200':
+          description: Array of model objects    /v1/vector_stores/{vector_store_id}/search:
+    post:
+      summary: Search vector store
+      parameters:
+      - name: vector_store_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                filters:
+                  type: object
+                max_num_results:
+                  type: integer
+      responses:
+        '200':
+          description: Vector search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorSearchResult'
+  /v1/vector_stores/{vector_store_id}/files:
+    post:
+      summary: Attach file to vector store
+      parameters:
+      - name: vector_store_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_id:
+                  type: string
+                attributes:
+                  type: object
+      responses:
+        '200':
+          description: File attached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorStoreFileAttachment'
+    get:
+      summary: List files in vector store
+      parameters:
+      - name: vector_store_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: List of files in vector store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorStoreFileList'
+  /v1/assistants:
+    post:
+      summary: Create an assistant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        '200':
+          description: Assistant created
+          content:
+            application/json:
+              schema:
+                type: object
+  /v1/threads:
+    post:
+      summary: Create a thread
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        '200':
+          description: Thread created
+          content:
+            application/json:
+              schema:
+                type: object
+  /v1/files:upload:
+    post:
+      summary: Upload file
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                purpose:
+                  type: string
+              required:
+              - file
+              - purpose
+      responses:
+        '200':
+          description: Upload successful
+          content:
+            application/json:
+              schema:
+                type: object
+  /v1/files:
+    post:
+      summary: Upload a file
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                purpose:
+                  type: string
+              required:
+              - file
+              - purpose
+      responses:
+        '200':
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+components:
+  schemas:
+    VectorSearchResult:
+      type: object
+      properties:
+        object:
+          type: string
+        search_query:
+          type: string
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              file_id:
+                type: string
+              filename:
+                type: string
+              score:
+                type: number
+              attributes:
+                type: object
+              content:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    text:
+                      type: string
+        has_more:
+          type: boolean
+        next_page:
+          type: string
+    VectorStoreFileAttachment:
+      type: object
+      properties:
+        vector_store_id:
+          type: string
+        file_id:
+          type: string
+        attributes:
+          type: object
+    VectorStoreFileList:
+      type: object
+      properties:
+        vector_store_id:
+          type: string
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              file_id:
+                type: string
+              filename:
+                type: string
+              attributes:
+                type: object
+    ChatCompletionRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+            required:
+            - role
+            - content
+      required:
+      - model
+      - messages
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+

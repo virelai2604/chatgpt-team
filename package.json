@@ -1,5 +1,9 @@
 {
+  "type": "module",
   "devDependencies": {
     "wrangler": "^4.37.1"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
   }
 }

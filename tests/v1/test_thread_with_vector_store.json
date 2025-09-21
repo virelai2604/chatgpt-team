@@ -1,0 +1,8 @@
+{
+  "messages": [{ "role": "user", "content": "Find insights in attached files." }],
+  "tool_resources": {
+    "file_search": {
+      "vector_store_ids": ["vs_test_123"]
+    }
+  }
+}
