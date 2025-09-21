@@ -14,7 +14,7 @@ export default {
 
       try {
         const pair = new WebSocketPair();
-        const [client, server] = Object.values(pair);
+        const client = pair[0]; const server = pair[1];
 
         // Accept the WebSocket *before* any async work
         server.accept();
@@ -66,3 +66,5 @@ export default {
     return new Response("Not Found", { status: 404 });
   }
 };
+
+
