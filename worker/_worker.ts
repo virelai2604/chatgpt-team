@@ -4,16 +4,13 @@ export default {
 
     if (pathname === "/v1/health-rt") {
       return new Response(JSON.stringify({ ok: true, service: "realtime", ts: Date.now() }), {
-        headers: { "content-type": "application/json; charset=utf-8",
-                   "cache-control": "no-store",
-                   "access-control-allow-origin": "*" }
+        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "*" }
       });
     }
 
     if (pathname === "/v1/realtime") {
       const upgrade = req.headers.get("upgrade") || "";
-      if (upgrade.toLowerCase() !== "websocket")
-        return new Response("Expected WebSocket", { status: 426 });
+      if (upgrade.toLowerCase() !== "websocket") return new Response("Expected WebSocket", { status: 426 });
 
       const pair = new WebSocketPair();
       const [client, server] = [pair[0], pair[1]];
@@ -33,10 +30,8 @@ export default {
       if (env.OPENAI_PROJECT) upstreamHeaders["OpenAI-Project"] = env.OPENAI_PROJECT;
 
       const upstreamResp = await fetch(upstreamUrl, {
-        headers: { "Upgrade": "websocket", "Connection": "Upgrade",
-                   "Sec-WebSocket-Protocol": chosen, ...upstreamHeaders }
+        headers: { "Upgrade": "websocket", "Connection": "Upgrade", "Sec-WebSocket-Protocol": chosen, ...upstreamHeaders }
       });
-
       // @ts-ignore
       const upstreamSocket = upstreamResp.webSocket;
       if (!upstreamSocket) {
@@ -46,11 +41,11 @@ export default {
       // @ts-ignore
       upstreamSocket.accept();
 
-      // Bridge traffic
       // @ts-ignore
       server.addEventListener("message", (e: MessageEvent) => upstreamSocket.send(e.data));
       // @ts-ignore
       upstreamSocket.addEventListener("message", (e: MessageEvent) => server.send(e.data));
+
       server.addEventListener("close", () => upstreamSocket.close());
       upstreamSocket.addEventListener("close", () => server.close());
       server.addEventListener("error", () => upstreamSocket.close(1011, "client error"));
