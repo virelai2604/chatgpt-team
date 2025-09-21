@@ -1,3 +1,4 @@
+// Catch-all relay for REST
 type Env = {
   OPENAI_KEY: string;
   OPENAI_ORG_ID?: string;
@@ -17,7 +18,6 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return new Response("Not Found", { status: 404, headers: cors() });
   }
 
-  // Block moderation only
   if (url.pathname.startsWith("/v1/moderations")) {
     return json({ error: { message: "blocked" } }, 404, cors());
   }
@@ -48,12 +48,13 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     for (const [k, v] of inForm.entries()) outForm.append(k, v as any);
     init = { method, headers: out, body: outForm, redirect: "manual" };
   } else {
-    init = { method, headers: out, body: (method -in @("GET","HEAD")) ? undefined : request.body, redirect: "manual" };
+    init = { method, headers: out, body: (method -in ["GET","HEAD"]) ? undefined : request.body, redirect: "manual" };
   }
 
   const resp = await fetch(upstreamUrl, init);
   const rh = new Headers(resp.headers);
   rh.set("Access-Control-Allow-Origin", "*");
+  rh.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
   rh.set("Access-Control-Expose-Headers", "OpenAI-Organization, OpenAI-Project, OpenAI-Beta, X-Request-Id");
   rh.set("Cache-Control", "no-store");
 
@@ -63,7 +64,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 function cors(): Record<string,string> {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+    "Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
     "Access-Control-Allow-Headers": "Authorization,Content-Type,OpenAI-Organization,OpenAI-Project,OpenAI-Beta,Accept",
     "Cache-Control": "no-store"
   };
@@ -75,3 +76,5 @@ function json(data: unknown, status = 200, headers: Record<string,string> = {}) 
     headers: new Headers({ "content-type": "application/json; charset=utf-8", ...headers })
   });
 }
+
+
