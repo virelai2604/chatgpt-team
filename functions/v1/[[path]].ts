@@ -1,76 +1,77 @@
-export const onRequest: PagesFunction = async (ctx) => {
-  const req = ctx.request;
-  const url = new URL(req.url);
-  const path = url.pathname.replace(/\/+$/, "");
-  const method = req.method.toUpperCase();
-
-  // 1) Block moderations outright (policy)
-  if (path === "/v1/moderations") {
-    return new Response(JSON.stringify({ error: "blocked" }), {
-      status: 404, headers: { "content-type":"application/json", "access-control-allow-origin":"*" }
-    });
-  }
-
-  // Build upstream headers & gate OpenAI-Beta to Assistants/Threads only
-  const env = (ctx.env ?? {}) as any;
-  const buildHeaders = (target: string) => {
-    const h = new Headers(req.headers);
-    h.delete("host"); h.delete("content-length");
-    if (!h.get("authorization") && env.OPENAI_KEY) h.set("authorization", `Bearer ${env.OPENAI_KEY}`);
-    if (!h.get("openai-organization") && env.OPENAI_ORG_ID) h.set("openai-organization", env.OPENAI_ORG_ID);
-    if (!h.get("openai-project") && env.OPENAI_PROJECT) h.set("openai-project", env.OPENAI_PROJECT);
-    const isAssistants = /^\/v1\/(assistants|threads|runs)/.test(target);
-    if (isAssistants) {
-      const val = env.OPENAI_BETA || "assistants=v2";
-      h.set("openai-beta", val.includes("assistants=") ? val : "assistants=v2");
-    } else {
-      h.delete("openai-beta");
-    }
-    return h;
-  };
-
-  const passthrough = async (target: string) => {
-    const upstream = new URL("https://api.openai.com" + target);
-    const headers = buildHeaders(target);
-    const ct = req.headers.get("content-type") || "";
-    if (method === "GET" || method === "DELETE") return fetch(upstream, { method, headers });
-    if (ct.includes("multipart/form-data")) {
-      const form = await req.formData();
-      return fetch(upstream, { method, headers, body: form });
-    }
-    let body: any; try { body = await req.text(); } catch {}
-    return fetch(upstream, { method, headers, body });
-  };
-
-  const forwardJSON = async (target: string, bodyObj: any) => {
-    const upstream = new URL("https://api.openai.com" + target);
-    const headers = buildHeaders(target);
-    headers.set("content-type", "application/json");
-    return fetch(upstream, { method: "POST", headers, body: JSON.stringify(bodyObj) });
-  };
-
-  // 2) Legacy → modern shims
-  if (path === "/v1/completions" && method === "POST") {
-    let b:any = {}; try { b = await req.json(); } catch {}
-    const input = Array.isArray(b.prompt) ? b.prompt.join("\n") : (b.prompt ?? "");
-    const model = (typeof b.model === "string" && b.model.trim()) ? b.model : "gpt-4o-mini";
-    const mapped:any = { model, input };
-    if (typeof b.max_tokens === "number") mapped.max_output_tokens = b.max_tokens; // modern cap
-    return forwardJSON("/v1/responses", mapped);
-  }
-
-  if (path === "/v1/edits" && method === "POST") {
-    let b:any = {}; try { b = await req.json(); } catch {}
-    const instruction = b.instruction ?? "";
-    const input = b.input ?? "";
-    const model = (typeof b.model === "string" && b.model.trim()) ? b.model : "gpt-4o-mini";
-    const composed = `Apply the following instruction to the text.\nInstruction:\n${instruction}\n\nText:\n${input}`;
-    return forwardJSON("/v1/responses", { model, input: composed });
-  }
-
-  // 3) Default pass-through
-  return passthrough(path);
+type Env = {
+  OPENAI_KEY: string;
+  OPENAI_ORG_ID?: string;
+  OPENAI_PROJECT?: string;
+  OPENAI_BETA?: string;
+  BASE?: string; // default https://api.openai.com
 };
 
+export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
+  const url = new URL(request.url);
 
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: cors() });
+  }
 
+  if (!url.pathname.startsWith("/v1/")) {
+    return new Response("Not Found", { status: 404, headers: cors() });
+  }
+
+  if (url.pathname.startsWith("/v1/moderations")) {
+    return json({ error: { message: "blocked" } }, 404, cors());
+  }
+
+  const base = (env.BASE || "https://api.openai.com").replace(/\/$/, "");
+  const upstreamUrl = base + url.pathname + url.search;
+
+  const out = new Headers(request.headers);
+  if (!out.get("authorization") && env.OPENAI_KEY) {
+    out.set("authorization", `Bearer ${env.OPENAI_KEY}`);
+  }
+  if (env.OPENAI_ORG_ID) out.set("openai-organization", env.OPENAI_ORG_ID);
+  if (env.OPENAI_PROJECT) out.set("openai-project", env.OPENAI_PROJECT);
+  if (env.OPENAI_BETA) out.set("openai-beta", env.OPENAI_BETA);
+
+  for (const h of ["host","content-length","connection","transfer-encoding","keep-alive","upgrade"]) {
+    out.delete(h);
+  }
+
+  const method = request.method.toUpperCase();
+  const ct = request.headers.get("content-type") || "";
+  const isMultipart = ct.includes("multipart/form-data");
+
+  let init: RequestInit;
+  if (isMultipart) {
+    const inForm = await request.formData();
+    const outForm = new FormData();
+    for (const [k, v] of inForm.entries()) outForm.append(k, v as any);
+
+    init = { method, headers: out, body: outForm, redirect: "manual" };
+  } else {
+    init = { method, headers: out, body: (method === "GET" || method === "HEAD") ? undefined : request.body, redirect: "manual" };
+  }
+
+  const resp = await fetch(upstreamUrl, init);
+  const rh = new Headers(resp.headers);
+  rh.set("Access-Control-Allow-Origin", "*");
+  rh.set("Access-Control-Expose-Headers", "OpenAI-Organization, OpenAI-Project, OpenAI-Beta, X-Request-Id");
+  rh.set("Cache-Control", "no-store");
+
+  return new Response(resp.body, { status: resp.status, headers: rh });
+};
+
+function cors(): Record<string,string> {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization,Content-Type,OpenAI-Organization,OpenAI-Project,OpenAI-Beta,Accept",
+    "Cache-Control": "no-store"
+  };
+}
+
+function json(data: unknown, status = 200, headers: Record<string,string> = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: new Headers({ "content-type": "application/json; charset=utf-8", ...headers })
+  });
+}
