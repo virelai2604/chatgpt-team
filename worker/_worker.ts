@@ -1,36 +1,62 @@
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-// --- Realtime WS Patch Start ---
-if (url.pathname.startsWith("/v1/realtime")) {
-  if (request.headers.get("Upgrade") !== "websocket") {
-    return new Response("Expected WebSocket", { status: 426 });
-  }
-  const { socket, response } = Deno.upgradeWebSocket(request);
-  socket.onopen = () => {
-    socket.send(JSON.stringify({ type: "system", message: "Realtime WS connected" }));
-  };
-  socket.onmessage = (event) => {
-    socket.send(JSON.stringify({ type: "echo", data: event.data }));
-  };
-  return response;
-}
-// --- Realtime WS Patch End ---
-    const method = request.method;
-    const pathname = url.pathname;
 
-    if (pathname.startsWith("/v1/realtime")) {
-      // Your WS logic stays here...
-      return new Response("Realtime WS not yet implemented.", { status: 501 });
+    // ✅ WebSocket Handler - BIFL Safe
+    if (url.pathname.startsWith("/v1/realtime")) {
+      const upgradeHeader = request.headers.get("Upgrade");
+      console.log("[WS] Incoming request for /v1/realtime");
+      console.log("[WS] Upgrade header: " + upgradeHeader);
+
+      if (upgradeHeader !== "websocket") {
+        return new Response("Expected WebSocket", { status: 426 });
+      }
+
+      try {
+        const pair = new WebSocketPair();
+        const [client, server] = Object.values(pair);
+
+        // Accept the WebSocket *before* any async work
+        server.accept();
+
+        server.addEventListener("message", (event) => {
+          console.log("[WS] Message:", event.data);
+          server.send(JSON.stringify({
+            type: "echo",
+            data: event.data
+          }));
+        });
+
+        server.addEventListener("close", () => {
+          console.log("[WS] Closed by client");
+        });
+
+        server.addEventListener("error", (err) => {
+          console.error("[WS] Error:", err.message);
+        });
+
+        // ✅ Always return immediately
+        return new Response(null, {
+          status: 101,
+          webSocket: client
+        });
+
+      } catch (err) {
+        return new Response("WS Upgrade failed: " + err.message, { status: 500 });
+      }
     }
 
-    if (pathname.startsWith("/v1/")) {
-      const proxyUrl = "https://chatgpt-team.pages.dev" + pathname + url.search;
+    // ✅ Proxy fallback to Pages
+    if (url.pathname.startsWith("/v1/")) {
+      const proxyUrl = "https://chatgpt-team.pages.dev" + url.pathname + url.search;
+      const method = request.method;
+
       const resp = await fetch(proxyUrl, {
         method,
         headers: request.headers,
         body: method !== "GET" && method !== "HEAD" ? request.body : undefined,
       });
+
       return new Response(resp.body, {
         status: resp.status,
         headers: resp.headers,
@@ -39,5 +65,4 @@ if (url.pathname.startsWith("/v1/realtime")) {
 
     return new Response("Not Found", { status: 404 });
   }
-}
-
+};
