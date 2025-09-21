@@ -79,3 +79,13 @@ try {
 } catch {
   Log "❌ /v1/health failed: $_"
 }
+
+Log "🧪 WS: /v1/realtime test"
+try {
+  Push-Location "C:\Tools\ChatGpt Domain\Cloudflare\chatgpt-team\worker"
+  node .\test_realtime.mjs | Tee-Object -Append $logPath
+  Pop-Location
+  Log "✅ WS test passed"
+} catch {
+  Log "❌ WS test failed: $_"
+}
