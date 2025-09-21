@@ -3,7 +3,7 @@ type Env = {
   OPENAI_ORG_ID?: string;
   OPENAI_PROJECT?: string;
   OPENAI_BETA?: string;
-  BASE?: string; // default https://api.openai.com
+  BASE?: string;
 };
 
 export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
@@ -36,7 +36,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     out.delete(h);
   }
 
-  const method = request.method.toUpperCase();
+  const method = request.method.ToUpper();
   const ct = request.headers.get("content-type") || "";
   const isMultipart = ct.includes("multipart/form-data");
 
@@ -45,10 +45,9 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     const inForm = await request.formData();
     const outForm = new FormData();
     for (const [k, v] of inForm.entries()) outForm.append(k, v as any);
-
     init = { method, headers: out, body: outForm, redirect: "manual" };
   } else {
-    init = { method, headers: out, body: (method === "GET" || method === "HEAD") ? undefined : request.body, redirect: "manual" };
+    init = { method, headers: out, body: (method -in @("GET","HEAD")) ? $null : request.body, redirect: "manual" };
   }
 
   const resp = await fetch(upstreamUrl, init);
