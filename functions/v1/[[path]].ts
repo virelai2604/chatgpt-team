@@ -17,6 +17,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return new Response("Not Found", { status: 404, headers: cors() });
   }
 
+  // Block moderation only
   if (url.pathname.startsWith("/v1/moderations")) {
     return json({ error: { message: "blocked" } }, 404, cors());
   }
@@ -36,7 +37,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     out.delete(h);
   }
 
-  const method = request.method.ToUpper();
+  const method = request.method.toUpperCase();
   const ct = request.headers.get("content-type") || "";
   const isMultipart = ct.includes("multipart/form-data");
 
@@ -47,7 +48,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     for (const [k, v] of inForm.entries()) outForm.append(k, v as any);
     init = { method, headers: out, body: outForm, redirect: "manual" };
   } else {
-    init = { method, headers: out, body: (method -in @("GET","HEAD")) ? $null : request.body, redirect: "manual" };
+    init = { method, headers: out, body: (method -in @("GET","HEAD")) ? undefined : request.body, redirect: "manual" };
   }
 
   const resp = await fetch(upstreamUrl, init);
