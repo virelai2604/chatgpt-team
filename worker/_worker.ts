@@ -1,70 +1,92 @@
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
+const modelsCache = new Set();
+let modelSyncFailed = false;
+let modelsReady = false;
 
-    // ✅ WebSocket Handler - BIFL Safe
-    if (url.pathname.startsWith("/v1/realtime")) {
-      const upgradeHeader = request.headers.get("Upgrade");
-      console.log("[WS] Incoming request for /v1/realtime");
-      console.log("[WS] Upgrade header: " + upgradeHeader);
+async function syncModelList(apiKey) {
+  console.log("🔄 syncModelList called");
+  try {
+    const res = await fetch("https://api.openai.com/v1/models", {
+      headers: { Authorization: `Bearer ${apiKey}` }
+    });
+    console.log("✅ OpenAI responded");
 
-      if (upgradeHeader !== "websocket") {
-        return new Response("Expected WebSocket", { status: 426 });
-      }
+    const text = await res.text();
+    console.log("🔍 Response text:", text.slice(0, 200));
 
-      try {
-        const pair = new WebSocketPair();
-        const client = pair[0]; const server = pair[1];
+    const json = JSON.parse(text);
+    if (Array.isArray(json.data)) {
+      json.data.forEach((m) => modelsCache.add(m.id));
+      modelsReady = true;
+      console.log(`✅ Synced ${modelsCache.size} models`);
+    } else {
+      modelSyncFailed = true;
+      console.warn("⚠️ Invalid model list structure");
+    }
+  } catch (err) {
+    modelSyncFailed = true;
+    console.error("❌ syncModelList failed:", err.message);
+  }
+}
 
-        // Accept the WebSocket *before* any async work
-        server.accept();
+function isModelSupported(model) {
+  if (!modelsReady || modelSyncFailed) return true;
+  return modelsCache.has(model);
+}
 
-        server.addEventListener("message", (event) => {
-          console.log("[WS] Message:", event.data);
-          server.send(JSON.stringify({
-            type: "echo",
-            data: event.data
-          }));
-        });
+async function guardedProxy(request, endpoint) {
+  try {
+    const raw = await request.text();
+    const body = JSON.parse(raw);
+    const model = body.model;
 
-        server.addEventListener("close", () => {
-          console.log("[WS] Closed by client");
-        });
-
-        server.addEventListener("error", (err) => {
-          console.error("[WS] Error:", err.message);
-        });
-
-        // ✅ Always return immediately
-        return new Response(null, {
-          status: 101,
-          webSocket: client
-        });
-
-      } catch (err) {
-        return new Response("WS Upgrade failed: " + err.message, { status: 500 });
-      }
+    if (!model || !isModelSupported(model)) {
+      return new Response(JSON.stringify({
+        error: {
+          message: `Model '${model}' not supported.`,
+          type: "model_not_supported",
+          code: 501
+        }
+      }), { status: 501, headers: { "Content-Type": "application/json" } });
     }
 
-    // ✅ Proxy fallback to Pages
-    if (url.pathname.startsWith("/v1/")) {
-      const proxyUrl = "https://chatgpt-team.pages.dev" + url.pathname + url.search;
-      const method = request.method;
+    return fetch(endpoint, {
+      method: "POST",
+      headers: request.headers,
+      body: raw
+    });
 
-      const resp = await fetch(proxyUrl, {
-        method,
+  } catch (err) {
+    return new Response("❌ Internal error: " + err.message, { status: 500 });
+  }
+}
+
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    const pathname = url.pathname;
+
+    if (!modelsReady && !modelSyncFailed) {
+      const key = request.headers.get("Authorization")?.replace("Bearer ", "");
+      if (key) await syncModelList(key);
+    }
+
+    if (pathname === "/v1/completions" || pathname === "/v1/chat/completions") {
+      return guardedProxy(request, "https://api.openai.com" + pathname);
+    }
+
+    if (pathname === "/v1/realtime" && request.headers.get("Upgrade") === "websocket") {
+      return fetch("wss://api.openai.com/v1/realtime", { headers: request.headers });
+    }
+
+    if (pathname.startsWith("/v1/")) {
+      const proxyUrl = "https://chatgpt-team.pages.dev" + pathname + url.search;
+      return fetch(proxyUrl, {
+        method: request.method,
         headers: request.headers,
-        body: method !== "GET" && method !== "HEAD" ? request.body : undefined,
-      });
-
-      return new Response(resp.body, {
-        status: resp.status,
-        headers: resp.headers,
+        body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined
       });
     }
 
     return new Response("Not Found", { status: 404 });
   }
 };
-
-
