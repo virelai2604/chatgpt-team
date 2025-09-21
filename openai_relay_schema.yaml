@@ -1,70 +1,70 @@
 openapi: 3.1.0
 info:
-  title: ChatGPT Team Relay
-  version: 1.4
+  title: OpenAI Relay (Full SDK Surface + Custom)
+  version: 1.0.0
 servers:
-  - url: https://chatgpt-team.pages.dev
+  - url: https://chatgpt-team.pages.dev/v1
 paths:
-  /v1/chat/completions:
-    post: { summary: Legacy Chat Completions (pass-through), operationId: createChatCompletion, requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
-  /v1/responses:
-    post:
-      summary: OpenAI Responses API (recommended; supports background)
-      operationId: createResponse
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, input]
-              properties:
-                model: { type: string }
-                input:
-                  oneOf:
-                    - type: string
-                    - type: array
-                      items: { type: object }
-                background: { type: boolean, description: "Run in background and poll via GET /v1/responses/{id} or resume with stream=true" }
-              additionalProperties: true
-      responses:
-        "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
-  /v1/responses/{id}:
-    get:
-      summary: Get status/result for a background response
-      operationId: getResponse
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { name: stream, in: query, required: false, schema: { type: boolean } }]
-      responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } }, text/event-stream: { schema: { type: string, description: "SSE stream" } } } } }
-  /v1/background:
-    post:
-      summary: Compatibility shim that forwards to /v1/responses with background=true
-      operationId: createBackgroundJob
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, additionalProperties: true }
-      responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
-  /v1/embeddings:
-    post: { summary: Embeddings, operationId: createEmbedding, requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
-  /v1/images/generations:
-    post: { summary: Images, operationId: createImage, requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
-  /v1/audio/speech:
-    post: { summary: Text-to-Speech, operationId: createSpeech, requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: audio bytes } } }
-  /v1/audio/transcriptions:
-    post: { summary: Speech-to-Text (multipart/form-data), operationId: createTranscription, requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
-  /v1/audio/translations:
-    post: { summary: Speech-to-Text translate (multipart/form-data), operationId: createTranslation, requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
-  /v1/files:
-    get: { summary: List files, operationId: listFiles, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
-    post: { summary: Upload file (multipart/form-data), operationId: uploadFile, requestBody: { required: true, content: { multipart/form-data: { schema: { type: object, additionalProperties: true } } } }, responses: { "200": { description: ok, content: { application/json: { schema: { type: object, additionalProperties: true } } } } } }
-  /v1/files/{file_id}:
-    get: { summary: Retrieve file, operationId: retrieveFile, parameters: [{ name: file_id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
-    delete: { summary: Delete file, operationId: deleteFile, parameters: [{ name: file_id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
-  /v1/vector-stores:
-    get: { summary: List vector stores, operationId: listVectorStores, responses: { "200": { description: ok } } }
-    post: { summary: Create vector store, operationId: createVectorStore, requestBody: { required: false }, responses: { "200": { description: ok } } }
-components:
-  securitySchemes:
-    bearerAuth: { type: http, scheme: bearer }
-security: [ { bearerAuth: [] } ]
+  /health:
+    get: { summary: Relay Health, responses: { "200": { description: OK } } }
+  /health-rt:
+    get: { summary: Worker Health, responses: { "200": { description: OK } } }
+  /background:
+    get: { summary: Background Health, responses: { "200": { description: OK } } }
+  /models:
+    get: { summary: List Models, responses: { "200": { description: OK } } }
+  /completions:
+    post: { summary: Legacy Completions, responses: { "200": { description: OK } } }
+  /chat/completions:
+    post: { summary: Create Chat Completion, responses: { "200": { description: OK } } }
+  /responses:
+    post: { summary: Create Response, responses: { "200": { description: OK } } }
+  /embeddings:
+    post: { summary: Create Embedding, responses: { "200": { description: OK } } }
+  /files:
+    get: { summary: List Files, responses: { "200": { description: OK } } }
+    post: { summary: Upload File, responses: { "200": { description: OK } } }
+  /files/{file_id}:
+    get: { summary: Retrieve File, responses: { "200": { description: OK } } }
+    delete: { summary: Delete File, responses: { "200": { description: OK } } }
+  /files/{file_id}/content:
+    get: { summary: Download File Content, responses: { "200": { description: OK } } }
+  /fine-tunes:
+    get: { summary: List Fine-Tunes, responses: { "200": { description: OK } } }
+    post: { summary: Create Fine-Tune, responses: { "200": { description: OK } } }
+  /fine-tunes/{fine_tune_id}:
+    get: { summary: Retrieve Fine-Tune, responses: { "200": { description: OK } } }
+  /fine-tunes/{fine_tune_id}/cancel:
+    post: { summary: Cancel Fine-Tune, responses: { "200": { description: OK } } }
+  /assistants:
+    get: { summary: List Assistants, responses: { "200": { description: OK } } }
+    post: { summary: Create Assistant, responses: { "200": { description: OK } } }
+  /assistants/{assistant_id}:
+    get: { summary: Retrieve Assistant, responses: { "200": { description: OK } } }
+    post: { summary: Modify Assistant, responses: { "200": { description: OK } } }
+    delete: { summary: Delete Assistant, responses: { "200": { description: OK } } }
+  /threads:
+    post: { summary: Create Thread, responses: { "200": { description: OK } } }
+  /threads/{thread_id}:
+    get: { summary: Retrieve Thread, responses: { "200": { description: OK } } }
+  /threads/{thread_id}/messages:
+    get: { summary: List Thread Messages, responses: { "200": { description: OK } } }
+    post: { summary: Create Thread Message, responses: { "200": { description: OK } } }
+  /threads/{thread_id}/messages/{message_id}:
+    get: { summary: Retrieve Thread Message, responses: { "200": { description: OK } } }
+  /threads/{thread_id}/runs:
+    post: { summary: Create Run, responses: { "200": { description: OK } } }
+  /threads/{thread_id}/runs/{run_id}:
+    get: { summary: Retrieve Run, responses: { "200": { description: OK } } }
+  /images/generations:
+    post: { summary: Generate Image, responses: { "200": { description: OK } } }
+  /audio/speech:
+    post: { summary: Generate Speech (TTS), responses: { "200": { description: OK } } }
+  /audio/transcriptions:
+    post: { summary: Transcribe Audio, responses: { "200": { description: OK } } }
+  /audio/translations:
+    post: { summary: Translate Audio, responses: { "200": { description: OK } } }
+  /moderations:
+    post: { summary: Moderations (blocked by relay), responses: { "403": { description: Blocked } } }
+  /realtime:
+    get: { summary: Realtime WebSocket, responses: { "101": { description: Switching Protocols } } }
