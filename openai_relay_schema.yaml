@@ -3,12 +3,62 @@ info:
   title: ChatGPT Relay Full Schema
   version: 1.0.0
 servers:
-- url: https://chatgpt-team.pages.dev
+  - url: https://chatgpt-team.pages.dev
+
 paths:
+  /v1/models:
+    get:
+      summary: List available models
+      responses:
+        '200':
+          description: Array of model objects
+
+  /v1/chat/completions:
+    post:
+      summary: Chat Completions (standard OpenAI)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        '200':
+          description: Chat response
+
   /v1/responses:
     post:
-      summary: Responses API – unified chat / assistant interface
-      description: Uses `input` array instead of `messages` (per OpenAI Responses API)
+      summary: Responses API – Chat + Assistant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantRequest'
+      responses:
+        '200':
+          description: Response from assistant/chat
+
+  /v1/audio/transcriptions:
+    post:
+      summary: Audio Transcription
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Transcription result
+
+  /v1/audio/speech:
+    post:
+      summary: Convert text to speech (TTS)
       requestBody:
         required: true
         content:
@@ -19,36 +69,120 @@ paths:
                 model:
                   type: string
                 input:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      role:
-                        type: string
-                        enum: [user, assistant, system, developer]
-                      content:
-                        type: string
+                  type: string
               required:
                 - model
                 - input
       responses:
         '200':
-          description: Valid Responses API outcome
+          description: Audio stream
 
-  /v1/models:
-    get:
-      summary: List available models
+  /v1/images/generations:
+    post:
+      summary: Generate image from prompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+                n:
+                  type: integer
+                size:
+                  type: string
+              required:
+                - prompt
       responses:
         '200':
-          description: Array of model objects    /v1/vector_stores/{vector_store_id}/search:
+          description: Image data returned
+
+  /v1/files:
+    post:
+      summary: Upload a file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                purpose:
+                  type: string
+              required:
+                - file
+                - purpose
+      responses:
+        '200':
+          description: File uploaded
+    get:
+      summary: List files
+      responses:
+        '200':
+          description: File list
+
+  /v1/files/{file_id}:
+    get:
+      summary: Retrieve file metadata
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: File info
+
+  /v1/files/{file_id}/content:
+    get:
+      summary: Retrieve file content
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: File stream
+
+  /v1/assistants:
+    post:
+      summary: Create an assistant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantRequest'
+      responses:
+        '200':
+          description: Assistant created
+
+  /v1/threads:
+    post:
+      summary: Create a thread
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantRequest'
+      responses:
+        '200':
+          description: Thread created
+
+  /v1/vector_stores/{vector_store_id}/search:
     post:
       summary: Search vector store
       parameters:
-      - name: vector_store_id
-        in: path
-        required: true
-        schema:
-          type: string
+        - name: vector_store_id
+          in: path
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -62,6 +196,8 @@ paths:
                   type: object
                 max_num_results:
                   type: integer
+              required:
+                - query
       responses:
         '200':
           description: Vector search results
@@ -69,15 +205,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VectorSearchResult'
+
   /v1/vector_stores/{vector_store_id}/files:
     post:
       summary: Attach file to vector store
       parameters:
-      - name: vector_store_id
-        in: path
-        required: true
-        schema:
-          type: string
+        - name: vector_store_id
+          in: path
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -89,6 +226,8 @@ paths:
                   type: string
                 attributes:
                   type: object
+              required:
+                - file_id
       responses:
         '200':
           description: File attached
@@ -96,101 +235,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VectorStoreFileAttachment'
+
     get:
       summary: List files in vector store
       parameters:
-      - name: vector_store_id
-        in: path
-        required: true
-        schema:
-          type: string
+        - name: vector_store_id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '200':
-          description: List of files in vector store
+          description: List of files
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/VectorStoreFileList'
-  /v1/assistants:
-    post:
-      summary: Create an assistant
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ChatCompletionRequest'
-      responses:
-        '200':
-          description: Assistant created
-          content:
-            application/json:
-              schema:
-                type: object
-  /v1/threads:
-    post:
-      summary: Create a thread
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ChatCompletionRequest'
-      responses:
-        '200':
-          description: Thread created
-          content:
-            application/json:
-              schema:
-                type: object
-  /v1/files:upload:
-    post:
-      summary: Upload file
-      requestBody:
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-                purpose:
-                  type: string
-              required:
-              - file
-              - purpose
-      responses:
-        '200':
-          description: Upload successful
-          content:
-            application/json:
-              schema:
-                type: object
-  /v1/files:
-    post:
-      summary: Upload a file
-      requestBody:
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-                purpose:
-                  type: string
-              required:
-              - file
-              - purpose
-      responses:
-        '200':
-          description: File uploaded
-          content:
-            application/json:
-              schema:
-                type: object
+
 components:
   schemas:
+    ChatCompletionRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+            required:
+              - role
+              - content
+      required:
+        - model
+        - messages
+
+    AssistantRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        input:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+            required:
+              - role
+              - content
+      required:
+        - model
+        - input
+
     VectorSearchResult:
       type: object
       properties:
@@ -224,6 +329,7 @@ components:
           type: boolean
         next_page:
           type: string
+
     VectorStoreFileAttachment:
       type: object
       properties:
@@ -233,6 +339,7 @@ components:
           type: string
         attributes:
           type: object
+
     VectorStoreFileList:
       type: object
       properties:
@@ -249,29 +356,9 @@ components:
                 type: string
               attributes:
                 type: object
-    ChatCompletionRequest:
-      type: object
-      properties:
-        model:
-          type: string
-        messages:
-          type: array
-          items:
-            type: object
-            properties:
-              role:
-                type: string
-              content:
-                type: string
-            required:
-            - role
-            - content
-      required:
-      - model
-      - messages
+
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
       in: header
       name: Authorization
-

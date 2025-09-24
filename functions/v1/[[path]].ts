@@ -21,7 +21,7 @@ export default {
     const url = new URL(request.url);
     const pathname = url.pathname;
 
-    // 🔁 Direct route handlers
+    // ➤ Directly routed known endpoints
     if (pathname.startsWith("/v1/files")) {
       return await files.httpRequestWithRetry(request);
     }
@@ -38,27 +38,28 @@ export default {
       return await chatCompletions.httpRequestWithRetry(request);
     }
     if (pathname === "/v1/responses") {
-      // 🔧 ADD: responses endpoint routing (per YAML spec)
-      return await chatCompletions.httpRequestWithRetry(request);
+      return await chatCompletions.httpRequestWithRetry(request); // shared logic
     }
     if (pathname.startsWith("/v1/assistants")) {
       return await assistants.httpRequestWithRetry(request);
     }
     if (pathname.startsWith("/v1/threads")) {
-      if (pathname.includes("/runs")) return await runs.httpRequestWithRetry(request);
+      if (pathname.includes("/runs")) {
+        return await runs.httpRequestWithRetry(request);
+      }
       return await threads.httpRequestWithRetry(request);
     }
     if (pathname.startsWith("/v1/vector_stores")) {
-      if (pathname.match(/^\/v1\/vector_stores\/[^/]+\/search$/)) {
+      if (/^\/v1\/vector_stores\/[^/]+\/search$/.test(pathname)) {
         return await vectorStoresSearch.httpRequestWithRetry(request);
       }
-      if (pathname.match(/^\/v1\/vector_stores\/[^/]+\/files$/)) {
+      if (/^\/v1\/vector_stores\/[^/]+\/files$/.test(pathname)) {
         return await vectorStoresFiles.httpRequestWithRetry(request);
       }
       return await vectorStores.httpRequestWithRetry(request);
     }
 
-    // 🔒 Block moderations
+    // ➤ Explicit block for moderation
     if (pathname.startsWith("/v1/moderations")) {
       return new Response(JSON.stringify({ error: "moderation blocked" }), {
         status: 403,
@@ -66,24 +67,25 @@ export default {
       });
     }
 
-    // 🔁 Default passthrough to OpenAI upstream
+    // ➤ Default passthrough
     const upstream = "https://api.openai.com" + pathname + url.search;
-    const headers = new Headers(request.headers);
     const relayHeaders = new Headers();
-
-    for (const [k, v] of headers.entries()) {
+    for (const [k, v] of request.headers.entries()) {
       if (k.toLowerCase() !== "content-length") {
-        relayHeaders.set(k, v);
+        relayHeaders.append(k, v);
       }
     }
 
-    const init: RequestInit = {
+    const upstreamInit: RequestInit = {
       method: request.method,
       headers: relayHeaders,
-      body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+      body:
+        request.method !== "GET" && request.method !== "HEAD"
+          ? request.body
+          : undefined,
     };
 
-    const resp = await httpRequestWithRetry(upstream, init);
+    const resp = await httpRequestWithRetry(upstream, upstreamInit);
     return new Response(resp.body, {
       status: resp.status,
       headers: resp.headers,

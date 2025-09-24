@@ -1,5 +1,5 @@
 import type { PagesFunction } from "../[[path]]";
-import { httpRequestWithRetry } from "../../../lib/httpClient";
+import { httpRequestWithRetry } from "../../lib/httpClient";
 
 export const onRequest: PagesFunction = async ({ request }) => {
   if (request.method !== "POST") {
