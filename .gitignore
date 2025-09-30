@@ -17,3 +17,4 @@ test*.http
 test*.md
 .vscode/
 .idea/
+tools/.out/
