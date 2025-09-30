@@ -2,5 +2,6 @@ name = "chatgpt-team"
 compatibility_date = "2025-09-30"
 
 [build]
-upload_format = "modules"
-pages_build_output_dir = "functions"
+command = ""
+cwd = "."
+watch_dir = "functions"
