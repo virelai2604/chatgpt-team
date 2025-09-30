@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/@openapitools/openapi-generator-cli/config.schema.json",
+  "spaces": 2,
+  "generator-cli": {
+    "version": "7.14.0",
+    "generators": {
+      "sdk-typescript": {
+        "generatorName": "typescript-node",
+        "inputSpec": "openai_relay_schema.yaml",
+        "output": "tools/sdk-typescript",
+        "additionalProperties": {
+          "supportsES6": true,
+          "modelPropertyNaming": "original"
+        }
+      }
+    }
+  }
+}

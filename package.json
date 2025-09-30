@@ -1,9 +1,14 @@
 {
   "type": "module",
   "devDependencies": {
+    "@types/node": "^24.5.2",
+    "dotenv": "^17.2.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2",
     "wrangler": "^4.37.1"
   },
   "dependencies": {
+    "axios": "^1.12.2",
     "ws": "^8.18.3"
   }
 }

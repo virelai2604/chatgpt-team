@@ -1,0 +1,17 @@
+### 🧪 Upload a file via relay using multipart/form-data
+# Must set Authorization manually or via environment injection in REST Client extension
+
+POST https://chatgpt-team.pages.dev/v1/files
+Authorization: Bearer {{OPENAI_API_KEY}}
+Content-Type: multipart/form-data; boundary=----OpenAIRelay
+
+------OpenAIRelay
+Content-Disposition: form-data; name="purpose"
+
+assistants
+------OpenAIRelay
+Content-Disposition: form-data; name="file"; filename="logo.jpg"
+Content-Type: image/jpeg
+
+< ./tools/logo.jpg
+------OpenAIRelay--

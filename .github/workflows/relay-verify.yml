@@ -1,0 +1,31 @@
+name: 🔁 Verify OpenAI Relay
+
+on:
+  push:
+    paths:
+      - "functions/v1/**/*.ts"
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      BASEUR: https://chatgpt-team.pages.dev/v1
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Check status
+        run: |
+          $res = Invoke-RestMethod "$env:BASEUR/health" -TimeoutSec 10
+          if (-not $res.ok) { throw "❌ Fail: /health not ok" }
+          Write-Host "✅ /health = ok"
+
+      - name: Confirm models
+        run: |
+          $headers = @{ Authorization = "Bearer $env:OPENAI_API_KEY" }
+          $m = Invoke-RestMethod "$env:BASEUR/models" -Headers $headers -TimeoutSec 10
+          if ($m.data.Count -lt 1) { throw "❌ No models returned" }
+          Write-Host "✅ /models = $($m.data.Count)"

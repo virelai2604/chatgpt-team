@@ -1,100 +1,118 @@
 openapi: 3.1.0
 info:
   title: ChatGPT Relay Full Schema (SDK-aligned)
-  version: 1.0.0
+  version: 2.0.0
 servers:
   - url: https://chatgpt-team.pages.dev
 
 paths:
   /v1/models:
-    get: { summary: List available models, responses: { '200': { description: Array of model objects } } }
-
-  /v1/completions:
-    post: { summary: Legacy text completions, responses: { '200': { description: Legacy completion } } }
-
-  /v1/edits:
-    post: { summary: Edit stored prompt or text, responses: { '200': { description: Edit result } } }
+    get:
+      summary: List available models
+      responses:
+        '200':
+          description: Array of model objects
 
   /v1/chat/completions:
-    post: { summary: Chat Completion (ChatML), responses: { '200': { description: Chat output } } }
+    post:
+      summary: Modern Chat Completion with tool calling
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        '200':
+          description: Chat result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
 
   /v1/responses:
-    post: { summary: Unified assistant/chat endpoint, responses: { '200': { description: SSE or JSON reply } } }
-
-  /v1/fine_tuning/jobs:
-    get: { summary: List fine-tune jobs, responses: { '200': { description: All jobs } } }
-    post: { summary: Start fine-tune job, responses: { '200': { description: Job created } } }
-
-  /v1/fine_tuning/jobs/{fine_tuning_job_id}:
-    get: { summary: Retrieve job metadata, responses: { '200': { description: Job info } } }
-
-  /v1/fine_tuning/jobs/{fine_tuning_job_id}/events:
-    get: { summary: Read fine-tune events, responses: { '200': { description: Events } } }
-
-  /v1/files:
-    get: { summary: List files, responses: { '200': { description: All files } } }
-    post: { summary: Upload file, responses: { '200': { description: File created } } }
-
-  /v1/files/{file_id}:
-    get: { summary: Fetch file info, responses: { '200': { description: Metadata } } }
-
-  /v1/files/{file_id}/content:
-    get: { summary: Download file, responses: { '200': { description: File stream } } }
-
-  /v1/images/generations:
-    post: { summary: Generate image from prompt, responses: { '200': { description: b64 image(s) or URLs } } }
-
-  /v1/images/variations:
-    post: { summary: Generate image variations, responses: { '200': { description: b64 image(s) or URLs } } }
-
-  /v1/images/edits:
-    post: { summary: Edit image via mask, responses: { '200': { description: b64 image(s) or URLs } } }
-
-  /v1/audio/transcriptions:
-    post: { summary: Transcribe speech file, responses: { '200': { description: Transcript } } }
-
-  /v1/audio/translations:
-    post: { summary: Translate speech to English, responses: { '200': { description: Translation } } }
-
-  /v1/audio/speech:
-    post: { summary: TTS - Generate speech from text, responses: { '200': { description: Audio stream or file } } }
+    post:
+      summary: Streamable response via SSE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantRequest'
+      responses:
+        '200':
+          description: SSE or final chat result
 
   /v1/assistants:
-    post: { summary: Create a new assistant }
+    post:
+      summary: Create assistant
+      responses:
+        '200':
+          description: Assistant object
 
   /v1/assistants/{assistant_id}:
-    get: { summary: Get assistant information }
+    get:
+      summary: Fetch assistant details
+      parameters:
+        - name: assistant_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Assistant info
 
   /v1/threads:
-    post: { summary: Start new thread, responses: { '200': { description: Created thread } } }
-
-  /v1/threads/{thread_id}:
-    get: { summary: Get thread state }
+    post:
+      summary: Start thread
+      responses:
+        '200':
+          description: Thread created
 
   /v1/threads/{thread_id}/messages:
-    post: { summary: Submit message to thread }
+    post:
+      summary: Add user message to thread
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Message added
 
   /v1/threads/{thread_id}/runs:
-    post: { summary: Launch a run via tool/assistant }
-
-  /v1/threads/{thread_id}/runs/{run_id}:
-    get: { summary: Check run status }
+    post:
+      summary: Start a tool-calling run
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Run started
 
   /v1/threads/{thread_id}/runs/{run_id}/steps:
-    get: { summary: Fetch run steps }
-
-  /v1/vector_stores:
-    post: { summary: Create vector store }
-
-  /v1/vector_stores/{vector_store_id}:
-    get: { summary: Get metadata }
-
-  /v1/vector_stores/{vector_store_id}/files:
-    get: { summary: List files in store }
-    post: { summary: Associate file to vector store }
-
-  /v1/vector_stores/{vector_store_id}/search:
-    post: { summary: Perform vector similarity search }
+    get:
+      summary: Fetch execution steps
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Steps array
 
 components:
   securitySchemes:
@@ -102,3 +120,115 @@ components:
       type: apiKey
       in: header
       name: Authorization
+
+  schemas:
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          type: string
+        tool_calls:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolCall"
+
+    ToolCall:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique ID
+        type:
+          type: string
+          enum: [function]
+        function:
+          $ref: '#/components/schemas/FunctionCall'
+
+    FunctionCall:
+      type: object
+      required: [name, arguments]
+      properties:
+        name:
+          type: string
+        arguments:
+          type: string
+
+    ToolDefinition:
+      type: object
+      required: [type, function]
+      properties:
+        type:
+          type: string
+          enum: [function]
+        function:
+          type: object
+          required: [name, parameters]
+          properties:
+            name:
+              type: string
+            parameters:
+              type: object
+              additionalProperties: true
+
+    ChatCompletionRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolDefinition'
+        tool_choice:
+          oneOf:
+            - type: string
+              enum: [none, auto]
+            - type: object
+              properties:
+                type:
+                  type: string
+                function:
+                  $ref: "#/components/schemas/FunctionCall"
+      required: [model, messages]
+      additionalProperties: true
+
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+        created:
+          type: integer
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              message:
+                $ref: "#/components/schemas/ChatMessage"
+              finish_reason:
+                type: string
+
+    AssistantRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        input:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+      required: [model, input]
+      additionalProperties: true

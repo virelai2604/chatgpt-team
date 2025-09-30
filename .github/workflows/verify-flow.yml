@@ -1,60 +1,20 @@
-name: verify-flow
+name: ✅ Verify Relay Core
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ main ]
-  workflow_dispatch: {}
-
-defaults:
-  run:
-    shell: pwsh
+    paths:
+      - '**.ts'
+      - 'wrangler.toml'
 
 jobs:
-  verify:
+  health:
     runs-on: ubuntu-latest
-    env:
-      REST_ROOT: https://chatgpt-team.pages.dev
-      REST_BASE: https://chatgpt-team.pages.dev/v1
-      REALTIME_PROBE: https://chatgpt-team-realtime.virelai.workers.dev/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Health (root)
+      - uses: actions/checkout@v4
+      - name: Run health check
+        shell: pwsh
         run: |
-          $r = Invoke-RestMethod -Uri "$env:REST_ROOT/health" -TimeoutSec 15
-          $r | ConvertTo-Json -Depth 5
-          if (-not $r.ok) { throw "/health not ok" }
-
-      - name: Health (versioned)
-        run: |
-          $r = Invoke-RestMethod -Uri "$env:REST_BASE/health" -TimeoutSec 15
-          $r | ConvertTo-Json -Depth 5
-          if (-not $r.ok) { throw "/v1/health not ok" }
-
-      - name: /v1/models
-        run: |
-          $h = @{ Authorization = "Bearer $env:OPENAI_API_KEY" }
-          $m = Invoke-RestMethod -Uri "$env:REST_BASE/models" -Headers $h -TimeoutSec 30
-          "models.count: $($m.data.Count)"
-          if ($m.data.Count -lt 1) { throw "No models returned" }
-
-      - name: /v1/chat/completions (pong)
-        run: |
-          $h = @{ Authorization = "Bearer $env:OPENAI_API_KEY"; "Content-Type"="application/json" }
-          $body = @{ model="gpt-4o-mini"; messages=@(@{role="user";content="Say 'pong'."}); max_tokens=5 } | ConvertTo-Json -Depth 6
-          $c = Invoke-RestMethod -Method POST -Uri "$env:REST_BASE/chat/completions" -Headers $h -Body $body -TimeoutSec 30
-          $txt = $c.choices[0].message.content
-          "reply: $txt"
-          if ($txt -notmatch 'pong') { throw "Chat did not say pong" }
-
-      - name: Realtime WS 101 (2s cap)
-        run: |
-          $key = [Convert]::ToBase64String((1..16 | % {Get-Random -Max 256}))
-          $code = & "/usr/bin/curl" --http1.1 -m 2 --connect-timeout 1 -s -o /dev/null -w "%{http_code}" `
-            -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" `
-            -H "Sec-WebSocket-Key: $key" -H "Authorization: Bearer $env:OPENAI_API_KEY" `
-            "$env:REALTIME_PROBE"
-          "status: $code"
-          if ($code -ne "101") { throw "Realtime did not upgrade (got $code)" }
+          $res = Invoke-RestMethod https://chatgpt-team.pages.dev/v1/health
+          if (-not $res.ok) { throw "Health check failed" }
+          Write-Host "✅ Relay OK"

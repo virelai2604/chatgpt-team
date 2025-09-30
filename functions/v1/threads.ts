@@ -1,38 +1,46 @@
-import { httpRequestWithRetry } from "../../lib/httpClient";
+export async function onRequestPost(context) {
+  const { request, env } = context;
+  const url = new URL(request.url);
+  const methodOverride = request.headers.get("x-method-override")?.toUpperCase();
+  const finalMethod = methodOverride || "POST";
 
-export const onRequestPost: PagesFunction = async ({ request }) => {
-  const body = await request.json();
-  const isStreaming = body?.stream === true;
-  const upstream = "https://api.openai.com/v1/threads";
+  let bodyJson;
+  try { bodyJson = await request.json(); } catch {}
 
-  const headers = {
-    Authorization: request.headers.get("Authorization") || "",
-    "Content-Type": "application/json",
-  };
-
+  const isStreaming = bodyJson?.stream === true;
   if (isStreaming) {
-    const response = await fetch(upstream, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
+    const res = await fetch("https://api.openai.com" + url.pathname + url.search, {
+      method: finalMethod,
+      headers: {
+        "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+        "OpenAI-Organization": env.OPENAI_ORG_ID,
+        "OpenAI-Beta": env.OPENAI_BETA,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(bodyJson)
     });
-
-    return new Response(response.body, {
-      status: response.status,
+    return new Response(res.body, {
+      status: res.status,
       headers: {
         "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-      },
+        "Connection": "keep-alive"
+      }
     });
   }
 
-  const response = await httpRequestWithRetry(upstream, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
+  const res2 = await fetch("https://api.openai.com" + url.pathname + url.search, {
+    method: finalMethod,
+    headers: {
+      "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+      "OpenAI-Organization": env.OPENAI_ORG_ID,
+      "OpenAI-Beta": env.OPENAI_BETA,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(bodyJson)
   });
 
-  const json = await response.json();
-  return new Response(JSON.stringify(json), { status: response.status });
-};
+  return new Response(await res2.text(), {
+    status: res2.status,
+    headers: { "Content-Type": "application/json" }
+  });
+}

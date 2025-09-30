@@ -1,52 +1,98 @@
-import { fetchWithRetry } from "../../lib/httpClient";
-import { buildOpenAIHeaders } from "../../lib/filesHelper";
-
-export const onRequest: PagesFunction = async (context) => {
-  const { request } = context;
-  const url = new URL(request.url);
-  const method = request.method.toUpperCase();
-  const pathname = url.pathname;
-
-  if (method === "POST" && pathname === "/v1/chat/completions") {
-    const contentType = request.headers.get("Content-Type") || "";
-    if (!contentType.includes("application/json")) {
-      return new Response("Invalid Content-Type, expecting application/json", { status: 400 });
-    }
-    const bodyJson = await request.json();
-    const { model, messages, stream } = bodyJson;
-
-    const headers = buildOpenAIHeaders(request);
-    headers.set("Content-Type", "application/json");
-
-    const openaiRequest = {
-      model,
-      messages,
-      stream: stream === true
-    };
-
-    const openaiResponse = await fetchWithRetry("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: headers,
-      body: JSON.stringify(openaiRequest)
+export async function onRequestPost(context) {
+  const { request, env } = context;
+  const methodOverride = request.headers.get("x-method-override")?.toUpperCase();
+  const finalMethod = methodOverride || "POST";
+  const url = new URL(request.url);
+  const target = "https://api.openai.com" + url.pathname + url.search;
+  let bodyJson;
+  if (["POST", "DELETE", "PATCH", "PUT"].includes(finalMethod)) {
+    try {
+      bodyJson = await request.json();
+  const isStreaming = bodyJson?.stream === true;
+  if (isStreaming) {
+    const res = await fetch(target, {
+      method: finalMethod,
+      headers,
+      body: JSON.stringify(bodyJson),
     });
-
-    if (stream === true) {
-      const responseStream = openaiResponse.body;
-      if (!responseStream) {
-        return new Response("No response body for streaming", { status: 502 });
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
       }
-      return new Response(responseStream, {
-        status: openaiResponse.status,
-        headers: openaiResponse.headers
-      });
-    } else {
-      const text = await openaiResponse.text();
-      return new Response(text, {
-        status: openaiResponse.status,
-        headers: openaiResponse.headers
-      });
-    }
+    });
   }
+  );
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
+      }
+    });
+  }
+  );
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
+      }
+    });
+  }
+    } catch {}
+    if (methodOverride === "GET" && bodyJson) {
+      for (const [key, value] of Object.entries(bodyJson)) {
+        url.searchParams.append(key, value?.toString?.() ?? "");
+  );
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
+      }
+    });
+  }
+      }
+    }
+  }
+  );
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
+      }
+    });
+  }
+      });
+    }
+  const headers = {
+    "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+    "OpenAI-Organization": env.OPENAI_ORG_ID,
+    "OpenAI-Beta": env.OPENAI_BETA,
+    "Content-Type": "application/json"
+  };
+  const res = await fetch(target, {
+    method: finalMethod,
+    headers,
+    body: ["POST", "PUT", "PATCH", "DELETE"].includes(finalMethod) ? JSON.stringify(bodyJson) : undefined
+  });
+  );
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
+      }
+    });
+  }
+    });
+  }
+  return new Response(await res.text(), {
+    status: res.status,
+    headers: { "Content-Type": "application/json" }
+  });
+}
 
-  return new Response("Not Found", { status: 404 });
-};

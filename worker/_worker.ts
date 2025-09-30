@@ -15,6 +15,7 @@ export default {
       return new Response(null, { status: 101, webSocket: client });
     }
 
+    // Fallback proxy to Pages root domain
     const upstreamUrl = "https://chatgpt-team.pages.dev" + url.pathname + url.search;
     return fetch(upstreamUrl, {
       method: request.method,
@@ -24,13 +25,12 @@ export default {
   }
 };
 
-async function handleUpstreamRelay(request, url, server) {
+async function handleUpstreamRelay(request: Request, url: URL, server: WebSocket) {
   const upstreamResp = await fetch("https://api.openai.com/v1/realtime" + url.search, {
     method: "GET",
     headers: {
       "Authorization": request.headers.get("Authorization") ?? "",
-      "OpenAI-Org": request.headers.get("OpenAI-Org") ?? "",
-      "OpenAI-Project": request.headers.get("OpenAI-Project") ?? "",
+      "OpenAI-Organization": request.headers.get("OpenAI-Org") ?? "",
       "OpenAI-Beta": request.headers.get("OpenAI-Beta") ?? "realtime=v1",
       "Connection": "Upgrade",
       "Upgrade": "websocket",

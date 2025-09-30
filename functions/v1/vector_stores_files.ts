@@ -1,50 +1,98 @@
-export const config = {
-  runtime: 'edge',
-};
-
-export default {
-  async httpRequestWithRetry(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    const method = request.method;
-    const pathname = url.pathname;
-
-    const vsFilesMatch = pathname.match(/^\/v1\/vector_stores\/([^\/]+)\/files$/);
-    if ((method === 'POST' || method === 'GET') && vsFilesMatch) {
-      const vs_id = vsFilesMatch[1];
-
-      if (method === 'POST') {
-        // Attach file by ID to vector store
-        const body = await request.json();
-        const resp = await httpRequestWithRetry(`https://api.openai.com/v1/vector_stores/${vs_id}/files`, {
-          method: 'POST',
-          headers: {
-            Authorization: request.headers.get('Authorization') || '',
-            'OpenAI-Org': request.headers.get('OpenAI-Org') || '',
-            'OpenAI-Project': request.headers.get('OpenAI-Project') || '',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body)
-        });
-        const json = await resp.json();
-        return new Response(JSON.stringify(json), { status: resp.status });
+export async function onRequestPost(context) {
+  const { request, env } = context;
+  const methodOverride = request.headers.get("x-method-override")?.toUpperCase();
+  const finalMethod = methodOverride || "POST";
+  const url = new URL(request.url);
+  const target = "https://api.openai.com" + url.pathname + url.search;
+  let bodyJson;
+  if (["POST", "DELETE", "PATCH", "PUT"].includes(finalMethod)) {
+    try {
+      bodyJson = await request.json();
+  const isStreaming = bodyJson?.stream === true;
+  if (isStreaming) {
+    const res = await fetch(target, {
+      method: finalMethod,
+      headers,
+      body: JSON.stringify(bodyJson),
+    });
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
       }
-
-      if (method === 'GET') {
-        const resp = await httpRequestWithRetry(`https://api.openai.com/v1/vector_stores/${vs_id}/files`, {
-          method: 'GET',
-          headers: {
-            Authorization: request.headers.get('Authorization') || '',
-            'OpenAI-Org': request.headers.get('OpenAI-Org') || '',
-            'OpenAI-Project': request.headers.get('OpenAI-Project') || '',
-          },
-        });
-        const json = await resp.json();
-        return new Response(JSON.stringify(json), { status: resp.status });
+    });
+  }
+  );
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
       }
-    }
-
-    return new Response(JSON.stringify({ error: 'Not found vector_stores files' }), { status: 404 });
-  },
-};
-
+    });
+  }
+  );
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
+      }
+    });
+  }
+    } catch {}
+    if (methodOverride === "GET" && bodyJson) {
+      for (const [key, value] of Object.entries(bodyJson)) {
+        url.searchParams.append(key, value?.toString?.() ?? "");
+  );
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
+      }
+    });
+  }
+      }
+    }
+  }
+  );
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
+      }
+    });
+  }
+      });
+    }
+  const headers = {
+    "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+    "OpenAI-Organization": env.OPENAI_ORG_ID,
+    "OpenAI-Beta": env.OPENAI_BETA,
+    "Content-Type": "application/json"
+  };
+  const res = await fetch(target, {
+    method: finalMethod,
+    headers,
+    body: ["POST", "PUT", "PATCH", "DELETE"].includes(finalMethod) ? JSON.stringify(bodyJson) : undefined
+  });
+  );
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive"
+      }
+    });
+  }
+    });
+  }
+  return new Response(await res.text(), {
+    status: res.status,
+    headers: { "Content-Type": "application/json" }
+  });
+}
 

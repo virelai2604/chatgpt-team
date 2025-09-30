@@ -1,15 +1,18 @@
-name: 🔁 Sync OpenAI Model Cache Daily
+name: 🔁 Sync Live Models & SDK Gen
 
 on:
   schedule:
-    - cron: "17 3 * * *"  # Daily at 03:17 UTC
+    - cron: "0 3 */14 * *"  # ⏳ Every 2 weeks
   workflow_dispatch:
 
 jobs:
-  deploy:
+  sync:
     runs-on: ubuntu-latest
+    env:
+      OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v3
 
       - name: Setup Node.js
@@ -17,12 +20,30 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install Wrangler
-        run: npm install -g wrangler
+      - name: Install CLI tools
+        run: npm install -g @openapitools/openapi-generator-cli
 
-      - name: Publish to Cloudflare Workers
-        run: wrangler deploy --env production
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+      - name: Fetch and pin live models
+        shell: pwsh
+        run: |
+          $headers = @{ Authorization = "Bearer $env:OPENAI_KEY" }
+          $resp = Invoke-RestMethod -Uri https://api.openai.com/v1/models -Headers $headers
+          $resp | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath "models_live.json" -Encoding UTF8
+
+      - name: Generate TypeScript SDK client
+        run: |
+          openapi-generator-cli generate `
+            -i openai_relay_schema.yaml `
+            -g typescript-node `
+            -o tools/sdk-typescript `
+            --additional-properties=supportsES6=true,typescriptThreePlus=true,withSeparateModelsAndApi=true,snapshotVersion=true
+
+      - name: Commit pinned model + SDK (optional)
+        run: |
+          git config user.name "relay-bot"
+          git config user.email "relay@bots.noreply"
+          git add models_live.json
+          git add tools/sdk-typescript --all
+          git commit -m "sync: pinned live models + regen SDK"
+          git push
+        continue-on-error: true
