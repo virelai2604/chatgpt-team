@@ -1,0 +1,2 @@
+functionsWorker-0.4587234074765756.js
+functionsWorker-0.4587234074765756.js.map

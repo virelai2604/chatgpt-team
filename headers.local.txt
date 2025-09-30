@@ -1,0 +1,18 @@
+HTTP/1.1 200 OK
+Transfer-Encoding: chunked
+Date: Sun, 31 Aug 2025 22:01:40 GMT
+Content-Type: application/json
+Access-Control-Allow-Origin: *
+Content-Encoding: br
+Server: cloudflare
+Set-Cookie: __cf_bm=I6jt0VPnCqB.bDKbBLdNUVq1YXJALsh_ovVbw8kBPis-1756677700-1.0.1.1-tQvsFVcgKkpBuFOCgpolROV_gjuPxyVHQfBlb.BUO4TKfed_L03VV03.DXiyuG2YKd7T.YM_BflrnUh4dk4BLu9zLQ4B0dxqGSJkTz99oy8; path=/; expires=Sun, 31-Aug-25 22:31:40 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+CF-Cache-Status: DYNAMIC
+alt-svc: h3=":443"; ma=86400
+CF-RAY: 977fcec6486b893c-SIN
+openai-processing-ms: 343
+openai-version: 2020-10-01
+Set-Cookie: _cfuvid=ktFmfnVl860Ch8vY3xNmClSRNT7f3jvkScnhSpdCFmc-1756677700629-0.0.1.1-604800000; path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+X-Content-Type-Options: nosniff
+x-request-id: 84aa9a8a3d7dd2512173d2a6af3ba3b2
+
