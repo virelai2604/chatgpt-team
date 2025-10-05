@@ -1,17 +1,12 @@
-from fastapi import APIRouter, HTTPException
-from app.client import OpenAIClient
-import os
+from fastapi import APIRouter, Request
+from app.utils.forward import forward_openai
 
 router = APIRouter()
 
-@router.get("/")
-async def list_models():
-    api_key = os.getenv("OPENAI_API_KEY", "sk-...")
-    client = OpenAIClient(api_key)
+@router.api_route("/", methods=["GET"])
+async def list_models(request: Request):
+    return await forward_openai(request, "models")
 
-    try:
-        response = await client.client.get("/models")
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@router.api_route("/{model_id}", methods=["GET", "POST", "PATCH", "DELETE"])
+async def handle_model_by_id(request: Request, model_id: str):
+    return await forward_openai(request, f"models/{model_id}")

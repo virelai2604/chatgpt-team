@@ -3,14 +3,27 @@ import httpx
 
 router = APIRouter()
 
-@router.api_route('/v1/{rest_of_path:path}', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
-async def passthrough_proxy(rest_of_path: str, request: Request):
-    async with httpx.AsyncClient() as client:
-        url = f'https://api.openai.com/v1/{rest_of_path}'
-        resp = await client.request(
-            method=request.method,
-            url=url,
-            headers=dict(request.headers),
-            content=await request.body()
+@router.api_route("/v1/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+async def proxy_openai_v1(request: Request, path: str):
+    # Construct the target OpenAI URL
+    target_url = f"https://api.openai.com/v1/{path}"
+    # Forward all headers except host, content-length, and transfer-encoding
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in ["host", "content-length", "transfer-encoding"]}
+    # Read the request body (works for streaming and file upload too)
+    body = await request.body()
+
+    async with httpx.AsyncClient(timeout=None) as client:
+        response = await client.request(
+            request.method,
+            target_url,
+            headers=headers,
+            content=body,
+            params=dict(request.query_params),
+            follow_redirects=True
         )
-    return Response(resp.content, status_code=resp.status_code, headers=dict(resp.headers))
+        # Return the response as-is for SDK compatibility
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers={k: v for k, v in response.headers.items() if k.lower() not in ["content-encoding", "transfer-encoding", "content-length", "connection"]}
+        )

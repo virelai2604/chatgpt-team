@@ -2,32 +2,38 @@ from fastapi import FastAPI
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 from app.routes import (
-    chat, completions, files, models, openapi, assistants, tools, proxy
+    chat, completions, files, models, openapi, assistants, tools, proxy,
+    audio, images, embeddings, moderations
 )
 
 load_dotenv()
-
 app = FastAPI(title="OpenAI Relay (FastAPI)", version="1.0.0")
 
-# Include API routers
+# Core OpenAI endpoints
 app.include_router(chat.router, prefix="/v1/chat")
-app.include_router(completions.router, prefix="/v1")
-app.include_router(files.router, prefix="/v1/files")
+app.include_router(completions.router, prefix="/v1/completions")
 app.include_router(models.router, prefix="/v1/models")
+app.include_router(files.router, prefix="/v1/files")
 app.include_router(assistants.router, prefix="/v1/assistants")
 app.include_router(tools.router, prefix="/v1/tools")
+app.include_router(audio.router, prefix="/v1/audio")
+app.include_router(images.router, prefix="/v1/images")
+app.include_router(embeddings.router, prefix="/v1/embeddings")
+app.include_router(moderations.router, prefix="/v1/moderations")
 app.include_router(openapi.router)
+
+# Proxy must be LAST for fallback passthrough!
 app.include_router(proxy.router)
 
-# Root health check
-@app.get("/")
-async def root():
-    return {"status": "ok", "detail": "ChatGPT relay is running."}
-
-# /v1/health health check
+# Health checks after all routers
 @app.get("/v1/health")
 async def health():
     return {"status": "ok"}
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "detail": "ChatGPT relay is running."}
+
 # Static files for /.well-known
 app.mount("/.well-known", StaticFiles(directory=".well-known"), name="well-known")
+
