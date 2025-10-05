@@ -42,3 +42,10 @@ pytest_cache/
 *.swp
 .DS_Store
 Thumbs.db
+.env
+*.ps1
+*.pyc
+__pycache__/
+.venv/
+test.wav
+downloaded_test.wav
