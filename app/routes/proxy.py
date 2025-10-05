@@ -7,7 +7,10 @@ router = APIRouter()
 async def proxy_openai_v1(request: Request, path: str):
     target_url = f"https://api.openai.com/v1/{path}"
     headers = {k: v for k, v in request.headers.items() if k.lower() not in ["host", "content-length", "transfer-encoding"]}
-    body = await request.body()
+    if request.method == "GET":
+        body = None
+    else:
+        body = await request.body()
     async with httpx.AsyncClient(timeout=None) as client:
         response = await client.request(
             request.method,
