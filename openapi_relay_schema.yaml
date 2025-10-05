@@ -1,0 +1,114 @@
+openapi: 3.0.0
+info:
+  title: ChatGPT Relay Proxy
+  version: 1.0.0
+  description: >
+    FastAPI-based OpenAI relay. Fully compatible with OpenAI SDK v1, v2,
+    supports streaming, legacy completions, and future model rollovers.
+
+servers:
+  - url: https://chatgpt-team.pages.dev/v1
+
+paths:
+  /chat/completions:
+    post:
+      summary: Create a chat completion (GPT-3.5, GPT-4, GPT-4 Turbo)
+      operationId: chatCompletions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatCompletionRequest"
+      responses:
+        '200':
+          description: Chat completion response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatCompletionResponse"
+
+  /completions:
+    post:
+      summary: Create a legacy text completion (text-davinci-003, etc.)
+      operationId: legacyCompletions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompletionRequest"
+      responses:
+        '200':
+          description: Text completion response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompletionResponse"
+
+components:
+  schemas:
+    ChatCompletionRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [system, user, assistant]
+              content:
+                type: string
+        temperature:
+          type: number
+        stream:
+          type: boolean
+
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              message:
+                type: object
+                properties:
+                  role:
+                    type: string
+                  content:
+                    type: string
+
+    CompletionRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        prompt:
+          type: string
+        max_tokens:
+          type: integer
+        temperature:
+          type: number
+        stream:
+          type: boolean
+
+    CompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string

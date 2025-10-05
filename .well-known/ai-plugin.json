@@ -1,0 +1,18 @@
+{
+  "schema_version": "v1",
+  "name_for_model": "chatgpt_team_proxy",
+  "name_for_human": "ChatGPT Relay",
+  "description_for_model": "Relay all OpenAI v1 requests.",
+  "description_for_human": "Connects to your OpenAI org via relay for chat and completion.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://chatgpt-team.pages.dev/openapi.yaml",
+    "is_user_authenticated": false
+  },
+  "logo_url": "https://chatgpt-team.pages.dev/logo.png",
+  "contact_email": "support@example.com",
+  "legal_info_url": "https://chatgpt-team.pages.dev/legal"
+}
