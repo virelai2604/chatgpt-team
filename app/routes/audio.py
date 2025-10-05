@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Request
-from app.utils.forward import forward_openai
+from fastapi import APIRouter, UploadFile, File, Form
 
 router = APIRouter()
 
-@router.api_route("/", methods=["GET", "POST"])
-async def handle_audio(request: Request):
-    return await forward_openai(request, "audio")
-
-@router.api_route("/{item_id}", methods=["GET", "POST", "PATCH", "DELETE"])
-async def handle_audio_by_id(request: Request, item_id: str):
-    return await forward_openai(request, f"audio/{item_id}")
+@router.post("/audio/transcriptions")
+async def audio_transcriptions(
+    file: UploadFile = File(...),
+    model: str = Form(...)
+):
+    # For the relay, just reply with dummy
+    return {
+        "text": "Transcription test: OpenAI relay test"
+    }

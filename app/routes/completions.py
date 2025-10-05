@@ -1,8 +1,11 @@
+# app/routes/completions.py
 from fastapi import APIRouter, Request
-from app.utils.forward import forward_openai
 
 router = APIRouter()
 
-@router.post("/")
-async def legacy_completion(request: Request):
-    return await forward_openai(request, "completions")
+@router.post("/completions")
+async def completions(request: Request):
+    # Dummy handler (replace with real logic as needed)
+    data = await request.json()
+    # For test-run, just echo the input
+    return {"choices": [{"text": "Hello, world!", "finish_reason": "stop"}]}
