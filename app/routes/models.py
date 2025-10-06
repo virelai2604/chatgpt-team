@@ -7,6 +7,6 @@ router = APIRouter()
 async def list_models(request: Request):
     return await forward_openai(request, "models")
 
-@router.api_route("/{model_id}", methods=["GET", "POST", "PATCH", "DELETE"])
-async def handle_model_by_id(request: Request, model_id: str):
+@router.api_route("/{model_id}", methods=["GET", "DELETE"])
+async def model_by_id(request: Request, model_id: str):
     return await forward_openai(request, f"models/{model_id}")

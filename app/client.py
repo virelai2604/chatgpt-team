@@ -1,36 +1,16 @@
 import httpx
-import os
 import asyncio
 
-class OpenAIClient:
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.org_id = os.getenv("OPENAI_ORG_ID")
-        self.allowed_models = os.getenv("MODEL_ALLOWLIST", "").split(",")
-        self.base_url = "https://api.openai.com/v1"
+class OpenAIRelayClient:
+    def __init__(self, base_url="http://localhost:8000/v1"):
+        self.base_url = base_url
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
-            headers=self._build_headers(),
+            headers={"Content-Type": "application/json"},
             timeout=httpx.Timeout(15.0)
         )
 
-    def _build_headers(self):
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        if self.org_id:
-            headers["OpenAI-Organization"] = self.org_id
-        return headers
-
-    #def _guard_model(self, payload: dict):
-        #model = payload.get("model")
-        #if model and model not in self.allowed_models:
-            #raise ValueError(f"🚫 Model '{model}' not in allowlist.")
-
     async def post(self, path: str, payload: dict, retries: int = 3):
-        self._guard_model(payload)
-
         for attempt in range(1, retries + 1):
             try:
                 response = await self.client.post(path, json=payload)
@@ -42,4 +22,25 @@ class OpenAIClient:
                     print(f"⏳ Retry {attempt}/{retries} in {wait}s...")
                     await asyncio.sleep(wait)
                 else:
-                    raise e
+                    print(f"❌ HTTP Error: {e}")
+                    raise
+
+    async def close(self):
+        await self.client.aclose()
+
+# --- Example test usage ---
+async def main():
+    client = OpenAIRelayClient()  # Defaults to localhost relay
+    # For /v1/chat/completions
+    payload = {
+        "model": "gpt-3.5-turbo",
+        "messages": [{"role": "user", "content": "Hello from test client!"}]
+    }
+    try:
+        result = await client.post("/chat/completions", payload)
+        print(result)
+    finally:
+        await client.close()
+
+if __name__ == "__main__":
+    asyncio.run(main())
