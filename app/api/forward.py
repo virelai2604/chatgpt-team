@@ -1,14 +1,12 @@
 from fastapi import Request
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, JSONResponse
 import httpx
-from app.utils.error_handler import error_response
 
 async def forward_openai(request: Request, endpoint: str):
     body = await request.body()
     headers = {k.decode(): v.decode() for k, v in request.headers.raw if k.decode() != "host"}
     url = f"https://api.openai.com{endpoint}"
 
-    # Detect streaming (SSE or octet-stream)
     wants_stream = (
         "text/event-stream" in headers.get("accept", "")
         or "text/event-stream" in headers.get("content-type", "")
@@ -60,9 +58,7 @@ async def forward_openai(request: Request, endpoint: str):
                     media_type=resp.headers.get("content-type")
                 )
     except Exception as e:
-        return error_response(
-            error_type="proxy_error",
-            message=str(e),
+        return JSONResponse(
             status_code=502,
-            detail={"hint": "Check OpenAI key, org, network, or logs for details"}
+            content={"error": {"type": "proxy_error", "message": str(e)}}
         )

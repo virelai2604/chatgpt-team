@@ -6,10 +6,8 @@ import traceback
 # Load environment variables
 load_dotenv()
 
-# Import custom error handler
 from app.utils.error_handler import error_response
 
-# Import routers
 from app.routes import (
     chat, completions, files, models, openapi, assistants, tools,
     audio, images, embeddings, moderations, threads, vector_stores, batch, relay_status
@@ -32,7 +30,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     print(f"[ERROR] {request.method} {request.url}\n{tb}")
     return error_response("internal_server_error", str(exc), status_code=500)
 
-# Register routers with their prefixes
 app.include_router(chat.router, prefix="/v1/chat")
 app.include_router(completions.router, prefix="/v1/completions")
 app.include_router(models.router, prefix="/v1/models")
@@ -49,8 +46,6 @@ app.include_router(batch.router, prefix="/v1/batch")
 app.include_router(relay_status.router)
 app.include_router(openapi.router)
 
-# CATCH-ALL passthrough should be last!
 app.include_router(passthrough_proxy.router)
 
-# Static files (optional)
 app.mount("/.well-known", StaticFiles(directory=".well-known"), name="well-known")
