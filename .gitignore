@@ -61,3 +61,14 @@ __pycache__/
 .vscode/
 .venv/
 *.log
+.env
+*.env
+*.key
+__pycache__/
+.vscode/
+*.pyc
+*.pyo
+*.log
+*.sqlite3
+/.venv
+*.db
