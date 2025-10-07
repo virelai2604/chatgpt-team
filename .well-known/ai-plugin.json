@@ -1,18 +1,18 @@
 {
   "schema_version": "v1",
-  "name_for_model": "chatgpt_team_proxy",
-  "name_for_human": "ChatGPT Relay",
-  "description_for_model": "Relay all OpenAI v1 requests.",
-  "description_for_human": "Connects to your OpenAI org via relay for chat and completion.",
+  "name_for_human": "ChatGPT Team Relay",
+  "name_for_model": "chatgpt_team_relay",
+  "description_for_human": "A full OpenAI-compatible relay for ChatGPT plugins and SDKs.",
+  "description_for_model": "Relay all OpenAI API requests, v1 and v2, streaming and legacy. Supports GPT-3.5/4, DALL-E, Whisper, Assistants, Tools, Files, and more.",
   "auth": {
     "type": "none"
   },
   "api": {
     "type": "openapi",
-    "url": "https://chatgpt-team.pages.dev/openapi.yaml",
+    "url": "https://chatgpt-team-relay.onrender.com/openapi.yaml",
     "is_user_authenticated": false
   },
-  "logo_url": "https://chatgpt-team.pages.dev/logo.png",
+  "logo_url": "https://chatgpt-team-relay.onrender.com/logo.png",
   "contact_email": "support@example.com",
-  "legal_info_url": "https://chatgpt-team.pages.dev/legal"
+  "legal_info_url": "https://chatgpt-team-relay.onrender.com/legal"
 }

@@ -1,12 +1,8 @@
 from fastapi import APIRouter, Request
-from app.utils.forward import forward_openai
+from app.api.forward import forward_openai
 
 router = APIRouter()
 
-@router.api_route("/", methods=["GET", "POST"])
-async def handle_images(request: Request):
-    return await forward_openai(request, "images")
-
-@router.api_route("/{item_id}", methods=["GET", "POST", "PATCH", "DELETE"])
-async def handle_images_by_id(request: Request, item_id: str):
-    return await forward_openai(request, f"images/{item_id}")
+@router.api_route("/generations", methods=["POST"])
+async def image_generations(request: Request):
+    return await forward_openai(request, "/v1/images/generations")

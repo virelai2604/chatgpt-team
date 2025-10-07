@@ -1,31 +1,23 @@
-from fastapi import FastAPI
-from dotenv import load_dotenv
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from app.routes import (
-    chat, completions, files, models, openapi, assistants, tools, proxy,
-    audio, images, embeddings, moderations
-)
+from dotenv import load_dotenv
+import traceback
 
+# Load environment variables
 load_dotenv()
-app = FastAPI(title="OpenAI Relay (FastAPI)", version="1.0.0")
 
-# Core OpenAI endpoints
-app.include_router(chat.router,        prefix="/v1/chat")
-app.include_router(completions.router, prefix="/v1")
-app.include_router(models.router,      prefix="/v1/models")
-app.include_router(files.router,       prefix="/v1")
-app.include_router(assistants.router,  prefix="/v1")
-app.include_router(tools.router,       prefix="/v1")
-app.include_router(audio.router,       prefix="/v1")
-app.include_router(images.router,      prefix="/v1")
-app.include_router(embeddings.router,  prefix="/v1")
-app.include_router(moderations.router, prefix="/v1")
-app.include_router(openapi.router)
+# Import custom error handler
+from app.utils.error_handler import error_response
 
-# Proxy must be LAST for fallback passthrough!
-app.include_router(proxy.router)
+# Import routers
+from app.routes import (
+    chat, completions, files, models, openapi, assistants, tools,
+    audio, images, embeddings, moderations, threads, vector_stores, batch, relay_status
+)
+from app.api import passthrough_proxy
 
-# Health checks after all routers
+app = FastAPI(title="OpenAI Relay", version="1.0.0")
+
 @app.get("/v1/health")
 async def health():
     return {"status": "ok"}
@@ -34,6 +26,31 @@ async def health():
 async def root():
     return {"status": "ok", "detail": "ChatGPT relay is running."}
 
-# Static files for /.well-known
-app.mount("/.well-known", StaticFiles(directory=".well-known"), name="well-known")
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    print(f"[ERROR] {request.method} {request.url}\n{tb}")
+    return error_response("internal_server_error", str(exc), status_code=500)
 
+# Register routers with their prefixes
+app.include_router(chat.router, prefix="/v1/chat")
+app.include_router(completions.router, prefix="/v1/completions")
+app.include_router(models.router, prefix="/v1/models")
+app.include_router(files.router, prefix="/v1/files")
+app.include_router(assistants.router, prefix="/v1/assistants")
+app.include_router(tools.router, prefix="/v1/tools")
+app.include_router(audio.router, prefix="/v1/audio")
+app.include_router(images.router, prefix="/v1/images")
+app.include_router(embeddings.router, prefix="/v1/embeddings")
+app.include_router(moderations.router, prefix="/v1/moderations")
+app.include_router(threads.router, prefix="/v1/threads")
+app.include_router(vector_stores.router, prefix="/v1/vector_stores")
+app.include_router(batch.router, prefix="/v1/batch")
+app.include_router(relay_status.router)
+app.include_router(openapi.router)
+
+# CATCH-ALL passthrough should be last!
+app.include_router(passthrough_proxy.router)
+
+# Static files (optional)
+app.mount("/.well-known", StaticFiles(directory=".well-known"), name="well-known")
