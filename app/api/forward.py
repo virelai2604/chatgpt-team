@@ -1,12 +1,27 @@
+import os
 from fastapi import Request
 from fastapi.responses import StreamingResponse, Response, JSONResponse
 import httpx
+from dotenv import load_dotenv
+
+# Load .env file from project root
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
 
 async def forward_openai(request: Request, endpoint: str):
+    # Read request body as raw bytes
     body = await request.body()
+
+    # Relay all headers except 'host', override with backend credentials
     headers = {k.decode(): v.decode() for k, v in request.headers.raw if k.decode() != "host"}
+    headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
+    if OPENAI_ORG_ID:
+        headers["OpenAI-Organization"] = OPENAI_ORG_ID
+
     url = f"https://api.openai.com{endpoint}"
 
+    # Detect streaming (SSE or binary chunk)
     wants_stream = (
         "text/event-stream" in headers.get("accept", "")
         or "text/event-stream" in headers.get("content-type", "")
