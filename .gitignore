@@ -52,3 +52,12 @@ downloaded_test.wav
 test-run.ps1
 test_v1_api.py
 test*
+.env
+*.env
+__pycache__/
+*.pyc
+*.pyo
+*.db
+.vscode/
+.venv/
+*.log
