@@ -1,26 +1,38 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
-import os
+import traceback
 
-# Load .env before anything else!
+# Load environment variables
 load_dotenv()
 
+# Import custom error handler (optional)
+from app.utils.error_handler import error_response
+
+# Import routers
 from app.routes import (
-    chat, completions, files, models, openapi, assistants, tools, proxy,
+    chat, completions, files, models, openapi, assistants, tools,
     audio, images, embeddings, moderations, threads, vector_stores, batch
 )
-import httpx
+from app.api import passthrough_proxy
 
-app = FastAPI(title="OpenAI Relay (FastAPI)", version="1.0.0")
+app = FastAPI(title="OpenAI Relay", version="1.0.0")
 
-# (Optional) Debug route for checking API key (remove or comment out in prod)
-# @app.get("/debug/api_key_raw")
-# async def debug_api_key_raw():
-#     key = os.environ.get("OPENAI_API_KEY")
-#     return {"OPENAI_API_KEY": key}
+@app.get("/v1/health")
+async def health():
+    return {"status": "ok"}
 
-# Register all routers with their prefixes
+@app.get("/")
+async def root():
+    return {"status": "ok", "detail": "ChatGPT relay is running."}
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    print(f"[ERROR] {request.method} {request.url}\n{tb}")
+    return error_response("internal_server_error", str(exc), status_code=500)
+
+# Register routers with their prefixes
 app.include_router(chat.router, prefix="/v1/chat")
 app.include_router(completions.router, prefix="/v1/completions")
 app.include_router(models.router, prefix="/v1/models")
@@ -35,14 +47,9 @@ app.include_router(threads.router, prefix="/v1/threads")
 app.include_router(vector_stores.router, prefix="/v1/vector_stores")
 app.include_router(batch.router, prefix="/v1/batch")
 app.include_router(openapi.router)
-app.include_router(proxy.router)  # Proxy must be last!
 
-@app.get("/v1/health")
-async def health():
-    return {"status": "ok"}
+# CATCH-ALL passthrough should be last!
+app.include_router(passthrough_proxy.router)
 
-@app.get("/")
-async def root():
-    return {"status": "ok", "detail": "ChatGPT relay is running."}
-
+# Static files (optional)
 app.mount("/.well-known", StaticFiles(directory=".well-known"), name="well-known")

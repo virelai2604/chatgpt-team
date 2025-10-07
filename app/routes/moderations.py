@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Request
-from app.utils.forward import forward_openai
+from app.api.forward import forward_openai
 
 router = APIRouter()
 
 @router.api_route("/", methods=["POST"])
 async def moderations(request: Request):
-    return await forward_openai(request, "moderations")
+    return await forward_openai(request, "/v1/moderations")

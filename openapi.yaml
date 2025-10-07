@@ -1,0 +1,339 @@
+openapi: 3.0.0
+info:
+  title: ChatGPT Team Relay
+  version: "1.0.0"
+  description: |
+    FastAPI-based relay for OpenAI API v1 & v2 endpoints. Compatible with all OpenAI client SDKs, streaming, plugins, legacy completions, and future model rollovers.
+servers:
+  - url: https://chatgpt-team-relay.onrender.com/v1
+    description: Primary Render deployment
+tags:
+  - name: chat
+  - name: completions
+  - name: models
+  - name: images
+  - name: embeddings
+  - name: audio
+  - name: files
+  - name: tools
+  - name: assistants
+  - name: vector_stores
+  - name: threads
+  - name: batch
+
+paths:
+  /chat/completions:
+    post:
+      tags: [chat]
+      summary: Chat completion (GPT-3.5, GPT-4, GPT-4 Turbo)
+      operationId: createChatCompletion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatCompletionRequest"
+      responses:
+        "200":
+          description: Chat completion response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatCompletionResponse"
+          headers:
+            OpenAI-Model:
+              description: Model used for response
+              schema:
+                type: string
+      x-openai-stream: true  # <--- Streaming supported
+
+  /completions:
+    post:
+      tags: [completions]
+      summary: Legacy text completion (e.g., text-davinci-003)
+      operationId: createLegacyCompletion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompletionRequest"
+      responses:
+        "200":
+          description: Legacy completion response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompletionResponse"
+      x-openai-stream: true
+
+  /models:
+    get:
+      tags: [models]
+      summary: List available models
+      operationId: listModels
+      responses:
+        "200":
+          description: Model list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelList"
+
+  /embeddings:
+    post:
+      tags: [embeddings]
+      summary: Create text embeddings
+      operationId: createEmbeddings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmbeddingRequest"
+      responses:
+        "200":
+          description: Embedding result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmbeddingResponse"
+
+  /images/generations:
+    post:
+      tags: [images]
+      summary: Generate images from text
+      operationId: generateImage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageGenerationRequest"
+      responses:
+        "200":
+          description: Image generation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationResponse"
+
+  /audio/transcriptions:
+    post:
+      tags: [audio]
+      summary: Speech-to-text transcription (whisper-1)
+      operationId: createTranscription
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                model:
+                  type: string
+      responses:
+        "200":
+          description: Transcription result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text:
+                    type: string
+
+  /audio/speech:
+    post:
+      tags: [audio]
+      summary: Text-to-speech (TTS)
+      operationId: createSpeech
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpeechRequest"
+      responses:
+        "200":
+          description: Returns generated audio
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+
+  /files:
+    get:
+      tags: [files]
+      summary: List uploaded files
+      operationId: listFiles
+      responses:
+        "200":
+          description: File list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileList"
+    post:
+      tags: [files]
+      summary: Upload a file
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                purpose:
+                  type: string
+      responses:
+        "200":
+          description: File upload result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileUploadResponse"
+
+  # ...add other endpoints as needed...
+
+components:
+  schemas:
+    ChatCompletionRequest:
+      type: object
+      properties:
+        model: {type: string}
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role: {type: string, enum: [system, user, assistant]}
+              content: {type: string}
+        temperature: {type: number, default: 1}
+        stream: {type: boolean, default: false}
+
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id: {type: string}
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              message:
+                type: object
+                properties:
+                  role: {type: string}
+                  content: {type: string}
+
+    CompletionRequest:
+      type: object
+      properties:
+        model: {type: string}
+        prompt: {type: string}
+        max_tokens: {type: integer}
+        temperature: {type: number, default: 1}
+        stream: {type: boolean, default: false}
+
+    CompletionResponse:
+      type: object
+      properties:
+        id: {type: string}
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              text: {type: string}
+
+    ModelList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              object: {type: string}
+              created: {type: integer}
+              owned_by: {type: string}
+
+    EmbeddingRequest:
+      type: object
+      properties:
+        model: {type: string}
+        input: {type: string}
+
+    EmbeddingResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              embedding: 
+                type: array
+                items: {type: number}
+              index: {type: integer}
+
+    ImageGenerationRequest:
+      type: object
+      properties:
+        model: {type: string}
+        prompt: {type: string}
+        n: {type: integer}
+        size: {type: string}
+
+    ImageGenerationResponse:
+      type: object
+      properties:
+        created: {type: integer}
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              url: {type: string}
+
+    SpeechRequest:
+      type: object
+      properties:
+        model: {type: string}
+        input: {type: string}
+        voice: {type: string}
+
+    FileList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              object: {type: string}
+              bytes: {type: integer}
+              created_at: {type: integer}
+              filename: {type: string}
+              purpose: {type: string}
+
+    FileUploadResponse:
+      type: object
+      properties:
+        id: {type: string}
+        object: {type: string}
+        bytes: {type: integer}
+        created_at: {type: integer}
+        filename: {type: string}
+        purpose: {type: string}

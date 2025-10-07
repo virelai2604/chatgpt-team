@@ -50,3 +50,5 @@ __pycache__/
 test.wav
 downloaded_test.wav
 test-run.ps1
+test_v1_api.py
+test*
