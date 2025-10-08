@@ -14,7 +14,15 @@ from app.routes import (
 )
 from app.api import passthrough_proxy
 
+# === NEW: Import BIFL DB schema initializer ===
+from app.utils.db_logger import init_db
+
 app = FastAPI(title="OpenAI Relay", version="1.0.0")
+
+@app.on_event("startup")
+def startup_event():
+    """Ensure all database tables exist before serving requests (BIFL)."""
+    init_db()
 
 @app.get("/v1/health")
 async def health():
@@ -30,6 +38,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     print(f"[ERROR] {request.method} {request.url}\n{tb}")
     return error_response("internal_server_error", str(exc), status_code=500)
 
+# === Register all routers ===
 app.include_router(chat.router, prefix="/v1/chat")
 app.include_router(completions.router, prefix="/v1/completions")
 app.include_router(models.router, prefix="/v1/models")
@@ -46,7 +55,7 @@ app.include_router(batch.router, prefix="/v1/batch")
 app.include_router(relay_status.router)
 app.include_router(responses.router)
 app.include_router(openapi.router)
-
 app.include_router(passthrough_proxy.router)
 
+# Static files (e.g. for .well-known/ai-plugin.json)
 app.mount("/.well-known", StaticFiles(directory=".well-known"), name="well-known")
