@@ -10,18 +10,25 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
 
 async def forward_openai(request: Request, endpoint: str):
-    # Read request body as raw bytes
     body = await request.body()
 
-    # Relay all headers except 'host', override with backend credentials
-    headers = {k.decode(): v.decode() for k, v in request.headers.raw if k.decode() != "host"}
+    # Relay all headers except 'host', 'authorization', 'openai-organization' (case-insensitive)
+    headers = {
+        k.decode(): v.decode()
+        for k, v in request.headers.raw
+        if k.decode().lower() not in ["host", "authorization", "openai-organization"]
+    }
     headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
 
     url = f"https://api.openai.com{endpoint}"
 
-    # Detect streaming (SSE or binary chunk)
+    # Debug log for troubleshooting
+    print(f"Forwarding {request.method} {url}")
+    print("Proxy headers:", headers)
+    print("Body length:", len(body))
+
     wants_stream = (
         "text/event-stream" in headers.get("accept", "")
         or "text/event-stream" in headers.get("content-type", "")
@@ -39,6 +46,7 @@ async def forward_openai(request: Request, endpoint: str):
                 ) as resp:
                     if resp.status_code >= 400 and not resp.headers.get("content-type", "").startswith("text/event-stream"):
                         content = await resp.aread()
+                        print("Upstream error, status:", resp.status_code)
                         return Response(
                             content=content,
                             status_code=resp.status_code,
@@ -50,8 +58,10 @@ async def forward_openai(request: Request, endpoint: str):
                             async for chunk in resp.aiter_bytes():
                                 yield chunk
                         except httpx.StreamClosed:
+                            print("Stream closed early")
                             return
-                        except Exception:
+                        except Exception as ex:
+                            print("Error streaming:", ex)
                             return
                     return StreamingResponse(
                         streamer(),
@@ -66,6 +76,7 @@ async def forward_openai(request: Request, endpoint: str):
                     headers=headers,
                     content=body
                 )
+                print("Upstream status:", resp.status_code)
                 return Response(
                     content=resp.content,
                     status_code=resp.status_code,
@@ -73,6 +84,7 @@ async def forward_openai(request: Request, endpoint: str):
                     media_type=resp.headers.get("content-type")
                 )
     except Exception as e:
+        print("Proxy error:", str(e))
         return JSONResponse(
             status_code=502,
             content={"error": {"type": "proxy_error", "message": str(e)}}
