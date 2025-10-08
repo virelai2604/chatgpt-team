@@ -3,7 +3,7 @@ info:
   title: ChatGPT Relay Actions
   version: "1.0.0"
   description: >
-    Minimal, BIFL-grade OpenAPI schema for key ChatGPT relay endpoints.
+    Full BIFL-grade OpenAPI schema for all ChatGPT relay endpoints.
 servers:
   - url: https://chatgpt-team-relay.onrender.com/v1
 
@@ -19,8 +19,19 @@ paths:
             schema:
               type: object
               properties:
-                model: { type: string, description: "The model name (e.g., gpt-4o)" }
-                messages: { type: array, items: { type: object }, description: "Conversation history" }
+                model:
+                  type: string
+                  description: "The model name (e.g., gpt-4o)"
+                messages:
+                  type: array
+                  description: "Conversation history"
+                  items:
+                    type: object
+                    properties:
+                      role: { type: string }
+                      content: { type: string }
+                    required: [role, content]
+              required: [model, messages]
       responses:
         '200':
           description: Chat completion response
@@ -32,6 +43,36 @@ paths:
                   id: { type: string }
                   object: { type: string }
                   created: { type: integer }
+                  choices:
+                    type: array
+                    items:
+                      type: object
+                  usage: { type: object }
+
+  /completions:
+    post:
+      operationId: createCompletion
+      summary: Text completion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model: { type: string }
+                prompt: { type: string }
+              required: [model, prompt]
+      responses:
+        '200':
+          description: Completion response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  object: { type: string }
                   choices: { type: array, items: { type: object } }
                   usage: { type: object }
 
@@ -54,6 +95,19 @@ paths:
                       type: object
 
   /files:
+    get:
+      operationId: listFiles
+      summary: List files
+      responses:
+        '200':
+          description: List of files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object: { type: string }
+                  data: { type: array, items: { type: object } }
     post:
       operationId: uploadFile
       summary: Upload a file
@@ -64,8 +118,9 @@ paths:
             schema:
               type: object
               properties:
-                file: { type: string, format: binary, description: "File to upload" }
-                purpose: { type: string, description: "Purpose (e.g. fine-tune)" }
+                file: { type: string, format: binary }
+                purpose: { type: string }
+              required: [file, purpose]
       responses:
         '200':
           description: File upload response
@@ -81,6 +136,63 @@ paths:
                   filename: { type: string }
                   purpose: { type: string }
 
+  /assistants:
+    get:
+      operationId: listAssistants
+      summary: List assistants
+      responses:
+        '200':
+          description: List of assistants
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { type: object } }
+    post:
+      operationId: createAssistant
+      summary: Create assistant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: "Name of the assistant"
+                instructions:
+                  type: string
+                  description: "Instructions for the assistant"
+              required: [name, instructions]
+      responses:
+        '200':
+          description: Assistant response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  object: { type: string }
+                  name: { type: string }
+                  instructions: { type: string }
+
+  /tools:
+    get:
+      operationId: listTools
+      summary: List tools
+      responses:
+        '200':
+          description: List of tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { type: object } }
+
   /audio/transcriptions:
     post:
       operationId: createTranscription
@@ -94,6 +206,7 @@ paths:
               properties:
                 file: { type: string, format: binary }
                 model: { type: string }
+              required: [file, model]
       responses:
         '200':
           description: Transcription response
@@ -116,6 +229,7 @@ paths:
               type: object
               properties:
                 prompt: { type: string }
+              required: [prompt]
       responses:
         '200':
           description: Generated image
@@ -125,10 +239,38 @@ paths:
                 type: object
                 properties:
                   created: { type: integer }
-                  data:
-                    type: array
-                    items:
-                      type: object
+                  data: { type: array, items: { type: object } }
+
+  /embeddings:
+    post:
+      operationId: createEmbedding
+      summary: Create embeddings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model: { type: string }
+                input:
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items: { type: string }
+              required: [model, input]
+      responses:
+        '200':
+          description: Embedding response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object: { type: string }
+                  data: { type: array, items: { type: object } }
+                  model: { type: string }
+                  usage: { type: object }
 
   /moderations:
     post:
@@ -142,6 +284,7 @@ paths:
               type: object
               properties:
                 input: { type: string }
+              required: [input]
       responses:
         '200':
           description: Moderation result
@@ -152,7 +295,125 @@ paths:
                 properties:
                   id: { type: string }
                   model: { type: string }
-                  results:
-                    type: array
-                    items:
-                      type: object
+                  results: { type: array, items: { type: object } }
+
+  /threads:
+    get:
+      operationId: listThreads
+      summary: List threads
+      responses:
+        '200':
+          description: List of threads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { type: object } }
+    post:
+      operationId: createThread
+      summary: Create thread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: "Title of the thread"
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role: { type: string }
+                      content: { type: string }
+                    required: [role, content]
+                  description: "Initial thread messages"
+              required: [title, messages]
+      responses:
+        '200':
+          description: Thread response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  object: { type: string }
+                  title: { type: string }
+
+  /vector_stores:
+    get:
+      operationId: listVectorStores
+      summary: List vector stores
+      responses:
+        '200':
+          description: List of vector stores
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { type: object } }
+
+  /batch:
+    post:
+      operationId: createBatch
+      summary: Create batch job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                requests:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      endpoint: { type: string }
+                      payload: { type: object }
+                  description: "Batch of requests to process"
+              required: [requests]
+      responses:
+        '200':
+          description: Batch response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { type: string }
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+
+  /responses:
+    get:
+      operationId: listResponses
+      summary: List responses (custom endpoint)
+      responses:
+        '200':
+          description: List of responses
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { type: object } }
