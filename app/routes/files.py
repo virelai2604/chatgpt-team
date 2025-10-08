@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, UploadFile, File
 from app.api.forward import forward_openai
+import os
 
 router = APIRouter()
 
 @router.api_route("/", methods=["GET", "POST"])
-async def files_collection(request: Request):
+async def files_collection(request: Request, file: UploadFile = File(None)):
     return await forward_openai(request, "/v1/files")
 
 @router.api_route("/{file_id}", methods=["GET", "DELETE"])

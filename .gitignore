@@ -72,3 +72,15 @@ __pycache__/
 *.sqlite3
 /.venv
 *.db
+# Ignore venv and Python cache
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+*.sqlite
+*.db
+
+# Ignore OS and editor junk
+.vscode/
+.idea/
+*.log

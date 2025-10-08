@@ -4,6 +4,9 @@ from fastapi.responses import StreamingResponse, Response, JSONResponse
 import httpx
 from dotenv import load_dotenv
 
+# BIFL logging import
+from app.utils.db_logger import save_raw_request
+
 # Load .env file from project root
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -11,6 +14,10 @@ OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
 
 async def forward_openai(request: Request, endpoint: str):
     body = await request.body()
+
+    # ---- BIFL-LOG: Save every proxied request (no matter the endpoint!) ----
+    headers_json = str(dict(request.headers))
+    save_raw_request(endpoint=endpoint, raw_body=body, headers_json=headers_json)
 
     # Relay all headers except 'host', 'authorization', 'openai-organization' (case-insensitive)
     headers = {
