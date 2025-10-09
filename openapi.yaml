@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
-  title: OpenAI Relay API (BIFL Grade, Client-Usable Endpoints)
-  version: "1.0.1"
+  title: OpenAI Relay API (BIFL Grade, Remote + Local Fallback)
+  version: "1.0.4"
 
 servers:
   - url: https://chatgpt-team-relay.onrender.com/v1
@@ -14,16 +14,16 @@ tags:
   - name: Audio
   - name: Assistants
   - name: Threads
-  - name: VectorStores
-  - name: Tools
 
 paths:
   /chat/completions:
     post:
       operationId: createChatCompletion
-      summary: Chat completions (GPT-3.5, GPT-4, GPT-4o, GPT-5)
+      summary: Chat completions (GPT-4, GPT-4o, GPT-3.5, GPT-5)
       tags: [Chat]
-      description: Create chat completion (supports streaming).
+      description: |
+        Create chat completion (supports streaming).
+        This endpoint is routed to the remote OpenAI relay.
       requestBody:
         required: true
         content:
@@ -43,6 +43,8 @@ paths:
       operationId: createCompletion
       summary: Text completions (legacy/instruct)
       tags: [Completions]
+      description: |
+        Legacy and instruct text completions, routed to the OpenAI relay.
       requestBody:
         required: true
         content:
@@ -62,6 +64,9 @@ paths:
       operationId: createEmbedding
       summary: Create embeddings
       tags: [Embeddings]
+      description: |
+        Creates vector embeddings using the OpenAI relay.  
+        For semantic search, you will need to store and compare vectors (in memory or with an external vector store, not via this API).
       requestBody:
         required: true
         content:
@@ -81,6 +86,8 @@ paths:
       operationId: createImageGeneration
       summary: Generate image (DALL·E)
       tags: [Images]
+      description: |
+        Generates images using DALL·E or compatible models through the relay.
       requestBody:
         required: true
         content:
@@ -98,8 +105,11 @@ paths:
   /audio/transcriptions:
     post:
       operationId: createAudioTranscription
-      summary: Audio transcription (whisper-1, gpt-4o-transcribe)
+      summary: Audio transcription (Whisper, GPT-4o, local fallback)
       tags: [Audio]
+      description: |
+        Transcribes speech from audio files using relay models (e.g., whisper-1, gpt-4o-transcribe).
+        If relay call fails, local Whisper transcription may be used as fallback.
       requestBody:
         required: true
         content:
@@ -108,7 +118,7 @@ paths:
               $ref: '#/components/schemas/AudioTranscriptionRequest'
       responses:
         '200':
-          description: Audio transcription result
+          description: Transcription result
           content:
             application/json:
               schema:
@@ -117,8 +127,11 @@ paths:
   /audio/speech:
     post:
       operationId: createSpeech
-      summary: Text-to-speech (tts-1, tts-1-hd, gpt-4o)
+      summary: Text-to-speech (tts-1, gpt-4o, local fallback)
       tags: [Audio]
+      description: |
+        Converts text to speech using relay models (e.g., tts-1, gpt-4o-mini-tts).
+        If relay call fails, local TTS (wav/mp3) fallback may be used.
       requestBody:
         required: true
         content:
@@ -139,6 +152,8 @@ paths:
       operationId: listModels
       summary: List available models
       tags: [Chat]
+      description: |
+        Lists all available models from the relay (may include GPT, DALL·E, Whisper, TTS, etc).
       responses:
         '200':
           description: List of models
@@ -242,52 +257,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Thread'
 
-  /vector_stores:
-    post:
-      operationId: createVectorStore
-      summary: Create vector store (Beta)
-      tags: [VectorStores]
-      parameters:
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema:
-            type: string
-            enum: ["assistants=v2"]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VectorStoreCreateRequest'
-      responses:
-        '200':
-          description: Vector store created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VectorStore'
-
-  /tools:
-    get:
-      operationId: listTools
-      summary: List tools (Beta)
-      tags: [Tools]
-      parameters:
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema:
-            type: string
-            enum: ["assistants=v2"]
-      responses:
-        '200':
-          description: List of tools
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ToolList'
-
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -295,7 +264,7 @@ components:
       scheme: bearer
 
   schemas:
-    # Minimal schemas (just a few for demonstration - you should expand as needed)
+    # (copy schemas as in earlier YAMLs; unchanged)
     ChatCompletionRequest:
       type: object
       required: [model, messages]
@@ -409,21 +378,35 @@ components:
         file:
           type: string
           format: binary
+          description: The audio file to transcribe
         model:
           type: string
+          description: Model name (e.g. whisper-1)
     AudioTranscriptionResponse:
       type: object
       properties:
         text:
           type: string
+          description: The transcript result
+        usage:
+          type: object
+          properties:
+            type:
+              type: string
+              example: duration
+            seconds:
+              type: number
+              example: 3
 
     TTSRequest:
       type: object
-      required: [model, input]
+      required: [model, input, voice]
       properties:
         model:
           type: string
         input:
+          type: string
+        voice:
           type: string
 
     ModelList:
@@ -479,29 +462,6 @@ components:
           type: string
         object:
           type: string
-
-    VectorStoreCreateRequest:
-      type: object
-      properties:
-        name:
-          type: string
-
-    VectorStore:
-      type: object
-      properties:
-        id:
-          type: string
-
-    ToolList:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
 
 security:
   - ApiKeyAuth: []
