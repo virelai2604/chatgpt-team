@@ -4,5 +4,6 @@ httpx==0.28.1
 pydantic==2.11.10
 python-dotenv==1.0.1
 python-multipart
+pip install --upgrade pip
 
 
