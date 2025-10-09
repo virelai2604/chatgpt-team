@@ -1,10 +1,7 @@
 openapi: 3.1.1
 info:
-  title: OpenAI Relay API – Must-Have Endpoints/Models
-  version: "2025.10.08"
-  description: |
-    Strict OpenAPI 3.1.1 for OpenAI relay: GPT-4o, GPT-4.1, GPT-5, DALL-E 3, Whisper, TTS, embeddings, Sora.
-    Includes only must-have endpoints and models. All assistants endpoints require beta header.
+  title: OpenAI Relay API (BIFL Grade, Client-Usable Endpoints)
+  version: "1.0.1"
 
 servers:
   - url: https://chatgpt-team-relay.onrender.com/v1
@@ -18,14 +15,15 @@ tags:
   - name: Assistants
   - name: Threads
   - name: VectorStores
-  - name: Sora
+  - name: Tools
 
 paths:
   /chat/completions:
     post:
       operationId: createChatCompletion
-      summary: Chat completion (GPT-4o, GPT-4.1, GPT-5, GPT-3.5-turbo)
+      summary: Chat completions (GPT-3.5, GPT-4, GPT-4o, GPT-5)
       tags: [Chat]
+      description: Create chat completion (supports streaming).
       requestBody:
         required: true
         content:
@@ -43,7 +41,7 @@ paths:
   /completions:
     post:
       operationId: createCompletion
-      summary: Text completion (legacy, GPT-3.5-turbo-instruct, GPT-4o, GPT-4.1, GPT-5)
+      summary: Text completions (legacy/instruct)
       tags: [Completions]
       requestBody:
         required: true
@@ -62,7 +60,7 @@ paths:
   /embeddings:
     post:
       operationId: createEmbedding
-      summary: Embedding vectors (ada-002, embedding-3, etc)
+      summary: Create embeddings
       tags: [Embeddings]
       requestBody:
         required: true
@@ -80,8 +78,8 @@ paths:
 
   /images/generations:
     post:
-      operationId: createImage
-      summary: Generate image (DALL·E-3, Vision)
+      operationId: createImageGeneration
+      summary: Generate image (DALL·E)
       tags: [Images]
       requestBody:
         required: true
@@ -118,7 +116,7 @@ paths:
 
   /audio/speech:
     post:
-      operationId: createTTS
+      operationId: createSpeech
       summary: Text-to-speech (tts-1, tts-1-hd, gpt-4o)
       tags: [Audio]
       requestBody:
@@ -139,7 +137,7 @@ paths:
   /models:
     get:
       operationId: listModels
-      summary: List all available models (must-have/future-proof)
+      summary: List available models
       tags: [Chat]
       responses:
         '200':
@@ -152,7 +150,7 @@ paths:
   /assistants:
     get:
       operationId: listAssistants
-      summary: List all Assistants (Beta v2)
+      summary: List all assistants (Beta v2)
       tags: [Assistants]
       parameters:
         - name: OpenAI-Beta
@@ -161,7 +159,6 @@ paths:
           schema:
             type: string
             enum: ["assistants=v2"]
-          description: Required for all assistants v2 beta endpoints. Must be "assistants=v2".
       responses:
         '200':
           description: List of assistants
@@ -171,7 +168,7 @@ paths:
                 $ref: '#/components/schemas/AssistantList'
     post:
       operationId: createAssistant
-      summary: Create an assistant (beta)
+      summary: Create assistant (Beta v2)
       tags: [Assistants]
       parameters:
         - name: OpenAI-Beta
@@ -180,7 +177,6 @@ paths:
           schema:
             type: string
             enum: ["assistants=v2"]
-          description: Required for all assistants v2 beta endpoints. Must be "assistants=v2".
       requestBody:
         required: true
         content:
@@ -198,7 +194,7 @@ paths:
   /threads:
     post:
       operationId: createThread
-      summary: Create a new thread (conversation context)
+      summary: Create thread
       tags: [Threads]
       parameters:
         - name: OpenAI-Beta
@@ -207,18 +203,12 @@ paths:
           schema:
             type: string
             enum: ["assistants=v2"]
-          description: Required for all assistants v2 beta endpoints. Must be "assistants=v2".
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                metadata:
-                  type: object
-                  description: Optional metadata to store with the thread.
-              additionalProperties: false
+              $ref: '#/components/schemas/ThreadCreateRequest'
       responses:
         '200':
           description: Thread created
@@ -230,7 +220,7 @@ paths:
   /threads/{thread_id}:
     get:
       operationId: getThread
-      summary: Get a thread by ID
+      summary: Retrieve thread
       tags: [Threads]
       parameters:
         - name: OpenAI-Beta
@@ -239,7 +229,6 @@ paths:
           schema:
             type: string
             enum: ["assistants=v2"]
-          description: Required for all assistants v2 beta endpoints. Must be "assistants=v2".
         - name: thread_id
           in: path
           required: true
@@ -253,24 +242,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/Thread'
 
-  /sora-2/invoke-test:
+  /vector_stores:
     post:
-      operationId: invokeSoraTest
-      summary: Invoke Sora-2 video generation test
-      tags: [Sora]
+      operationId: createVectorStore
+      summary: Create vector store (Beta)
+      tags: [VectorStores]
+      parameters:
+        - name: OpenAI-Beta
+          in: header
+          required: true
+          schema:
+            type: string
+            enum: ["assistants=v2"]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SoraRequest'
+              $ref: '#/components/schemas/VectorStoreCreateRequest'
       responses:
         '200':
-          description: Sora video result
+          description: Vector store created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SoraResponse'
+                $ref: '#/components/schemas/VectorStore'
+
+  /tools:
+    get:
+      operationId: listTools
+      summary: List tools (Beta)
+      tags: [Tools]
+      parameters:
+        - name: OpenAI-Beta
+          in: header
+          required: true
+          schema:
+            type: string
+            enum: ["assistants=v2"]
+      responses:
+        '200':
+          description: List of tools
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolList'
 
 components:
   securitySchemes:
@@ -279,64 +295,7 @@ components:
       scheme: bearer
 
   schemas:
-    ModelList:
-      type: object
-      properties:
-        object:
-          type: string
-          example: list
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/Model'
-    Model:
-      type: object
-      properties:
-        id:
-          type: string
-          enum:
-            - gpt-4o
-            - gpt-4o-turbo
-            - gpt-4-turbo
-            - gpt-4-turbo-preview
-            - gpt-4o-realtime-preview
-            - gpt-4.1
-            - gpt-4.1-mini
-            - gpt-4.1-nano
-            - gpt-5
-            - gpt-5-pro
-            - gpt-5-mini
-            - gpt-5-nano
-            - gpt-5-chat-latest
-            - gpt-3.5-turbo
-            - gpt-3.5-turbo-16k
-            - gpt-3.5-turbo-instruct
-            - dall-e-3
-            - whisper-1
-            - tts-1
-            - tts-1-hd
-            - text-embedding-3-small
-            - text-embedding-3-large
-            - text-embedding-ada-002
-            - sora-2
-            - sora-2-pro
-            - gpt-image-1
-            - gpt-image-1-mini
-            - gpt-4o-search-preview
-            - gpt-4o-mini-search-preview
-            - gpt-4o-transcribe
-            - gpt-4o-mini-transcribe
-        object:
-          type: string
-        created:
-          type: integer
-        owned_by:
-          type: string
-        permission:
-          type: array
-          items:
-            type: object
-
+    # Minimal schemas (just a few for demonstration - you should expand as needed)
     ChatCompletionRequest:
       type: object
       required: [model, messages]
@@ -345,10 +304,8 @@ components:
           type: string
         messages:
           type: array
-          minItems: 1
           items:
             type: object
-            required: [role, content]
             properties:
               role:
                 type: string
@@ -360,10 +317,6 @@ components:
         id:
           type: string
         object:
-          type: string
-        created:
-          type: integer
-        model:
           type: string
         choices:
           type: array
@@ -394,10 +347,6 @@ components:
         id:
           type: string
         object:
-          type: string
-        created:
-          type: integer
-        model:
           type: string
         choices:
           type: array
@@ -431,8 +380,6 @@ components:
                 type: array
                 items:
                   type: number
-              index:
-                type: integer
 
     ImageGenerationRequest:
       type: object
@@ -478,10 +425,8 @@ components:
           type: string
         input:
           type: string
-        voice:
-          type: string
 
-    AssistantList:
+    ModelList:
       type: object
       properties:
         object:
@@ -489,7 +434,30 @@ components:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/Assistant'
+            type: object
+            properties:
+              id:
+                type: string
+
+    AssistantList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+
+    AssistantCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        model:
+          type: string
+
     Assistant:
       type: object
       properties:
@@ -497,32 +465,12 @@ components:
           type: string
         object:
           type: string
-        created:
-          type: integer
-        name:
-          type: string
-        instructions:
-          type: string
-        tools:
-          type: array
-          items:
-            type: object
-        model:
-          type: string
-    AssistantCreateRequest:
+
+    ThreadCreateRequest:
       type: object
-      required: [name, instructions, model]
       properties:
-        name:
-          type: string
-        instructions:
-          type: string
-        model:
-          type: string
-        tools:
-          type: array
-          items:
-            type: object
+        metadata:
+          type: object
 
     Thread:
       type: object
@@ -531,38 +479,29 @@ components:
           type: string
         object:
           type: string
-        created:
-          type: integer
-        metadata:
-          type: object
 
-    VectorStoreList:
+    VectorStoreCreateRequest:
       type: object
       properties:
-        object:
+        name:
           type: string
-        data:
-          type: array
-          items:
-            type: object
 
-    SoraRequest:
-      type: object
-      required: [prompt, model]
-      properties:
-        prompt:
-          type: string
-        model:
-          type: string
-    SoraResponse:
+    VectorStore:
       type: object
       properties:
         id:
           type: string
-        video_url:
-          type: string
-        status:
-          type: string
+
+    ToolList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
 
 security:
   - ApiKeyAuth: []
