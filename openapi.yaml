@@ -1,467 +1,361 @@
-openapi: 3.1.1
+openapi: 3.1.0
 info:
-  title: OpenAI Relay API (BIFL Grade, Remote + Local Fallback)
-  version: "1.0.4"
-
+  title: OpenAI Relay API
+  version: "1.0.0"
+  description: BIFL-grade relay with essential OpenAI endpoints
 servers:
-  - url: https://chatgpt-team-relay.onrender.com/v1
-
-tags:
-  - name: Chat
-  - name: Completions
-  - name: Embeddings
-  - name: Images
-  - name: Audio
-  - name: Assistants
-  - name: Threads
+  - url: https://chatgpt-team-relay.onrender.com
 
 paths:
-  /chat/completions:
+  /v1/chat/completions:
     post:
-      operationId: createChatCompletion
-      summary: Chat completions (GPT-4, GPT-4o, GPT-3.5, GPT-5)
-      tags: [Chat]
-      description: |
-        Create chat completion (supports streaming).
-        This endpoint is routed to the remote OpenAI relay.
+      operationId: chatCompletions_create
+      summary: Create chat completion
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ChatCompletionRequest'
+              type: object
+              required: [model, messages]
+              properties:
+                model: { type: string }
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    required: [role, content]
+                    properties:
+                      role: { type: string, enum: [user, assistant, system, tool] }
+                      content: { type: string }
+                stream: { type: boolean, default: false }
       responses:
-        '200':
-          description: Chat completion result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ChatCompletionResponse'
+        '200': { description: Chat completion created }
 
-  /completions:
+  /v1/embeddings:
     post:
-      operationId: createCompletion
-      summary: Text completions (legacy/instruct)
-      tags: [Completions]
-      description: |
-        Legacy and instruct text completions, routed to the OpenAI relay.
+      operationId: embeddings_create
+      summary: Create embedding
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CompletionRequest'
+              type: object
+              required: [model, input]
+              properties:
+                model: { type: string }
+                input: { type: string }
       responses:
-        '200':
-          description: Completion result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CompletionResponse'
+        '200': { description: Embedding created }
 
-  /embeddings:
+  /v1/files:
     post:
-      operationId: createEmbedding
-      summary: Create embeddings
-      tags: [Embeddings]
-      description: |
-        Creates vector embeddings using the OpenAI relay.  
-        For semantic search, you will need to store and compare vectors (in memory or with an external vector store, not via this API).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EmbeddingRequest'
-      responses:
-        '200':
-          description: Embedding result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EmbeddingResponse'
-
-  /images/generations:
-    post:
-      operationId: createImageGeneration
-      summary: Generate image (DALL·E)
-      tags: [Images]
-      description: |
-        Generates images using DALL·E or compatible models through the relay.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ImageGenerationRequest'
-      responses:
-        '200':
-          description: Image generation result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ImageGenerationResponse'
-
-  /audio/transcriptions:
-    post:
-      operationId: createAudioTranscription
-      summary: Audio transcription (Whisper, GPT-4o, local fallback)
-      tags: [Audio]
-      description: |
-        Transcribes speech from audio files using relay models (e.g., whisper-1, gpt-4o-transcribe).
-        If relay call fails, local Whisper transcription may be used as fallback.
+      operationId: files_upload
+      summary: Upload file
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/AudioTranscriptionRequest'
+              type: object
+              properties:
+                file: { type: string, format: binary }
       responses:
-        '200':
-          description: Transcription result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AudioTranscriptionResponse'
+        '200': { description: File uploaded }
+    get:
+      operationId: files_list
+      summary: List files
+      responses:
+        '200': { description: File list }
 
-  /audio/speech:
+  /v1/files/{file_id}:
+    get:
+      operationId: files_retrieve
+      summary: Get file
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: File details }
+    delete:
+      operationId: files_delete
+      summary: Delete file
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: File deleted }
+
+  /v1/images/generations:
     post:
-      operationId: createSpeech
-      summary: Text-to-speech (tts-1, gpt-4o, local fallback)
-      tags: [Audio]
-      description: |
-        Converts text to speech using relay models (e.g., tts-1, gpt-4o-mini-tts).
-        If relay call fails, local TTS (wav/mp3) fallback may be used.
+      operationId: images_generate
+      summary: Generate image (DALL·E)
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TTSRequest'
+              type: object
+              required: [model, prompt]
+              properties:
+                model: { type: string }
+                prompt: { type: string }
+                n: { type: integer }
       responses:
-        '200':
-          description: TTS result (audio)
-          content:
-            audio/mpeg:
-              schema:
-                type: string
-                format: binary
+        '200': { description: Image created }
 
-  /models:
+  /v1/audio/speech:
+    post:
+      operationId: audio_tts
+      summary: Text to speech
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, input]
+              properties:
+                model: { type: string }
+                input: { type: string }
+      responses:
+        '200': { description: Audio created }
+
+  /v1/audio/transcriptions:
+    post:
+      operationId: audio_transcribe
+      summary: Audio transcription (Whisper)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                model: { type: string }
+      responses:
+        '200': { description: Transcription created }
+
+  /v1/audio/translation:
+    post:
+      operationId: audio_translate
+      summary: Translate audio to English
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                model: { type: string }
+      responses:
+        '200': { description: Audio translated }
+
+  /v1/models:
     get:
-      operationId: listModels
+      operationId: models_list
       summary: List available models
-      tags: [Chat]
-      description: |
-        Lists all available models from the relay (may include GPT, DALL·E, Whisper, TTS, etc).
       responses:
-        '200':
-          description: List of models
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ModelList'
+        '200': { description: Model list }
 
-  /assistants:
-    get:
-      operationId: listAssistants
-      summary: List all assistants (Beta v2)
-      tags: [Assistants]
-      parameters:
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema:
-            type: string
-            enum: ["assistants=v2"]
-      responses:
-        '200':
-          description: List of assistants
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AssistantList'
+  /v1/assistants:
     post:
-      operationId: createAssistant
-      summary: Create assistant (Beta v2)
-      tags: [Assistants]
-      parameters:
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema:
-            type: string
-            enum: ["assistants=v2"]
+      operationId: assistants_create
+      summary: Create assistant
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AssistantCreateRequest'
+              type: object
+              required: [model, instructions]
+              properties:
+                model: { type: string }
+                instructions: { type: string }
       responses:
-        '200':
-          description: Assistant created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Assistant'
+        '200': { description: Assistant created }
 
-  /threads:
-    post:
-      operationId: createThread
-      summary: Create thread
-      tags: [Threads]
+  /v1/assistants/{assistant_id}/files:
+    get:
+      operationId: assistants_list_files
+      summary: List files for assistant
       parameters:
-        - name: OpenAI-Beta
-          in: header
+        - name: assistant_id
+          in: path
           required: true
-          schema:
-            type: string
-            enum: ["assistants=v2"]
+          schema: { type: string }
+      responses:
+        '200': { description: Files for assistant }
+
+  /v1/threads:
+    post:
+      operationId: threads_create
+      summary: Create a new thread
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ThreadCreateRequest'
+              type: object
+              properties:
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    required: [role, content]
+                    properties:
+                      role:
+                        type: string
+                        enum: [user, assistant]
+                      content:
+                        type: string
       responses:
-        '200':
-          description: Thread created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Thread'
+        '200': { description: Thread created }
 
-  /threads/{thread_id}:
-    get:
-      operationId: getThread
-      summary: Retrieve thread
-      tags: [Threads]
+  /v1/threads/{thread_id}/messages:
+    post:
+      operationId: threads_add_message
+      summary: Add message to thread
       parameters:
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema:
-            type: string
-            enum: ["assistants=v2"]
         - name: thread_id
           in: path
           required: true
-          schema:
-            type: string
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role, content]
+              properties:
+                role:
+                  type: string
+                  enum: [user, assistant]
+                content:
+                  type: string
+      responses:
+        '200': { description: Message added }
+
+  /v1/threads/{thread_id}/runs:
+    post:
+      operationId: threads_create_run
+      summary: Create run for thread
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assistant_id: { type: string }
+      responses:
+        '200': { description: Run created }
+
+  /v1/vector_stores:
+    get:
+      operationId: vectorStores_list
+      summary: List vector stores
+      responses:
+        '200': { description: Vector store list }
+    post:
+      operationId: vectorStores_create
+      summary: Create vector store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+      responses:
+        '200': { description: Vector store created }
+
+  /v1/vector_stores/{vector_store_id}/queries:
+    post:
+      operationId: vectorStores_query
+      summary: Query vector store
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query: { type: string }
+      responses:
+        '200': { description: Vector store queried }
+
+  /v1/videos:
+    post:
+      operationId: videos_create
+      summary: Create a video (Sora)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt: { type: string }
+                model: { type: string }
       responses:
         '200':
-          description: Thread object
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Thread'
+          description: Video job accepted
+
+  /v1/videos/{video_id}:
+    get:
+      operationId: videos_get
+      summary: Get video job status/details
+      parameters:
+        - name: video_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Video status/details
+
+  /v1/videos/{video_id}/remix:
+    post:
+      operationId: videos_remix
+      summary: Remix a video job
+      parameters:
+        - name: video_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt: { type: string }
+      responses:
+        '200':
+          description: Video remix job accepted
 
 components:
-  securitySchemes:
-    ApiKeyAuth:
-      type: http
-      scheme: bearer
-
-  schemas:
-    # (copy schemas as in earlier YAMLs; unchanged)
-    ChatCompletionRequest:
-      type: object
-      required: [model, messages]
-      properties:
-        model:
-          type: string
-        messages:
-          type: array
-          items:
-            type: object
-            properties:
-              role:
-                type: string
-              content:
-                type: string
-    ChatCompletionResponse:
-      type: object
-      properties:
-        id:
-          type: string
-        object:
-          type: string
-        choices:
-          type: array
-          items:
-            type: object
-            properties:
-              message:
-                type: object
-                properties:
-                  role:
-                    type: string
-                  content:
-                    type: string
-              finish_reason:
-                type: string
-
-    CompletionRequest:
-      type: object
-      required: [model, prompt]
-      properties:
-        model:
-          type: string
-        prompt:
-          type: string
-    CompletionResponse:
-      type: object
-      properties:
-        id:
-          type: string
-        object:
-          type: string
-        choices:
-          type: array
-          items:
-            type: object
-            properties:
-              text:
-                type: string
-              finish_reason:
-                type: string
-
-    EmbeddingRequest:
-      type: object
-      required: [model, input]
-      properties:
-        model:
-          type: string
-        input:
-          type: string
-    EmbeddingResponse:
-      type: object
-      properties:
-        object:
-          type: string
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              embedding:
-                type: array
-                items:
-                  type: number
-
-    ImageGenerationRequest:
-      type: object
-      required: [model, prompt]
-      properties:
-        model:
-          type: string
-        prompt:
-          type: string
-    ImageGenerationResponse:
-      type: object
-      properties:
-        created:
-          type: integer
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              url:
-                type: string
-
-    AudioTranscriptionRequest:
-      type: object
-      required: [file, model]
-      properties:
-        file:
-          type: string
-          format: binary
-          description: The audio file to transcribe
-        model:
-          type: string
-          description: Model name (e.g. whisper-1)
-    AudioTranscriptionResponse:
-      type: object
-      properties:
-        text:
-          type: string
-          description: The transcript result
-        usage:
-          type: object
-          properties:
-            type:
-              type: string
-              example: duration
-            seconds:
-              type: number
-              example: 3
-
-    TTSRequest:
-      type: object
-      required: [model, input, voice]
-      properties:
-        model:
-          type: string
-        input:
-          type: string
-        voice:
-          type: string
-
-    ModelList:
-      type: object
-      properties:
-        object:
-          type: string
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-
-    AssistantList:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-
-    AssistantCreateRequest:
-      type: object
-      properties:
-        name:
-          type: string
-        model:
-          type: string
-
-    Assistant:
-      type: object
-      properties:
-        id:
-          type: string
-        object:
-          type: string
-
-    ThreadCreateRequest:
-      type: object
-      properties:
-        metadata:
-          type: object
-
-    Thread:
-      type: object
-      properties:
-        id:
-          type: string
-        object:
-          type: string
-
-security:
-  - ApiKeyAuth: []
+  schemas: {}
