@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: OpenAI Relay API
   version: "1.0.0"
-  description: BIFL-grade relay with essential OpenAI endpoints
+  description: BIFL-grade relay with essential OpenAI endpoints (including newest thread/run/message retrieval endpoints)
 servers:
   - url: https://chatgpt-team-relay.onrender.com
 
@@ -193,7 +193,6 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Files for assistant }
-
     post:
       operationId: assistants_attach_file
       summary: Attach file to assistant
@@ -213,7 +212,6 @@ paths:
                 file_id: { type: string }
       responses:
         '200': { description: File attached }
-
     delete:
       operationId: assistants_remove_file
       summary: Remove file from assistant
@@ -281,6 +279,38 @@ paths:
       responses:
         '200': { description: Message added }
 
+  /v1/threads/{thread_id}/messages/{message_id}:
+    get:
+      operationId: threads_get_message
+      summary: Get a specific message in a thread
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: message_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Message retrieved }
+
+  /v1/threads/{thread_id}/messages/{message_id}/files:
+    get:
+      operationId: threads_list_message_files
+      summary: List files for a message
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: message_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Files for message }
+
   /v1/threads/{thread_id}/runs:
     post:
       operationId: threads_create_run
@@ -301,13 +331,44 @@ paths:
       responses:
         '200': { description: Run created }
 
+  /v1/threads/{thread_id}/runs/{run_id}:
+    get:
+      operationId: threads_get_run
+      summary: Get run status for a thread
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Run retrieved }
+
+  /v1/threads/{thread_id}/runs/{run_id}/steps:
+    get:
+      operationId: threads_list_run_steps
+      summary: List steps for a run
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Run steps listed }
+
   /v1/vector_stores:
     get:
       operationId: vectorStores_list
       summary: List vector stores
       responses:
         '200': { description: Vector stores listed }
-
     post:
       operationId: vectorStores_create
       summary: Create vector store
@@ -341,6 +402,30 @@ paths:
                 query: { type: string }
       responses:
         '200': { description: Vector store queried }
+
+  /v1/vector_stores/{vector_store_id}/files:
+    get:
+      operationId: vectorStores_list_files
+      summary: List files in a vector store
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Vector store files listed }
+
+  /v1/vector_stores/{vector_store_id}/file_batches:
+    get:
+      operationId: vectorStores_list_file_batches
+      summary: List file batches for a vector store
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: File batches listed }
 
   /v1/videos:
     post:
