@@ -17,7 +17,17 @@ from app.api import passthrough_proxy
 # === NEW: Import BIFL DB schema initializer ===
 from app.utils.db_logger import init_db
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="OpenAI Relay", version="1.0.0")
+
+# === CORS Middleware for plugin/frontend/browser use ===
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # For dev, allow all. Restrict in prod!
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 def startup_event():

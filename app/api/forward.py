@@ -3,8 +3,6 @@ from fastapi import Request
 from fastapi.responses import StreamingResponse, Response, JSONResponse
 import httpx
 from dotenv import load_dotenv
-
-# BIFL logging import
 from app.utils.db_logger import save_raw_request
 
 # Load .env file from project root
@@ -14,7 +12,6 @@ OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
 
 async def forward_openai(request: Request, endpoint: str):
     body = await request.body()
-
     # ---- BIFL-LOG: Save every proxied request (no matter the endpoint!) ----
     headers_json = str(dict(request.headers))
     save_raw_request(endpoint=endpoint, raw_body=body, headers_json=headers_json)
@@ -31,7 +28,6 @@ async def forward_openai(request: Request, endpoint: str):
 
     url = f"https://api.openai.com{endpoint}"
 
-    # Debug log for troubleshooting
     print(f"Forwarding {request.method} {url}")
     print("Proxy headers:", headers)
     print("Body length:", len(body))
