@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: OpenAI Relay API
   version: "1.0.0"
-  description: BIFL-compliant, essential endpoints, streaming for chat/image/video, and correct beta header for assistants/tools.
+  description: BIFL-grade OpenAI relay with essential endpoints and multi-format image streaming.
 servers:
   - url: https://chatgpt-team-relay.onrender.com
 
@@ -10,7 +10,7 @@ paths:
   /v1/chat/completions:
     post:
       operationId: chatCompletions_create
-      summary: Create chat completion (supports streaming)
+      summary: Create chat completion
       requestBody:
         required: true
         content:
@@ -30,33 +30,7 @@ paths:
                       content: { type: string }
                 stream: { type: boolean, default: false }
       responses:
-        '200':
-          description: Chat completion created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id: { type: string }
-                  object: { type: string }
-                  created: { type: integer }
-                  model: { type: string }
-                  choices:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        index: { type: integer }
-                        message:
-                          type: object
-                          properties:
-                            role: { type: string }
-                            content: { type: string }
-                        finish_reason: { type: string }
-            text/event-stream:
-              schema:
-                type: string
-                description: Streaming response
+        '200': { description: Chat completion created }
 
   /v1/embeddings:
     post:
@@ -86,7 +60,9 @@ paths:
             schema:
               type: object
               properties:
-                file: { type: string, format: binary }
+                file:
+                  type: string
+                  format: binary
       responses:
         '200': { description: File uploaded }
     get:
@@ -120,7 +96,7 @@ paths:
   /v1/images/generations:
     post:
       operationId: images_generate
-      summary: Generate image (supports relay streaming)
+      summary: Generate image (DALL·E)
       requestBody:
         required: true
         content:
@@ -133,26 +109,7 @@ paths:
                 prompt: { type: string }
                 n: { type: integer }
       responses:
-        '200':
-          description: Image generated
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  created: { type: integer }
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        url: { type: string }
-                        b64_json: { type: string }
-            image/png:
-              schema:
-                type: string
-                format: binary
-                description: Streamed image
+        '200': { description: Image created }
 
   /v1/images/{image_id}/content:
     get:
@@ -162,8 +119,7 @@ paths:
         - name: image_id
           in: path
           required: true
-          schema:
-            type: string
+          schema: { type: string }
       responses:
         '200':
           description: Image file stream
@@ -172,54 +128,59 @@ paths:
               schema:
                 type: string
                 format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
 
-  /v1/videos:
+  /v1/audio/speech:
     post:
-      operationId: videos_create
-      summary: Create video (Sora)
+      operationId: audio_tts
+      summary: Text to speech
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [prompt]
+              required: [model, input]
               properties:
-                prompt: { type: string }
+                model: { type: string }
+                input: { type: string }
+      responses:
+        '200': { description: Audio created }
+
+  /v1/audio/transcriptions:
+    post:
+      operationId: audio_transcribe
+      summary: Audio transcription (Whisper)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
                 model: { type: string }
       responses:
-        '200': { description: Video created }
+        '200': { description: Transcription created }
 
-  /v1/videos/{video_id}:
-    get:
-      operationId: videos_get
-      summary: Get video status
-      parameters:
-        - name: video_id
-          in: path
-          required: true
-          schema: { type: string }
+  /v1/audio/translation:
+    post:
+      operationId: audio_translate
+      summary: Translate audio to English
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                model: { type: string }
       responses:
-        '200': { description: Video status }
-
-  /v1/videos/{video_id}/content:
-    get:
-      operationId: videos_stream_content
-      summary: Stream video file content (relay extension)
-      parameters:
-        - name: video_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Video file stream
-          content:
-            video/mp4:
-              schema:
-                type: string
-                format: binary
+        '200': { description: Audio translated }
 
   /v1/models:
     get:
@@ -232,12 +193,6 @@ paths:
     post:
       operationId: assistants_create
       summary: Create assistant
-      parameters:
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
       requestBody:
         required: true
         content:
@@ -251,76 +206,15 @@ paths:
       responses:
         '200': { description: Assistant created }
 
-  /v1/assistants/{assistant_id}:
-    get:
-      operationId: assistants_retrieve
-      summary: Retrieve assistant details
-      parameters:
-        - name: assistant_id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
-      responses:
-        '200': { description: Assistant details }
-    patch:
-      operationId: assistants_update
-      summary: Update assistant
-      parameters:
-        - name: assistant_id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                model: { type: string }
-                instructions: { type: string }
-      responses:
-        '200': { description: Assistant updated }
-    delete:
-      operationId: assistants_delete
-      summary: Delete assistant
-      parameters:
-        - name: assistant_id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
-      responses:
-        '200': { description: Assistant deleted }
-
   /v1/assistants/{assistant_id}/files:
     get:
       operationId: assistants_list_files
-      summary: List assistant files
+      summary: List files for assistant
       parameters:
         - name: assistant_id
           in: path
           required: true
           schema: { type: string }
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
       responses:
         '200': { description: Files for assistant }
     post:
@@ -331,11 +225,6 @@ paths:
           in: path
           required: true
           schema: { type: string }
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
       requestBody:
         required: true
         content:
@@ -355,11 +244,6 @@ paths:
           in: path
           required: true
           schema: { type: string }
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
       requestBody:
         required: true
         content:
@@ -376,12 +260,6 @@ paths:
     post:
       operationId: threads_create
       summary: Create thread
-      parameters:
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
       requestBody:
         required: true
         content:
@@ -395,44 +273,26 @@ paths:
                     type: object
                     required: [role, content]
                     properties:
-                      role: { type: string, enum: [user, assistant] }
+                      role:
+                        type: string
+                        enum: [user, assistant]
                       content: { type: string }
-                metadata:
-                  type: object
-                  additionalProperties: true
-                  properties: {}
+                      metadata:
+                        type: object
+                        additionalProperties: true
+                        properties: {}
       responses:
         '200': { description: Thread created }
 
   /v1/threads/{thread_id}/messages:
-    get:
-      operationId: threads_list_messages
-      summary: List messages in a thread
-      parameters:
-        - name: thread_id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
-      responses:
-        '200': { description: Messages in thread }
     post:
       operationId: threads_add_message
-      summary: Add message
+      summary: Add message to thread
       parameters:
         - name: thread_id
           in: path
           required: true
           schema: { type: string }
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
       requestBody:
         required: true
         content:
@@ -441,7 +301,9 @@ paths:
               type: object
               required: [role, content]
               properties:
-                role: { type: string, enum: [user, assistant] }
+                role:
+                  type: string
+                  enum: [user, assistant]
                 content: { type: string }
       responses:
         '200': { description: Message added }
@@ -449,7 +311,7 @@ paths:
   /v1/threads/{thread_id}/messages/{message_id}:
     get:
       operationId: threads_get_message
-      summary: Get a specific message in a thread
+      summary: Get message by ID
       parameters:
         - name: thread_id
           in: path
@@ -459,28 +321,34 @@ paths:
           in: path
           required: true
           schema: { type: string }
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
       responses:
         '200': { description: Message retrieved }
 
-  /v1/threads/{thread_id}/runs:
-    post:
-      operationId: threads_create_run
-      summary: Create run
+  /v1/threads/{thread_id}/messages/{message_id}/files:
+    get:
+      operationId: threads_list_message_files
+      summary: List files for message
       parameters:
         - name: thread_id
           in: path
           required: true
           schema: { type: string }
-        - name: OpenAI-Beta
-          in: header
+        - name: message_id
+          in: path
           required: true
           schema: { type: string }
-          example: assistants=v2
+      responses:
+        '200': { description: Files for message }
+
+  /v1/threads/{thread_id}/runs:
+    post:
+      operationId: threads_create_run
+      summary: Create run for thread
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -495,7 +363,7 @@ paths:
   /v1/threads/{thread_id}/runs/{run_id}:
     get:
       operationId: threads_get_run
-      summary: Get run status for a thread
+      summary: Get run by ID
       parameters:
         - name: thread_id
           in: path
@@ -505,35 +373,34 @@ paths:
           in: path
           required: true
           schema: { type: string }
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
       responses:
         '200': { description: Run retrieved }
+
+  /v1/threads/{thread_id}/runs/{run_id}/steps:
+    get:
+      operationId: threads_list_run_steps
+      summary: List steps for run
+      parameters:
+        - name: thread_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Run steps listed }
 
   /v1/vector_stores:
     get:
       operationId: vectorStores_list
       summary: List vector stores
-      parameters:
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
       responses:
-        '200': { description: Vector stores listed }
+        '200': { description: Vector store list }
     post:
       operationId: vectorStores_create
       summary: Create vector store
-      parameters:
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
       requestBody:
         required: true
         content:
@@ -545,27 +412,15 @@ paths:
       responses:
         '200': { description: Vector store created }
 
-  /v1/tools:
-    get:
-      operationId: tools_list
-      summary: List tools (beta)
-      parameters:
-        - name: OpenAI-Beta
-          in: header
-          required: true
-          schema: { type: string }
-          example: assistants=v2
-      responses:
-        '200': { description: Tools listed }
+  /v1/vector_stores/{vector_store_id}/queries:
     post:
-      operationId: tools_create
-      summary: Register new tool (beta)
+      operationId: vectorStores_query
+      summary: Query vector store
       parameters:
-        - name: OpenAI-Beta
-          in: header
+        - name: vector_store_id
+          in: path
           required: true
           schema: { type: string }
-          example: assistants=v2
       requestBody:
         required: true
         content:
@@ -573,10 +428,159 @@ paths:
             schema:
               type: object
               properties:
-                name: { type: string }
-                description: { type: string }
+                query: { type: string }
       responses:
-        '200': { description: Tool registered }
+        '200': { description: Vector store queried }
+
+  /v1/vector_stores/{vector_store_id}/files:
+    get:
+      operationId: vectorStores_list_files
+      summary: List files for vector store
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Vector store files listed }
+
+/v1/videos:
+  post:
+    operationId: videos_create
+    summary: Create video (Sora)
+    description: Start a new video render job from a prompt, with optional reference inputs or a remix ID.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [prompt]
+            properties:
+              prompt:
+                type: string
+                description: The text prompt for video generation.
+              model:
+                type: string
+                description: Model to use (e.g. 'sora-1').
+              reference_images:
+                type: array
+                items: { type: string, format: uri }
+                description: URLs for reference images.
+              reference_video:
+                type: string
+                format: uri
+                description: URL for a reference video.
+              remix_id:
+                type: string
+                description: Existing video ID to remix.
+    responses:
+      '200':
+        description: Video render job started
+
+  get:
+    operationId: videos_list
+    summary: List videos
+    description: Enumerate your videos with pagination for history, dashboards, or housekeeping.
+    parameters:
+      - in: query
+        name: limit
+        schema: { type: integer, default: 20 }
+        description: Number of results to return.
+      - in: query
+        name: after
+        schema: { type: string }
+        description: Cursor for pagination.
+    responses:
+      '200':
+        description: List of videos
+
+/v1/videos/{video_id}:
+  get:
+    operationId: videos_get_status
+    summary: Get video status
+    description: Retrieve the current state of a video render job and monitor its progress.
+    parameters:
+      - name: video_id
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      '200':
+        description: Video status/details
+
+  delete:
+    operationId: videos_delete
+    summary: Delete video
+    description: Remove an individual video ID from OpenAI’s storage.
+    parameters:
+      - name: video_id
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      '204':
+        description: Video deleted
+
+/v1/videos/{video_id}/content:
+  get:
+    operationId: videos_download
+    summary: Download video (MP4, GIF, MOV)
+    description: Fetch the finished MP4, GIF, or MOV video once the job is completed.
+    parameters:
+      - name: video_id
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      '200':
+        description: Video file stream
+        content:
+          video/mp4:
+            schema:
+              type: string
+              format: binary
+          video/quicktime:
+            schema:
+              type: string
+              format: binary
+          image/gif:
+            schema:
+              type: string
+              format: binary
+
+/v1/videos/{video_id}/remix:
+  post:
+    operationId: videos_remix
+    summary: Remix video
+    description: Start a remix job using an existing video ID.
+    parameters:
+      - name: video_id
+        in: path
+        required: true
+        schema: { type: string }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [prompt]
+            properties:
+              prompt:
+                type: string
+                description: Remix prompt.
+              reference_images:
+                type: array
+                items: { type: string, format: uri }
+                description: URLs for reference images.
+              reference_video:
+                type: string
+                format: uri
+                description: Reference video URL.
+    responses:
+      '200':
+        description: Remix job started
 
 components:
   schemas: {}
