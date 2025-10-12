@@ -10,6 +10,15 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
 
+def is_beta_assistants_endpoint(endpoint: str) -> bool:
+    """
+    Returns True if endpoint is one of the OpenAI Assistants beta APIs
+    """
+    return endpoint.startswith("/v1/assistants") or \
+           endpoint.startswith("/v1/threads") or \
+           endpoint.startswith("/v1/vector_stores") or \
+           endpoint.startswith("/v1/tools")
+
 async def forward_openai(request: Request, endpoint: str):
     body = await request.body()
     # ---- BIFL-LOG: Save every proxied request (no matter the endpoint!) ----
@@ -25,6 +34,10 @@ async def forward_openai(request: Request, endpoint: str):
     headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
+
+    # === PATCH: Add Beta header for Assistants/Threads/VectorStores/Tools APIs ===
+    if is_beta_assistants_endpoint(endpoint):
+        headers["OpenAI-Beta"] = "assistants=v2"
 
     url = f"https://api.openai.com{endpoint}"
 
