@@ -6,7 +6,7 @@ info:
     Modern OpenAI-compatible relay API, v2/Assistants/tools-first, 30 operations only.
     /v1/audio/translation removed. "tools" replaces v1 function/retrieval/code_interpreter flows.
 servers:
-  - url: https://your-bifl-relay.example.com
+  - url: https://chatgpt-team-relay.onrender.com
 
 components:
   schemas:
