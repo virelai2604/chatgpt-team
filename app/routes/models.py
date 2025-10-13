@@ -6,7 +6,6 @@ router = APIRouter()
 
 @router.api_route("/", methods=["GET"])
 async def list_models(request: Request):
-    # Optional: semantic logging of model list access
     try:
         save_chat_request(
             role="system",
@@ -20,7 +19,6 @@ async def list_models(request: Request):
 
 @router.api_route("/{model}", methods=["GET"])
 async def retrieve_model(request: Request, model: str):
-    # Optional: semantic logging of model retrieval
     try:
         save_chat_request(
             role="system",

@@ -1,32 +1,31 @@
-from fastapi import APIRouter, Request, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from app.api.forward import forward_openai
-from app.utils.db_logger import save_file_upload
-import os
+from app.utils.db_logger import save_chat_request
 
 router = APIRouter()
 
-@router.api_route("/", methods=["GET", "POST"])
-async def files_collection(request: Request, file: UploadFile = File(None)):
-    # Structured log for file upload
-    if file is not None:
-        try:
-            content = await file.read()
-            save_file_upload(
-                filename=file.filename,
-                filetype=os.path.splitext(file.filename)[-1],
-                mimetype=file.content_type,
-                content=content,
-                extra_json="{}"
-            )
-        except Exception as ex:
-            print("BIFL log error (file upload):", ex)
-    # Universal raw logging handled in forward_openai
+@router.post("/upload")
+async def upload_file(request: Request, file: UploadFile = File(...)):
+    # Structured logging for file upload
+    try:
+        save_chat_request(
+            role="user",
+            content=f"Uploading file: {file.filename}",
+            function_call_json="",
+            metadata_json="{'filename': '%s'}" % file.filename
+        )
+    except Exception as ex:
+        print("BIFL log error (file upload):", ex)
+    return await forward_openai(request, "/v1/files", files={"file": file})
+
+@router.get("/")
+async def list_files(request: Request):
     return await forward_openai(request, "/v1/files")
 
-@router.api_route("/{file_id}", methods=["GET", "DELETE"])
-async def file_resource(request: Request, file_id: str):
+@router.get("/{file_id}")
+async def retrieve_file(request: Request, file_id: str):
     return await forward_openai(request, f"/v1/files/{file_id}")
 
-@router.api_route("/{file_id}/content", methods=["GET"])
-async def file_content(request: Request, file_id: str):
-    return await forward_openai(request, f"/v1/files/{file_id}/content")
+@router.delete("/{file_id}")
+async def delete_file(request: Request, file_id: str):
+    return await forward_openai(request, f"/v1/files/{file_id}")

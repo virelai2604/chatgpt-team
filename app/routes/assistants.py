@@ -1,76 +1,35 @@
 from fastapi import APIRouter, Request
 from app.api.forward import forward_openai
-from app.utils.db_logger import save_chat_request
+from fastapi.responses import JSONResponse
 
-router = APIRouter()
+router = APIRouter(prefix="/assistants")
 
-@router.api_route("/", methods=["GET", "POST"])
-async def assistants(request: Request):
-    # Structured log for assistant creation (POST only)
-    if request.method == "POST":
-        try:
-            body = await request.json()
-            save_chat_request(
-                role="assistant",  # Can use a more descriptive role if desired
-                content=str(body),
-                function_call_json="",
-                metadata_json=str(body)
-            )
-        except Exception as ex:
-            print("BIFL log error (assistants POST):", ex)
-    # Universal raw logging is handled in forward_openai
+# v2 endpoints: CRUD for assistants
+@router.post("")
+async def create_assistant(request: Request):
     return await forward_openai(request, "/v1/assistants")
 
-@router.api_route("/{assistant_id}", methods=["GET", "POST", "DELETE"])
-async def assistant_by_id(request: Request, assistant_id: str):
-    # Structured log for updating or deleting an assistant
-    if request.method in ("POST", "DELETE"):
-        try:
-            body = await request.json() if request.method == "POST" else {}
-            save_chat_request(
-                role="assistant",
-                content=str(body),
-                function_call_json="",
-                metadata_json=str(body)
-            )
-        except Exception as ex:
-            print("BIFL log error (assistants by ID):", ex)
-    return await forward_openai(request, f"/v1/assistants/{assistant_id}")
-from fastapi import APIRouter, Request
-from app.api.forward import forward_openai
-from app.utils.db_logger import save_chat_request
-
-router = APIRouter()
-
-@router.api_route("/", methods=["GET", "POST"])
-async def assistants(request: Request):
-    # Structured log for assistant creation (POST only)
-    if request.method == "POST":
-        try:
-            body = await request.json()
-            save_chat_request(
-                role="assistant",  # Can use a more descriptive role if desired
-                content=str(body),
-                function_call_json="",
-                metadata_json=str(body)
-            )
-        except Exception as ex:
-            print("BIFL log error (assistants POST):", ex)
-    # Universal raw logging is handled in forward_openai
+@router.get("")
+async def list_assistants(request: Request):
     return await forward_openai(request, "/v1/assistants")
 
-@router.api_route("/{assistant_id}", methods=["GET", "POST", "DELETE"])
-async def assistant_by_id(request: Request, assistant_id: str):
-    # Structured log for updating or deleting an assistant
-    if request.method in ("POST", "DELETE"):
-        try:
-            body = await request.json() if request.method == "POST" else {}
-            save_chat_request(
-                role="assistant",
-                content=str(body),
-                function_call_json="",
-                metadata_json=str(body)
-            )
-        except Exception as ex:
-            print("BIFL log error (assistants by ID):", ex)
+@router.get("/{assistant_id}")
+async def get_assistant(request: Request, assistant_id: str):
     return await forward_openai(request, f"/v1/assistants/{assistant_id}")
+
+@router.patch("/{assistant_id}")
+async def update_assistant(request: Request, assistant_id: str):
+    return await forward_openai(request, f"/v1/assistants/{assistant_id}")
+
+# Deprecated v1 endpoints: mark as gone
+@router.post("/attach_file")
+async def deprecated_attach_file(request: Request):
+    return JSONResponse(
+        {"error": "Deprecated in v2. Use thread/message file upload."}, status_code=410
+    )
+
+@router.get("/list_files")
+async def deprecated_list_files(request: Request):
+    return JSONResponse(
+        {"error": "Deprecated in v2. Use thread/message file upload."}, status_code=410
+    )
