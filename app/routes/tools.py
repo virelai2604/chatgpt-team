@@ -5,4 +5,5 @@ router = APIRouter()
 
 @router.api_route("/", methods=["GET"])
 async def tools(request: Request):
+    """Proxy for /v1/tools endpoint."""
     return await forward_openai(request, "/v1/tools")

@@ -6,7 +6,7 @@ router = APIRouter()
 
 @router.api_route("/", methods=["POST"])
 async def batch_create(request: Request):
-    # Structured log for batch creation
+    """Create a new batch job (BIFL v2 style)."""
     try:
         body = await request.json()
         save_chat_request(
@@ -16,10 +16,10 @@ async def batch_create(request: Request):
             metadata_json=str(body)
         )
     except Exception as ex:
-        print("BIFL log error (batch create):", ex)
-    # Universal raw logging handled in forward_openai
+        print("[BIFL] Batch Create Log Error:", ex)
     return await forward_openai(request, "/v1/batch")
 
 @router.api_route("/{batch_id}", methods=["GET"])
 async def batch_by_id(request: Request, batch_id: str):
+    """Get batch status/details by ID."""
     return await forward_openai(request, f"/v1/batch/{batch_id}")

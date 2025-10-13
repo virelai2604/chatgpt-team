@@ -6,6 +6,7 @@ router = APIRouter()
 
 @router.api_route("/", methods=["GET", "POST"])
 async def vector_stores(request: Request):
+    # Log all POST requests (for auditing/vector usage)
     if request.method == "POST":
         try:
             body = await request.json()
@@ -17,4 +18,5 @@ async def vector_stores(request: Request):
             )
         except Exception as ex:
             print("BIFL log error (vector_stores POST):", ex)
+    # Pass through to OpenAI API, v2 header handled in forward_openai
     return await forward_openai(request, "/v1/vector_stores")

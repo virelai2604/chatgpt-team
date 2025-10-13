@@ -9,7 +9,6 @@ router = APIRouter()
 
 @router.api_route("/generations", methods=["POST"])
 async def image_generations(request: Request):
-    # Structured log for image generations
     try:
         body = await request.json()
         save_chat_request(
@@ -27,14 +26,13 @@ async def image_generations(request: Request):
 async def stream_image(image_id: str):
     """
     BIFL-style image streaming endpoint.
-    Streams either from local disk or a remote CDN/URL based on environment config.
-    Supports both PNG and JPEG.
+    Streams from local disk or remote CDN/URL based on config.
+    PNG and JPEG supported.
     """
     IMAGE_MODE = os.getenv("IMAGE_STREAM_MODE", "local")
     IMAGE_DIR = os.getenv("IMAGE_STREAM_DIR", "/images")
     IMAGE_URL_TEMPLATE = os.getenv("IMAGE_STREAM_URL", "https://cdn.yourapp.com/images/{image_id}.{ext}")
 
-    # Try .png first, then .jpg/.jpeg
     for ext, mime in [("png", "image/png"), ("jpg", "image/jpeg"), ("jpeg", "image/jpeg")]:
         if IMAGE_MODE == "local":
             image_path = os.path.join(IMAGE_DIR, f"{image_id}.{ext}")

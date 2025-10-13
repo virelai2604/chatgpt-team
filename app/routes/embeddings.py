@@ -6,16 +6,15 @@ router = APIRouter()
 
 @router.api_route("/", methods=["POST"])
 async def embeddings(request: Request):
-    # Structured log for embeddings
+    """Get embeddings for input(s) (BIFL v2 style)."""
     try:
         body = await request.json()
         save_chat_request(
-            role="user",  # or "system" if preferred
+            role="user",  # or "system"
             content=str(body.get("input", "")),
             function_call_json="",
             metadata_json=str(body)
         )
     except Exception as ex:
-        print("BIFL log error (embeddings):", ex)
-    # Universal raw logging handled in forward_openai
+        print("[BIFL] Embeddings Log Error:", ex)
     return await forward_openai(request, "/v1/embeddings")

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from app.api.forward import forward_openai
-from app.utils.db_logger import save_raw_request  # BIFL logger import
+from app.utils.db_logger import save_raw_request
 
 router = APIRouter()
 
@@ -10,7 +10,6 @@ async def passthrough(request: Request, full_path: str):
     BIFL-grade: Logs every unmatched /v1/* request (all methods), preserving all headers and body bytes,
     then relays to the OpenAI API.
     """
-    # Log the incoming request (headers + body)
     raw_body = await request.body()
     headers_json = str(dict(request.headers))
     save_raw_request(
@@ -18,6 +17,5 @@ async def passthrough(request: Request, full_path: str):
         raw_body=raw_body,
         headers_json=headers_json
     )
-    # Relay to OpenAI as before
     endpoint = f"/v1/{full_path}"
     return await forward_openai(request, endpoint)

@@ -9,13 +9,12 @@ load_dotenv()
 from app.utils.error_handler import error_response
 
 from app.routes import (
-    chat, completions, files, models, openapi, assistants, tools, attachments, audio, images, embeddings, moderations, threads, vector_stores, videos, batch, relay_status, responses
+    chat, completions, files, models, openapi, assistants, tools, attachments, audio, images, embeddings,
+    moderations, threads, vector_stores, videos, batch, relay_status, responses
 )
 from app.api import passthrough_proxy
 
-# === NEW: Import BIFL DB schema initializer ===
 from app.utils.db_logger import init_db
-
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="OpenAI Relay", version="1.0.0")
@@ -66,7 +65,9 @@ app.include_router(attachments.router, prefix="/v1/attachments")
 app.include_router(relay_status.router)
 app.include_router(responses.router)
 app.include_router(openapi.router)
-app.include_router(passthrough_proxy.router)
+
+# === Passthrough proxy registered LAST ===
+app.include_router(passthrough_proxy.router)  # <- Catches all unmatched /v1/* requests
 
 # Static files (e.g. for .well-known/ai-plugin.json)
 app.mount("/.well-known", StaticFiles(directory=".well-known"), name="well-known")

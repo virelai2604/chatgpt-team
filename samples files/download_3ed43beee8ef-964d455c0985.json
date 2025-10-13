@@ -1,0 +1,10 @@
+{
+  "type": "bifl-sample",
+  "message": "Hello, OpenAI Relay!",
+  "value": 1234,
+  "list": [
+    1,
+    2,
+    3
+  ]
+}
