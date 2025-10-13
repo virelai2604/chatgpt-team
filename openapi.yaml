@@ -467,42 +467,23 @@ paths:
       responses:
         '200': { description: OK }
 
-  /v1/threads/{thread_id}/runs/{run_id}:
+  /v1/tools:
     get:
-      summary: Get run by ID
-      operationId: getRunById
-      parameters:
-        - in: path
-          name: thread_id
-          required: true
-          schema: { type: string }
-        - in: path
-          name: run_id
-          required: true
-          schema: { type: string }
+      summary: List all registered tools
+      operationId: listTools
       responses:
         '200':
           description: OK
-
-  /v1/vector_stores/{vector_store_id}/queries:
     post:
-      summary: Query a vector store
-      operationId: queryVectorStore
-      parameters:
-        - in: path
-          name: vector_store_id
-          required: true
-          schema: { type: string }
+      summary: Register a new tool (function, retrieval, or code_interpreter)
+      operationId: registerTool
       requestBody:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                query:
-                  type: string
-                  description: Query text to search for in the vector store
-              required: [query]
+              $ref: '#/components/schemas/Tool'
       responses:
         '200':
           description: OK
+
+  
