@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: OpenAI Relay API
   version: "1.0.0"
-  description: BIFL-grade OpenAI relay with essential endpoints and multi-format image streaming.
+  description: BIFL-grade OpenAI relay with essential endpoints and multi-format video/image streaming.
 servers:
   - url: https://chatgpt-team-relay.onrender.com
 
@@ -236,25 +236,6 @@ paths:
                 file_id: { type: string }
       responses:
         '200': { description: File attached }
-    delete:
-      operationId: assistants_remove_file
-      summary: Remove file from assistant
-      parameters:
-        - name: assistant_id
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [file_id]
-              properties:
-                file_id: { type: string }
-      responses:
-        '200': { description: File removed }
 
   /v1/threads:
     post:
@@ -323,22 +304,6 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: Message retrieved }
-
-  /v1/threads/{thread_id}/messages/{message_id}/files:
-    get:
-      operationId: threads_list_message_files
-      summary: List files for message
-      parameters:
-        - name: thread_id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: message_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: Files for message }
 
   /v1/threads/{thread_id}/runs:
     post:
@@ -432,155 +397,247 @@ paths:
       responses:
         '200': { description: Vector store queried }
 
-  /v1/vector_stores/{vector_store_id}/files:
+  /v1/videos:
+    post:
+      operationId: videos_create
+      summary: Create video (Sora)
+      description: Start a new video render job from a prompt, with optional reference images or a remix ID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                  description: The text prompt for video generation.
+                model:
+                  type: string
+                  description: Model to use (e.g. 'sora-1', 'sora-2-pro').
+                reference_images:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  description: URLs for reference images.
+                reference_video:
+                  type: string
+                  format: uri
+                  description: URL for a reference video.
+                remix_id:
+                  type: string
+                  description: Existing video ID to remix.
+      responses:
+        '200':
+          description: Video render job started
+
     get:
-      operationId: vectorStores_list_files
-      summary: List files for vector store
+      operationId: videos_list
+      summary: List videos
+      description: Enumerate your videos with pagination for history, dashboards, or housekeeping.
       parameters:
-        - name: vector_store_id
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+          description: Number of results to return.
+        - name: after
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Cursor for pagination.
+      responses:
+        '200':
+          description: List of videos
+
+  /v1/videos/{video_id}:
+    get:
+      operationId: videos_get_status
+      summary: Get video status
+      description: Retrieve the current state of a video render job and monitor its progress.
+      parameters:
+        - name: video_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: Vector store files listed }
+        '200':
+          description: Video status/details
 
-/v1/videos:
+    delete:
+      operationId: videos_delete
+      summary: Delete video
+      description: Remove an individual video ID from OpenAI’s storage.
+      parameters:
+        - name: video_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Video deleted
+
+  /v1/videos/{video_id}/content:
+    get:
+      operationId: videos_download
+      summary: Download video (MP4, GIF, MOV)
+      description: Fetch the finished MP4, GIF, or MOV video once the job is completed.
+      parameters:
+        - name: video_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Video file stream
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+            video/quicktime:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+
+  /v1/videos/{video_id}/remix:
+    post:
+      operationId: videos_remix
+      summary: Remix video
+      description: Start a remix job using an existing video ID.
+      parameters:
+        - name: video_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                  description: Remix prompt.
+                reference_images:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  description: URLs for reference images.
+                reference_video:
+                  type: string
+                  format: uri
+                  description: Reference video URL.
+      responses:
+        '200':
+          description: Remix job started
+
+/v1/attachments/upload:
   post:
-    operationId: videos_create
-    summary: Create video (Sora)
-    description: Start a new video render job from a prompt, with optional reference inputs or a remix ID.
+    operationId: attachments_upload
+    summary: Upload an attachment
     requestBody:
       required: true
       content:
-        application/json:
+        multipart/form-data:
           schema:
             type: object
-            required: [prompt]
             properties:
-              prompt:
+              file:
                 type: string
-                description: The text prompt for video generation.
-              model:
-                type: string
-                description: Model to use (e.g. 'sora-1').
-              reference_images:
-                type: array
-                items: { type: string, format: uri }
-                description: URLs for reference images.
-              reference_video:
-                type: string
-                format: uri
-                description: URL for a reference video.
-              remix_id:
-                type: string
-                description: Existing video ID to remix.
+                format: binary
     responses:
       '200':
-        description: Video render job started
+        description: Attachment uploaded
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string }
+                sha256: { type: string }
+                chat_id: { type: string }
 
+/v1/attachments/{chat_id}/download:
   get:
-    operationId: videos_list
-    summary: List videos
-    description: Enumerate your videos with pagination for history, dashboards, or housekeeping.
+    operationId: attachments_download
+    summary: Download an attachment by chat_id
+    parameters:
+      - name: chat_id
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      '200':
+        description: Attachment binary download
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+
+/v1/attachments/list:
+  get:
+    operationId: attachments_list
+    summary: List recent attachments
     parameters:
       - in: query
         name: limit
-        schema: { type: integer, default: 20 }
-        description: Number of results to return.
-      - in: query
-        name: after
-        schema: { type: string }
-        description: Cursor for pagination.
+        schema: { type: integer, default: 25, minimum: 1, maximum: 100 }
+        description: Maximum number of attachments to return.
     responses:
       '200':
-        description: List of videos
-
-/v1/videos/{video_id}:
-  get:
-    operationId: videos_get_status
-    summary: Get video status
-    description: Retrieve the current state of a video render job and monitor its progress.
-    parameters:
-      - name: video_id
-        in: path
-        required: true
-        schema: { type: string }
-    responses:
-      '200':
-        description: Video status/details
-
-  delete:
-    operationId: videos_delete
-    summary: Delete video
-    description: Remove an individual video ID from OpenAI’s storage.
-    parameters:
-      - name: video_id
-        in: path
-        required: true
-        schema: { type: string }
-    responses:
-      '204':
-        description: Video deleted
-
-/v1/videos/{video_id}/content:
-  get:
-    operationId: videos_download
-    summary: Download video (MP4, GIF, MOV)
-    description: Fetch the finished MP4, GIF, or MOV video once the job is completed.
-    parameters:
-      - name: video_id
-        in: path
-        required: true
-        schema: { type: string }
-    responses:
-      '200':
-        description: Video file stream
+        description: List of attachments
         content:
-          video/mp4:
+          application/json:
             schema:
-              type: string
-              format: binary
-          video/quicktime:
-            schema:
-              type: string
-              format: binary
-          image/gif:
-            schema:
-              type: string
-              format: binary
+              type: array
+              items:
+                type: object
+                properties:
+                  chat_id: { type: string }
+                  filename: { type: string }
+                  mimetype: { type: string }
+                  size: { type: integer }
+                  imported_at: { type: string }
+                  version: { type: integer }
 
-/v1/videos/{video_id}/remix:
-  post:
-    operationId: videos_remix
-    summary: Remix video
-    description: Start a remix job using an existing video ID.
+/v1/attachments/{chat_id}:
+  delete:
+    operationId: attachments_delete
+    summary: Delete attachment by chat_id
     parameters:
-      - name: video_id
+      - name: chat_id
         in: path
         required: true
         schema: { type: string }
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            required: [prompt]
-            properties:
-              prompt:
-                type: string
-                description: Remix prompt.
-              reference_images:
-                type: array
-                items: { type: string, format: uri }
-                description: URLs for reference images.
-              reference_video:
-                type: string
-                format: uri
-                description: Reference video URL.
     responses:
       '200':
-        description: Remix job started
+        description: Attachment deleted
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string }
+                chat_id: { type: string }
+
 
 components:
   schemas: {}

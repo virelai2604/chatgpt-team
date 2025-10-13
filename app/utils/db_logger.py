@@ -2,7 +2,8 @@ import sqlite3
 import os
 from datetime import datetime
 
-DB_PATH = r"D:\ChatgptDATAB\chatgpt_team.sqlite"
+DB_PATH = r"D:\ChatgptDATAB\DB Chatgpt\chatgpt_archive.sqlite"
+
 
 def save_chat_request(role, content, function_call_json="", metadata_json=""):
     with sqlite3.connect(DB_PATH) as conn:
@@ -23,6 +24,18 @@ def save_raw_request(endpoint, raw_body, headers_json):
         conn.execute(
             "INSERT INTO raw_requests (timestamp, endpoint, body, headers_json) VALUES (?, ?, ?, ?)",
             (datetime.now().isoformat(), endpoint, raw_body, headers_json)
+        )
+
+def save_attachment(filename, mimetype, size, sha256, data, imported_at, source_folder, imported_by, imported_on_machine, replaced_at, chat_id, version=1):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO attachments (
+                filename, mimetype, size, sha256, data, imported_at, source_folder,
+                imported_by, imported_on_machine, replaced_at, chat_id, version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (filename, mimetype, size, sha256, data, imported_at, source_folder, imported_by, imported_on_machine, replaced_at, chat_id, version)
         )
 
 def init_db():
@@ -56,3 +69,23 @@ def init_db():
             "body BLOB,"
             "headers_json TEXT)"
         )
+        # Optionally add attachments table creation if not guaranteed present
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS attachments ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "filename TEXT,"
+            "mimetype TEXT,"
+            "size INTEGER,"
+            "sha256 TEXT,"
+            "data BLOB,"
+            "imported_at TEXT,"
+            "source_folder TEXT,"
+            "imported_by TEXT,"
+            "imported_on_machine TEXT,"
+            "replaced_at TEXT,"
+            "chat_id TEXT,"
+            "version INTEGER DEFAULT 1)"
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_attachments_sha256 ON attachments(sha256)")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_attachments_chatid ON attachments(chat_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_attachments_imported_at ON attachments(imported_at)")
