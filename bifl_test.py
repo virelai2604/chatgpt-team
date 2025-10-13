@@ -1,225 +1,128 @@
-import requests
-import os
-import time
+import os, time, json, requests, pytest
+from datetime import datetime
 
-RELAY = "https://chatgpt-team-relay.onrender.com/v1"
-API_KEY = None  # <-- Set if needed
-SAMPLES = "samples files"  # Directory with test assets
+# === CONFIG ===
+API_BASE = "https://chatgpt-team-relay.onrender.com/v1"
+API_KEY = os.getenv("BIFL_API_KEY", "sk-test")
+HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+DOWNLOADS = r"C:\Tools\ChatGpt Domain\Cloudflare\chatgpt-team\Downloads"
+DESKTOP_PATH = os.path.join(os.path.expanduser("~"), "Desktop", "BIFL_Checklist_Report.md")
 
-def auth_headers(extra=None):
-    h = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
-    if extra:
-        h.update(extra)
-    return h
+# === STATE ===
+checklist = {}
 
-def print_result(name, resp):
-    try:
-        print(f"[{name}] [{resp.status_code}]: {resp.text[:300]}")
-    except Exception as e:
-        print(f"[{name}] ERROR: {e}")
+# === UTILS ===
+def write_md_report():
+    with open(DESKTOP_PATH, "w", encoding="utf-8") as f:
+        f.write(f"# 🧩 BIFL Auto Checklist Report\n\n")
+        f.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        f.write("| Endpoint | Method | Status | Notes |\n")
+        f.write("|-----------|---------|---------|--------|\n")
+        for ep, data in checklist.items():
+            f.write(f"| {ep} | {data['method']} | {data['status']} | {data['note']} |\n")
 
-def markdown_row(endpoint, status, notes):
-    return f"| `{endpoint}` | {status} | {notes} |"
+def update_checklist(endpoint, method, status, note=""):
+    checklist[endpoint] = {"method": method, "status": status, "note": note}
+    print(f"\n📋 {endpoint} [{method}] → {status} {note}")
+    write_md_report()
 
-def wait_for_status(url, desired="completed", timeout=120, poll=5):
-    for _ in range(timeout // poll):
-        r = requests.get(url, headers=auth_headers())
-        js = r.json()
-        status = js.get("status")
-        if status == desired:
-            return js
-        elif status in ("failed", "moderation_blocked"):
-            return js
-        time.sleep(poll)
-    return {"status": "timeout"}
+def request_with_retry(method, path, **kwargs):
+    url = f"{API_BASE}{path}"
+    r = requests.request(method, url, headers=HEADERS, **kwargs)
+    if r.status_code >= 400:
+        headers_v2 = dict(HEADERS)
+        headers_v2["OpenAI-Beta"] = "assistants=v2"
+        r = requests.request(method, url, headers=headers_v2, **kwargs)
+    return r
 
-def test_file_list():
-    r = requests.get(RELAY + "/files", headers=auth_headers())
-    print_result("files_list", r)
-    return r.ok
+# === VIDEO FUNCTIONS ===
+def poll_video(video_id, timeout=240):
+    for _ in range(timeout // 5):
+        r = requests.get(f"{API_BASE}/videos/{video_id}", headers=HEADERS)
+        if r.ok and r.json().get("status") == "completed":
+            return True
+        time.sleep(5)
+    return False
 
-def test_embeddings():
-    payload = {"model": "text-embedding-ada-002", "input": "test embedding"}
-    r = requests.post(RELAY + "/embeddings", json=payload, headers=auth_headers())
-    print_result("embeddings", r)
-    return r.ok
+def download_video(video_id, prefix=""):
+    r = requests.get(f"{API_BASE}/videos/{video_id}/content", headers=HEADERS)
+    fpath = os.path.join(DOWNLOADS, f"{prefix}{video_id}.mp4")
+    if r.ok:
+        with open(fpath, "wb") as f:
+            f.write(r.content)
+        print(f"💾 Saved video: {fpath}")
+        return True
+    print(f"⚠️ Download failed for {video_id}: {r.status_code}")
+    return False
 
-def test_chat_completions():
-    # Test both stream and non-stream
-    for stream in [False, True]:
-        payload = {
-            "model": "gpt-3.5-turbo", 
-            "messages": [{"role": "user", "content": "Say hello!"}],
-            "stream": stream
-        }
-        r = requests.post(RELAY + "/chat/completions", json=payload, headers=auth_headers())
-        print_result(f"chat_completions_stream_{stream}", r)
-    return True
+def test_videos(model, prompt, prefix):
+    ep = f"/videos ({model})"
+    payload = {"prompt": prompt, "seconds": "4", "model": model}
+    r = request_with_retry("POST", "/videos", json=payload)
+    if not r.ok:
+        update_checklist(ep, "POST", "❌ FAIL", f"create {r.status_code}")
+        return
+    vid = r.json().get("id")
+    if not poll_video(vid):
+        update_checklist(ep, "POST", "❌ FAIL", "timeout")
+        return
+    if not download_video(vid, prefix):
+        update_checklist(ep, "GET", "❌ FAIL", "download error")
+        return
+    # Remix
+    remix = request_with_retry("POST", f"/videos/{vid}/remix",
+        json={"prompt": "same scene but cinematic, warm tone"})
+    if not remix.ok:
+        update_checklist(ep, "POST", "❌ FAIL", f"remix {remix.status_code}")
+        return
+    remix_id = remix.json().get("id")
+    if not poll_video(remix_id):
+        update_checklist(ep, "POST", "❌ FAIL", "remix timeout")
+        return
+    if not download_video(remix_id, prefix + "REMIX_"):
+        update_checklist(ep, "GET", "❌ FAIL", "remix download")
+        return
+    update_checklist(ep, "POST", "✅ PASS")
 
-def test_images_generations():
-    # Test both stream and non-stream
-    for stream in [False, True]:
-        payload = {
-            "model": "dall-e-3",
-            "prompt": "A peaceful mountain landscape at sunset.",
-            "n": 1,
-            "stream": stream
-        }
-        r = requests.post(RELAY + "/images/generations", json=payload, headers=auth_headers())
-        print_result(f"images_generations_stream_{stream}", r)
-    return True
-
-def test_audio_speech():
-    payload = {
-        "model": "tts-1", 
-        "input": "This is a BIFL grade audio speech test.", 
-        "voice": "nova"
-    }
-    r = requests.post(RELAY + "/audio/speech", json=payload, headers=auth_headers())
-    print_result("audio_speech", r)
-    return r.ok
-
-def test_audio_transcriptions():
-    file_path = os.path.join(SAMPLES, "bifl_test_audio.wav")
-    if not os.path.exists(file_path):
-        print("audio_transcriptions: SKIP, file not found")
-        return False
-    with open(file_path, "rb") as f:
-        files = {"file": (os.path.basename(file_path), f, "audio/wav")}
-        data = {"model": "whisper-1"}
-        r = requests.post(RELAY + "/audio/transcriptions", data=data, files=files, headers=auth_headers())
-        print_result("audio_transcriptions", r)
-    return r.ok
-
-def test_video_generation_and_stream():
-    # Both sora-2 and sora-2-pro with fallback prompt for moderation
-    for model in ["sora-2", "sora-2-pro"]:
-        payload = {
-            "prompt": "a peaceful sunset over mountains, safe for work, animation",
-            "model": model,
-            "seconds": "4"
-        }
-        r = requests.post(RELAY + "/videos", json=payload, headers=auth_headers())
-        print_result(f"video_create_{model}", r)
-        if not r.ok:
-            continue
-        vid = r.json().get("id")
-        if not vid:
-            print(f"video_create_{model}: No video id returned.")
-            continue
-        # Wait for completion
-        video_url = f"{RELAY}/videos/{vid}"
-        status = wait_for_status(video_url)
-        if status.get("status") == "completed":
-            # Try download with stream
-            d_url = f"{video_url}/content"
-            try:
-                d = requests.get(d_url, headers=auth_headers(), stream=True)
-                print_result(f"video_download_{model}", d)
-            except Exception as ex:
-                print(f"video_download_{model}: {ex}")
-        else:
-            print(f"[video_{model}] status: {status.get('status')} error: {status.get('error')}")
-    return True
-
-def test_video_list():
-    r = requests.get(RELAY + "/videos", headers=auth_headers())
-    print_result("video_list", r)
-    return r.ok
-
-def test_thread_flow():
-    # V2 flow per migration guide: create assistant, thread, message, run
-    # Upload a file as well for completeness
-    file_path = os.path.join(SAMPLES, "sample.txt")
-    if os.path.exists(file_path):
-        with open(file_path, "rb") as f:
-            files = {"file": (os.path.basename(file_path), f, "text/plain")}
-            data = {"purpose": "user_data"}
-            r = requests.post(RELAY + "/files", data=data, files=files, headers=auth_headers())
-            print_result("file_upload", r)
-            file_id = r.json().get("id")
+# === GENERIC ENDPOINT TEST ===
+def test_generic(method, endpoint, json_data=None):
+    path = endpoint.replace("{video_id}", "video_68ed0c9a0e48819099f64f6a8eb612c00875fdc385853e5d") \
+                   .replace("{assistant_id}", "asst_123") \
+                   .replace("{thread_id}", "thread_123") \
+                   .replace("{message_id}", "msg_123") \
+                   .replace("{run_id}", "run_123")
+    r = request_with_retry(method, path, json=json_data)
+    if r.ok:
+        update_checklist(endpoint, method, "✅ PASS")
     else:
-        file_id = None
+        update_checklist(endpoint, method, "❌ FAIL", f"{r.status_code}")
 
-    # 1. Assistant create
-    a_data = {"name": "BIFLv2Test", "model": "gpt-3.5-turbo"}
-    a = requests.post(RELAY + "/assistants", json=a_data, headers=auth_headers())
-    print_result("assistant_create", a)
-    asst_id = a.json().get("id")
-    # 2. Thread create
-    t = requests.post(RELAY + "/threads", json={}, headers=auth_headers())
-    print_result("thread_create", t)
-    thread_id = t.json().get("id")
-    # 3. Add message
-    m_data = {"role": "user", "content": "What is BIFL?"}
-    m = requests.post(RELAY + f"/threads/{thread_id}/messages", json=m_data, headers=auth_headers())
-    print_result("thread_add_message", m)
-    msg_id = m.json().get("id")
-    # 4. Create run
-    r_data = {"assistant_id": asst_id}
-    run = requests.post(RELAY + f"/threads/{thread_id}/runs", json=r_data, headers=auth_headers())
-    print_result("thread_run", run)
-    run_id = run.json().get("id")
-    # 5. Wait for run
-    run_url = f"{RELAY}/threads/{thread_id}/runs/{run_id}"
-    status = wait_for_status(run_url)
-    print(f"[wait] {run_url} => {status.get('status')}")
-    # 6. List run steps
-    rs = requests.get(f"{RELAY}/threads/{thread_id}/runs/{run_id}/steps", headers=auth_headers())
-    print_result("thread_list_run_steps", rs)
-    return True
-
-def test_vector_store_query():
-    # Create store, upload file, then query
-    vs_data = {"name": "BIFL Vector Store"}
-    r = requests.post(RELAY + "/vector_stores", json=vs_data, headers=auth_headers())
-    print_result("vector_store_create", r)
-    store_id = r.json().get("id")
-    if not store_id:
-        print("vector_store_create: No store id returned.")
-        return False
-    # Normally, should upload a file to vector store then query, skipping file upload for brevity
-    q_data = {"queries": ["test vector search"]}
-    q = requests.post(f"{RELAY}/vector_stores/{store_id}/queries", json=q_data, headers=auth_headers())
-    print_result("vector_store_query", q)
-    return q.ok
-
-def bifl_test_summary():
-    # This table is generated manually below as an example. You can automate this by collecting test results above.
-    rows = [
-        markdown_row("/v1/files [GET]", "✅", "File list successful"),
-        markdown_row("/v1/embeddings", "✅", "Embeddings call successful"),
-        markdown_row("/v1/chat/completions (stream/non-stream)", "✅", "Both modes tested"),
-        markdown_row("/v1/images/generations (stream/non-stream)", "✅", "Both modes tested"),
-        markdown_row("/v1/audio/speech", "✅", "TTS successful"),
-        markdown_row("/v1/audio/transcriptions", "✅", "Whisper transcribe"),
-        markdown_row("/v1/videos (sora-2/sora-2-pro)", "✅", "Video create+download (streamed)"),
-        markdown_row("/v1/videos [GET]", "✅", "List videos"),
-        markdown_row("/v1/assistants [POST]", "✅", "Assistant v2 create"),
-        markdown_row("/v1/threads [POST]", "✅", "Thread create v2"),
-        markdown_row("/v1/threads/{thread_id}/messages [POST]", "✅", "Message add v2"),
-        markdown_row("/v1/threads/{thread_id}/runs [POST]", "✅", "Run create v2"),
-        markdown_row("/v1/threads/{thread_id}/runs/{run_id}/steps [GET]", "✅", "Run steps listed"),
-        markdown_row("/v1/vector_stores [POST]", "✅", "Vector store created"),
-        markdown_row("/v1/vector_stores/{id}/queries [POST]", "✅", "Queried new store"),
-        # Add more rows as needed...
-    ]
-    print("\n\n# BIFL Endpoint Test Summary\n")
-    print("| Endpoint | Status | Notes |")
-    print("|---|---|---|")
-    for row in rows:
-        print(row)
-
+# === MAIN ===
 if __name__ == "__main__":
-    # Run tests in BIFL style, with clear logs.
-    test_file_list()
-    test_embeddings()
-    test_chat_completions()
-    test_images_generations()
-    test_audio_speech()
-    test_audio_transcriptions()
-    test_video_generation_and_stream()
-    test_video_list()
-    test_thread_flow()
-    test_vector_store_query()
-    bifl_test_summary()
+    print("🚀 Starting full BIFL Auto Checklist Test Run...")
+    os.makedirs(DOWNLOADS, exist_ok=True)
+
+    # VIDEO TESTS FIRST (so we have valid IDs)
+    test_videos("sora-2", "sunshine over a lake", "SUN_")
+    test_videos("sora-2-pro", "sunshine over a lake", "MOON_")
+
+    # ENDPOINTS
+    endpoints = [
+        ("POST", "/chat/completions", {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "hello"}]}),
+        ("POST", "/embeddings", {"model": "text-embedding-3-small", "input": "testing embedding"}),
+        ("GET", "/files", None),
+        ("GET", "/models", None),
+        ("POST", "/assistants", {"model": "gpt-4o-mini", "name": "autotest"}),
+        ("POST", "/threads", None),
+        ("GET", "/vector_stores", None),
+        ("POST", "/vector_stores", {"name": "demo_store"}),
+        ("GET", "/tools", None),
+        ("POST", "/tools", {"name": "testtool"})
+    ]
+
+    for method, ep, data in endpoints:
+        test_generic(method, ep, data)
+
+    print("\n✅ All endpoints tested.")
+    write_md_report()
+    print(f"\n📄 Report saved to: {DESKTOP_PATH}")

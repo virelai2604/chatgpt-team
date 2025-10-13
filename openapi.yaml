@@ -3,10 +3,9 @@ info:
   title: BIFL AI Relay API
   version: 1.0.0
   description: >
-    Modern OpenAI-compatible relay API, v2/Assistants/tools-first, 30 operations only.
-    /v1/audio/translation removed. "tools" replaces v1 function/retrieval/code_interpreter flows.
+    Modern OpenAI-compatible relay API (Assistants v2, tool-calling, retrieval, agent workflows). Follows BIFL and OpenAI standards.
 servers:
-  - url: https://chatgpt-team-relay.onrender.com
+  - url: https://your-bifl-relay.example.com
 
 components:
   schemas:
@@ -32,19 +31,16 @@ components:
       properties:
         type:
           type: string
-          enum: [function, retrieval, code_interpreter]
+          enum: [function, retrieval, code_interpreter, file_search]
         function:
           $ref: '#/components/schemas/FunctionTool'
     FunctionTool:
       type: object
       required: [name, description, parameters]
       properties:
-        name:
-          type: string
-        description:
-          type: string
-        parameters:
-          type: object
+        name: { type: string }
+        description: { type: string }
+        parameters: { type: object }
     Message:
       type: object
       properties:
@@ -186,7 +182,9 @@ paths:
               type: object
               properties:
                 input: { type: string }
-              required: [input]
+                model: { type: string }
+                voice: { type: string }
+              required: [input, model, voice]
       responses:
         '200': { description: OK }
 
@@ -201,6 +199,7 @@ paths:
               type: object
               properties:
                 file: { type: string, format: binary }
+                model: { type: string }
                 language: { type: string, description: "ISO code, e.g. 'en', 'fr', 'zh'" }
       responses:
         '200': { description: OK }
@@ -260,6 +259,51 @@ paths:
       responses:
         '200': { description: OK }
 
+  /v1/assistants/{assistant_id}/runs:
+    post:
+      summary: Start a run for a specific assistant (v2)
+      operationId: runAssistant
+      parameters:
+        - in: path
+          name: assistant_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                instructions:
+                  type: string
+                  description: Optional override instructions for this run
+                tools:
+                  type: array
+                  description: Optional override tools for this run
+                  items:
+                    $ref: '#/components/schemas/Tool'
+                files:
+                  type: array
+                  description: List of file IDs attached to this run
+                  items:
+                    type: string
+              required: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_id:
+                    type: string
+                  status:
+                    type: string
+                  output:
+                    type: string
+
   /v1/threads:
     post:
       summary: Create thread
@@ -303,22 +347,6 @@ paths:
       parameters:
         - in: path
           name: thread_id
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: OK }
-
-  /v1/threads/{thread_id}/messages/{message_id}:
-    get:
-      summary: Get message by ID
-      operationId: getMessageById
-      parameters:
-        - in: path
-          name: thread_id
-          required: true
-          schema: { type: string }
-        - in: path
-          name: message_id
           required: true
           schema: { type: string }
       responses:
@@ -392,6 +420,25 @@ paths:
       responses:
         '200': { description: OK }
 
+  /v1/vector_stores/{vector_store_id}/queries:
+    post:
+      summary: Query a vector store
+      operationId: queryVectorStore
+      parameters:
+        - in: path
+          name: vector_store_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query: { type: string }
+      responses:
+        '200': { description: OK }
+
   /v1/videos:
     get:
       summary: List videos
@@ -409,7 +456,8 @@ paths:
               properties:
                 prompt: { type: string }
                 seconds: { type: string }
-              required: [prompt, seconds]
+                model: { type: string }
+              required: [prompt, seconds, model]
       responses:
         '200': { description: OK }
 
@@ -462,8 +510,8 @@ paths:
             schema:
               type: object
               properties:
-                remix_prompt: { type: string }
-              required: [remix_prompt]
+                prompt: { type: string }
+              required: [prompt]
       responses:
         '200': { description: OK }
 
@@ -475,7 +523,7 @@ paths:
         '200':
           description: OK
     post:
-      summary: Register a new tool (function, retrieval, or code_interpreter)
+      summary: Register a new tool (function, retrieval, code_interpreter, file_search)
       operationId: registerTool
       requestBody:
         content:
@@ -485,5 +533,3 @@ paths:
       responses:
         '200':
           description: OK
-
-  
