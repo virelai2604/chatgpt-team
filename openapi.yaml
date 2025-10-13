@@ -1,58 +1,64 @@
 openapi: 3.1.0
 info:
-  title: OpenAI Relay API
+  title: OpenAI BIFL Relay API
   version: "1.0.0"
-  description: BIFL-grade OpenAI relay with essential endpoints and multi-format video/image streaming.
+  description: |
+    OpenAI-compatible relay for all major endpoints, streaming, v1/v2 models, and BIFL-grade best practices. No deprecated endpoints.
+
 servers:
   - url: https://chatgpt-team-relay.onrender.com
 
 paths:
   /v1/chat/completions:
     post:
-      operationId: chatCompletions_create
       summary: Create chat completion
+      operationId: chatCompletions_create
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [model, messages]
-              properties:
-                model: { type: string }
-                messages:
-                  type: array
-                  items:
-                    type: object
-                    required: [role, content]
-                    properties:
-                      role: { type: string, enum: [user, assistant, system, tool] }
-                      content: { type: string }
-                stream: { type: boolean, default: false }
+              $ref: '#/components/schemas/ChatCompletionRequest'
       responses:
-        '200': { description: Chat completion created }
+        '200':
+          description: Chat completion response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
 
   /v1/embeddings:
     post:
+      summary: Create embeddings
       operationId: embeddings_create
-      summary: Create embedding
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [model, input]
-              properties:
-                model: { type: string }
-                input: { type: string }
+              $ref: '#/components/schemas/EmbeddingsRequest'
       responses:
-        '200': { description: Embedding created }
+        '200':
+          description: Embeddings response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbeddingsResponse'
 
   /v1/files:
+    get:
+      summary: List files
+      operationId: files_list
+      responses:
+        '200':
+          description: List of files
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileList'
     post:
+      summary: Upload a file
       operationId: files_upload
-      summary: Upload file
       requestBody:
         required: true
         content:
@@ -63,97 +69,110 @@ paths:
                 file:
                   type: string
                   format: binary
+                purpose:
+                  type: string
       responses:
-        '200': { description: File uploaded }
-    get:
-      operationId: files_list
-      summary: List files
-      responses:
-        '200': { description: File list }
+        '200':
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileObject'
 
   /v1/files/{file_id}:
     get:
+      summary: Retrieve a file
       operationId: files_retrieve
-      summary: Get file
       parameters:
         - name: file_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: File details }
+        '200':
+          description: File object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileObject'
     delete:
+      summary: Delete a file
       operationId: files_delete
-      summary: Delete file
       parameters:
         - name: file_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: File deleted }
+        '200':
+          description: File deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
 
   /v1/images/generations:
     post:
+      summary: Generate an image
       operationId: images_generate
-      summary: Generate image (DALL·E)
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [model, prompt]
-              properties:
-                model: { type: string }
-                prompt: { type: string }
-                n: { type: integer }
+              $ref: '#/components/schemas/ImageGenerationRequest'
       responses:
-        '200': { description: Image created }
+        '200':
+          description: Image generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageGenerationResponse'
 
   /v1/images/{image_id}/content:
     get:
+      summary: Stream image content
       operationId: images_stream_content
-      summary: Stream image file content (relay extension)
       parameters:
         - name: image_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
         '200':
-          description: Image file stream
+          description: Image binary stream
           content:
             image/png:
-              schema:
-                type: string
-                format: binary
-            image/jpeg:
               schema:
                 type: string
                 format: binary
 
   /v1/audio/speech:
     post:
+      summary: Text-to-speech
       operationId: audio_tts
-      summary: Text to speech
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [model, input]
-              properties:
-                model: { type: string }
-                input: { type: string }
+              $ref: '#/components/schemas/AudioSpeechRequest'
       responses:
-        '200': { description: Audio created }
+        '200':
+          description: Audio output
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
 
   /v1/audio/transcriptions:
     post:
+      summary: Audio transcription
       operationId: audio_transcribe
-      summary: Audio transcription (Whisper)
       requestBody:
         required: true
         content:
@@ -161,15 +180,23 @@ paths:
             schema:
               type: object
               properties:
-                file: { type: string, format: binary }
-                model: { type: string }
+                file:
+                  type: string
+                  format: binary
+                model:
+                  type: string
       responses:
-        '200': { description: Transcription created }
+        '200':
+          description: Transcription result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioTranscriptionResponse'
 
   /v1/audio/translation:
     post:
+      summary: Audio translation
       operationId: audio_translate
-      summary: Translate audio to English
       requestBody:
         required: true
         content:
@@ -177,289 +204,308 @@ paths:
             schema:
               type: object
               properties:
-                file: { type: string, format: binary }
-                model: { type: string }
+                file:
+                  type: string
+                  format: binary
+                model:
+                  type: string
       responses:
-        '200': { description: Audio translated }
+        '200':
+          description: Translation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioTranscriptionResponse'
 
   /v1/models:
     get:
+      summary: List models
       operationId: models_list
-      summary: List available models
       responses:
-        '200': { description: Model list }
+        '200':
+          description: List of models
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelList'
 
   /v1/assistants:
     post:
-      operationId: assistants_create
       summary: Create assistant
+      operationId: assistants_create
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [model, instructions]
-              properties:
-                model: { type: string }
-                instructions: { type: string }
+              $ref: '#/components/schemas/AssistantCreateRequest'
       responses:
-        '200': { description: Assistant created }
+        '200':
+          description: Assistant created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantObject'
 
   /v1/assistants/{assistant_id}/files:
     get:
+      summary: List assistant files
       operationId: assistants_list_files
-      summary: List files for assistant
       parameters:
         - name: assistant_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: Files for assistant }
+        '200':
+          description: List of assistant files
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileList'
     post:
-      operationId: assistants_attach_file
       summary: Attach file to assistant
+      operationId: assistants_attach_file
       parameters:
         - name: assistant_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [file_id]
-              properties:
-                file_id: { type: string }
+              $ref: '#/components/schemas/AssistantAttachFileRequest'
       responses:
-        '200': { description: File attached }
+        '200':
+          description: File attached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileObject'
 
   /v1/threads:
     post:
-      operationId: threads_create
       summary: Create thread
+      operationId: threads_create
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                messages:
-                  type: array
-                  items:
-                    type: object
-                    required: [role, content]
-                    properties:
-                      role:
-                        type: string
-                        enum: [user, assistant]
-                      content: { type: string }
-                      metadata:
-                        type: object
-                        additionalProperties: true
-                        properties: {}
+              $ref: '#/components/schemas/ThreadCreateRequest'
       responses:
-        '200': { description: Thread created }
+        '200':
+          description: Thread created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadObject'
 
   /v1/threads/{thread_id}/messages:
     post:
-      operationId: threads_add_message
       summary: Add message to thread
+      operationId: threads_add_message
       parameters:
         - name: thread_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [role, content]
-              properties:
-                role:
-                  type: string
-                  enum: [user, assistant]
-                content: { type: string }
+              $ref: '#/components/schemas/ThreadMessageRequest'
       responses:
-        '200': { description: Message added }
+        '200':
+          description: Message added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadMessageObject'
 
   /v1/threads/{thread_id}/messages/{message_id}:
     get:
+      summary: Get thread message
       operationId: threads_get_message
-      summary: Get message by ID
       parameters:
         - name: thread_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
         - name: message_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: Message retrieved }
+        '200':
+          description: Thread message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadMessageObject'
 
   /v1/threads/{thread_id}/runs:
     post:
+      summary: Create thread run
       operationId: threads_create_run
-      summary: Create run for thread
       parameters:
         - name: thread_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                assistant_id: { type: string }
+              $ref: '#/components/schemas/ThreadRunRequest'
       responses:
-        '200': { description: Run created }
+        '200':
+          description: Thread run created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadRunObject'
 
   /v1/threads/{thread_id}/runs/{run_id}:
     get:
+      summary: Get thread run
       operationId: threads_get_run
-      summary: Get run by ID
       parameters:
         - name: thread_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
         - name: run_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: Run retrieved }
+        '200':
+          description: Thread run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadRunObject'
 
   /v1/threads/{thread_id}/runs/{run_id}/steps:
     get:
+      summary: List run steps
       operationId: threads_list_run_steps
-      summary: List steps for run
       parameters:
         - name: thread_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
         - name: run_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: Run steps listed }
+        '200':
+          description: List of run steps
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunStepsList'
 
   /v1/vector_stores:
     get:
-      operationId: vectorStores_list
       summary: List vector stores
+      operationId: vectorStores_list
       responses:
-        '200': { description: Vector store list }
+        '200':
+          description: Vector store list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorStoreList'
     post:
-      operationId: vectorStores_create
       summary: Create vector store
+      operationId: vectorStores_create
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                name: { type: string }
+              $ref: '#/components/schemas/VectorStoreCreateRequest'
       responses:
-        '200': { description: Vector store created }
+        '200':
+          description: Vector store created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorStoreObject'
 
   /v1/vector_stores/{vector_store_id}/queries:
     post:
-      operationId: vectorStores_query
       summary: Query vector store
+      operationId: vectorStores_query
       parameters:
         - name: vector_store_id
           in: path
           required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                query: { type: string }
-      responses:
-        '200': { description: Vector store queried }
-
-  /v1/videos:
-    post:
-      operationId: videos_create
-      summary: Create video (Sora)
-      description: Start a new video render job from a prompt, with optional reference images or a remix ID.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [prompt]
-              properties:
-                prompt:
-                  type: string
-                  description: The text prompt for video generation.
-                model:
-                  type: string
-                  description: Model to use (e.g. 'sora-1', 'sora-2-pro').
-                reference_images:
-                  type: array
-                  items:
-                    type: string
-                    format: uri
-                  description: URLs for reference images.
-                reference_video:
-                  type: string
-                  format: uri
-                  description: URL for a reference video.
-                remix_id:
-                  type: string
-                  description: Existing video ID to remix.
-      responses:
-        '200':
-          description: Video render job started
-
-    get:
-      operationId: videos_list
-      summary: List videos
-      description: Enumerate your videos with pagination for history, dashboards, or housekeeping.
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 20
-          description: Number of results to return.
-        - name: after
-          in: query
-          required: false
           schema:
             type: string
-          description: Cursor for pagination.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VectorStoreQueryRequest'
       responses:
         '200':
-          description: List of videos
+          description: Query response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorStoreQueryResponse'
+
+  /v1/videos:
+    get:
+      summary: List videos
+      operationId: videos_list
+      responses:
+        '200':
+          description: Video list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoList'
+    post:
+      summary: Create video
+      operationId: videos_create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoGenerationRequest'
+      responses:
+        '200':
+          description: Video created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoObject'
 
   /v1/videos/{video_id}:
     get:
-      operationId: videos_get_status
       summary: Get video status
-      description: Retrieve the current state of a video render job and monitor its progress.
+      operationId: videos_get_status
       parameters:
         - name: video_id
           in: path
@@ -468,12 +514,14 @@ paths:
             type: string
       responses:
         '200':
-          description: Video status/details
-
+          description: Video status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoObject'
     delete:
-      operationId: videos_delete
       summary: Delete video
-      description: Remove an individual video ID from OpenAI’s storage.
+      operationId: videos_delete
       parameters:
         - name: video_id
           in: path
@@ -481,14 +529,17 @@ paths:
           schema:
             type: string
       responses:
-        '204':
+        '200':
           description: Video deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
 
   /v1/videos/{video_id}/content:
     get:
+      summary: Download video
       operationId: videos_download
-      summary: Download video (MP4, GIF, MOV)
-      description: Fetch the finished MP4, GIF, or MOV video once the job is completed.
       parameters:
         - name: video_id
           in: path
@@ -497,26 +548,17 @@ paths:
             type: string
       responses:
         '200':
-          description: Video file stream
+          description: Video file
           content:
             video/mp4:
-              schema:
-                type: string
-                format: binary
-            video/quicktime:
-              schema:
-                type: string
-                format: binary
-            image/gif:
               schema:
                 type: string
                 format: binary
 
   /v1/videos/{video_id}/remix:
     post:
+      summary: Remix a video
       operationId: videos_remix
-      summary: Remix video
-      description: Start a remix job using an existing video ID.
       parameters:
         - name: video_id
           in: path
@@ -528,116 +570,222 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [prompt]
-              properties:
-                prompt:
-                  type: string
-                  description: Remix prompt.
-                reference_images:
-                  type: array
-                  items:
-                    type: string
-                    format: uri
-                  description: URLs for reference images.
-                reference_video:
-                  type: string
-                  format: uri
-                  description: Reference video URL.
+              $ref: '#/components/schemas/VideoRemixRequest'
       responses:
         '200':
-          description: Remix job started
+          description: Video remixed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoObject'
 
-/v1/attachments/upload:
-  post:
-    operationId: attachments_upload
-    summary: Upload an attachment
-    requestBody:
-      required: true
-      content:
-        multipart/form-data:
-          schema:
-            type: object
-            properties:
-              file:
-                type: string
-                format: binary
-    responses:
-      '200':
-        description: Attachment uploaded
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                status: { type: string }
-                sha256: { type: string }
-                chat_id: { type: string }
-
-/v1/attachments/{chat_id}/download:
-  get:
-    operationId: attachments_download
-    summary: Download an attachment by chat_id
-    parameters:
-      - name: chat_id
-        in: path
+  /v1/tools:
+    get:
+      summary: List tools
+      operationId: tools_list
+      responses:
+        '200':
+          description: List of tools
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolsList'
+    post:
+      summary: Register a tool
+      operationId: tools_register
+      requestBody:
         required: true
-        schema: { type: string }
-    responses:
-      '200':
-        description: Attachment binary download
-        content:
-          application/octet-stream:
-            schema:
-              type: string
-              format: binary
-
-/v1/attachments/list:
-  get:
-    operationId: attachments_list
-    summary: List recent attachments
-    parameters:
-      - in: query
-        name: limit
-        schema: { type: integer, default: 25, minimum: 1, maximum: 100 }
-        description: Maximum number of attachments to return.
-    responses:
-      '200':
-        description: List of attachments
         content:
           application/json:
             schema:
-              type: array
-              items:
-                type: object
-                properties:
-                  chat_id: { type: string }
-                  filename: { type: string }
-                  mimetype: { type: string }
-                  size: { type: integer }
-                  imported_at: { type: string }
-                  version: { type: integer }
-
-/v1/attachments/{chat_id}:
-  delete:
-    operationId: attachments_delete
-    summary: Delete attachment by chat_id
-    parameters:
-      - name: chat_id
-        in: path
-        required: true
-        schema: { type: string }
-    responses:
-      '200':
-        description: Attachment deleted
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                status: { type: string }
-                chat_id: { type: string }
-
+              $ref: '#/components/schemas/ToolRegistrationRequest'
+      responses:
+        '200':
+          description: Tool registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolObject'
 
 components:
-  schemas: {}
+  schemas:
+    # Minimal examples — expand as needed!
+    ChatCompletionRequest:
+      type: object
+      properties:
+        model: { type: string }
+        messages:
+          type: array
+          items: { type: object }
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string }
+        choices:
+          type: array
+          items: { type: object }
+
+    EmbeddingsRequest:
+      type: object
+      properties:
+        model: { type: string }
+        input: { type: array, items: { type: string } }
+    EmbeddingsResponse:
+      type: object
+      properties:
+        data: { type: array, items: { type: object } }
+
+    FileObject:
+      type: object
+      properties:
+        id: { type: string }
+        filename: { type: string }
+        purpose: { type: string }
+    FileList:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/FileObject' } }
+    DeleteResponse:
+      type: object
+      properties:
+        deleted: { type: boolean }
+
+    ImageGenerationRequest:
+      type: object
+      properties:
+        prompt: { type: string }
+        n: { type: integer }
+        size: { type: string }
+    ImageGenerationResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { type: object }
+
+    AudioSpeechRequest:
+      type: object
+      properties:
+        model: { type: string }
+        input: { type: string }
+    AudioTranscriptionResponse:
+      type: object
+      properties:
+        text: { type: string }
+        language: { type: string }
+
+    ModelList:
+      type: object
+      properties:
+        data: { type: array, items: { type: object } }
+
+    AssistantCreateRequest:
+      type: object
+      properties:
+        model: { type: string }
+        instructions: { type: string }
+        tools: { type: array, items: { type: object } }
+    AssistantObject:
+      type: object
+      properties:
+        id: { type: string }
+        model: { type: string }
+
+    AssistantAttachFileRequest:
+      type: object
+      properties:
+        file_id: { type: string }
+
+    ThreadCreateRequest:
+      type: object
+      properties:
+        messages: { type: array, items: { type: object } }
+    ThreadObject:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }
+
+    ThreadMessageRequest:
+      type: object
+      properties:
+        content: { type: string }
+        role: { type: string }
+    ThreadMessageObject:
+      type: object
+      properties:
+        id: { type: string }
+        content: { type: string }
+        role: { type: string }
+
+    ThreadRunRequest:
+      type: object
+      properties:
+        instructions: { type: string }
+    ThreadRunObject:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }
+
+    RunStepsList:
+      type: object
+      properties:
+        steps: { type: array, items: { type: object } }
+
+    VectorStoreList:
+      type: object
+      properties:
+        data: { type: array, items: { type: object } }
+    VectorStoreCreateRequest:
+      type: object
+      properties:
+        name: { type: string }
+    VectorStoreObject:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+    VectorStoreQueryRequest:
+      type: object
+      properties:
+        query: { type: string }
+    VectorStoreQueryResponse:
+      type: object
+      properties:
+        results: { type: array, items: { type: object } }
+
+    VideoList:
+      type: object
+      properties:
+        data: { type: array, items: { type: object } }
+    VideoGenerationRequest:
+      type: object
+      properties:
+        prompt: { type: string }
+    VideoObject:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }
+    VideoRemixRequest:
+      type: object
+      properties:
+        remix_prompt: { type: string }
+
+    ToolsList:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ToolObject' } }
+    ToolRegistrationRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+    ToolObject:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
