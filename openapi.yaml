@@ -1,11 +1,11 @@
 openapi: 3.1.1
 info:
   title: BIFL AI Relay API
-  version: 1.0.0
+  version: 1.0.1
   description: >
     Modern OpenAI-compatible relay API (Assistants v2, tool-calling, retrieval, agent workflows). Follows BIFL and OpenAI standards.
 servers:
-  - url: https://your-bifl-relay.example.com
+  - url: https://chatgpt-team-relay.onrender.com/v1
 
 components:
   schemas:
@@ -31,7 +31,20 @@ components:
       properties:
         type:
           type: string
-          enum: [function, retrieval, code_interpreter, file_search]
+          enum:
+            - function
+            - retrieval
+            - code_interpreter
+            - file_search
+            - web_search
+            - data_analysis
+            - image_generation
+            - video_generation
+            - audio_speech
+            - audio_transcription
+            - moderation
+            - file_upload
+            - custom
         function:
           $ref: '#/components/schemas/FunctionTool'
     FunctionTool:
@@ -231,16 +244,6 @@ paths:
         '200': { description: OK }
 
   /v1/assistants/{assistant_id}/files:
-    get:
-      summary: List assistant files
-      operationId: getAssistantFiles
-      parameters:
-        - in: path
-          name: assistant_id
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: OK }
     post:
       summary: Attach file to assistant
       operationId: attachAssistantFile
@@ -472,16 +475,6 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: OK }
-    delete:
-      summary: Delete video
-      operationId: deleteVideo
-      parameters:
-        - in: path
-          name: video_id
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: OK }
 
   /v1/videos/{video_id}/content:
     get:
@@ -523,7 +516,7 @@ paths:
         '200':
           description: OK
     post:
-      summary: Register a new tool (function, retrieval, code_interpreter, file_search)
+      summary: Register a new tool (function, retrieval, code_interpreter, file_search, etc)
       operationId: registerTool
       requestBody:
         content:
