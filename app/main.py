@@ -9,8 +9,7 @@ load_dotenv()
 from app.utils.error_handler import error_response
 
 from app.routes import (
-    chat, completions, files, models, openapi, assistants, tools,
-    audio, images, embeddings, moderations, threads, vector_stores, videos, batch, relay_status, responses
+    chat, completions, files, models, openapi, assistants, tools, attachments, audio, images, embeddings, moderations, threads, vector_stores, videos, batch, relay_status, responses
 )
 from app.api import passthrough_proxy
 
@@ -63,6 +62,7 @@ app.include_router(threads.router, prefix="/v1/threads")
 app.include_router(vector_stores.router, prefix="/v1/vector_stores")
 app.include_router(videos.router, prefix="/v1/videos")
 app.include_router(batch.router, prefix="/v1/batch")
+app.include_router(attachments.router, prefix="/v1/attachments")
 app.include_router(relay_status.router)
 app.include_router(responses.router)
 app.include_router(openapi.router)
