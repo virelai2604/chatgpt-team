@@ -10,7 +10,7 @@ from app.utils.error_handler import error_response
 
 from app.routes import (
     chat, completions, conversations, files, models, openapi, assistants, tools, attachments, audio, images, embeddings,
-    moderations, threads, vector_stores, videos, batch, relay_status, responses, 
+    moderations, threads, vector_stores, videos, batch, relay_status, responses, tools
 )
 from app.api import passthrough_proxy
 
