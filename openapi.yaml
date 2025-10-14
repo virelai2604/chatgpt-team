@@ -1,324 +1,117 @@
 openapi: 3.1.1
 info:
-  title: OpenAI Platform API (Minimal, Streaming, No Webhook)
+  title: OpenAI Platform Relay API
   version: "2025-10"
+  description: |
+    A minimal, streaming-compatible OpenAI-style API proxy that mirrors core OpenAI endpoints.
+    Includes unified `/responses` endpoint, tool registration, and extended developer ergonomics.
+  contact:
+    name: ChatGPT Team Relay
+    url: https://chatgpt-team-relay.onrender.com
+    email: support@team-relay.example.com
+
 servers:
   - url: https://chatgpt-team-relay.onrender.com
+    description: Primary Relay Server
 
-paths:
-  /v1/chat/completions:
-    post:
-      operationId: createChatCompletion
-      summary: Chat with model (stream/tools)
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ChatCompletionInput"
-      responses:
-        '200': { description: OK }
-        '400': { description: Bad input }
-        '401': { description: Unauthorized }
+tags:
+  - name: Chat
+    description: Chat and conversational model completions
+  - name: Responses
+    description: Unified endpoint for multimodal responses
+  - name: Embeddings
+    description: Text embeddings and similarity representations
+  - name: Images
+    description: Image generation (DALL·E)
+  - name: Audio
+    description: Audio transcription (Whisper) and speech (TTS)
+  - name: Video
+    description: Video generation (Sora)
+  - name: Files
+    description: File upload, listing, retrieval, and deletion
+  - name: Vector Stores
+    description: Vector database creation and query endpoints
+  - name: Models
+    description: Model discovery and management
+  - name: Tools
+    description: Custom tool registration and listing
 
-  /v1/responses:
-    post:
-      operationId: createResponse
-      summary: Unified conversational/tool endpoint (stream/tools)
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ResponsesInput"
-      responses:
-        '200': { description: OK }
-        '400': { description: Bad input }
-        '401': { description: Unauthorized }
-
-  /v1/embeddings:
-    post:
-      operationId: createEmbedding
-      summary: Text embeddings
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/EmbeddingsInput"
-      responses:
-        '200': { description: OK }
-        '400': { description: Bad input }
-
-  /v1/images/generations:
-    post:
-      operationId: generateImage
-      summary: Generate image (DALL·E)
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ImageGenerationInput"
-      responses:
-        '200': { description: OK }
-
-  /v1/audio/transcriptions:
-    post:
-      operationId: transcribeAudio
-      summary: Audio transcription (Whisper)
-      requestBody:
-        content:
-          multipart/form-data:
-            schema:
-              $ref: "#/components/schemas/AudioTranscriptionInput"
-      responses:
-        '200': { description: OK }
-
-  /v1/audio/speech:
-    post:
-      operationId: generateSpeech
-      summary: Text-to-speech (TTS-1)
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AudioSpeechInput"
-      responses:
-        '200': { description: OK }
-
-  /v1/videos:
-    post:
-      operationId: createVideo
-      summary: Video generation (Sora)
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/VideoCreationInput"
-      responses:
-        '200': { description: OK }
-
-  /v1/videos/{video_id}:
-    get:
-      operationId: retrieveVideo
-      summary: Retrieve a video job's metadata and status
-      parameters:
-        - in: path
-          name: video_id
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: The video job metadata
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id: { type: string }
-                  object: { type: string }
-                  model: { type: string }
-                  status: { type: string }
-                  created_at: { type: integer }
-                  completed_at: { type: integer }
-                  progress: { type: integer }
-                  error: { type: object }
-                  expires_at: { type: integer }
-                  size: { type: string }
-                  seconds: { type: string }
-                  remixed_from_video_id: { type: string }
-        '404': { description: Not found }
-
-  /v1/videos/{video_id}/remix:
-    post:
-      operationId: remixVideo
-      summary: Remix Sora video
-      parameters:
-        - in: path
-          name: video_id
-          required: true
-          schema: { type: string }
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/VideoRemixInput"
-      responses:
-        '200': { description: OK }
-
-  /v1/videos/{video_id}/content:
-    get:
-      operationId: downloadVideoContent
-      summary: Download video
-      parameters:
-        - in: path
-          name: video_id
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: OK }
-
-  /v1/files:
-    post:
-      operationId: uploadFile
-      summary: Upload file
-      requestBody:
-        content:
-          multipart/form-data:
-            schema:
-              $ref: "#/components/schemas/FileUploadInput"
-      responses:
-        '200': { description: OK }
-    get:
-      operationId: listFiles
-      summary: List files
-      responses:
-        '200': { description: OK }
-
-  /v1/files/{file_id}:
-    get:
-      operationId: getFile
-      summary: Get file
-      parameters:
-        - name: file_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: OK }
-    delete:
-      operationId: deleteFile
-      summary: Delete file
-      parameters:
-        - name: file_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: OK }
-
-  /v1/vector_stores:
-    post:
-      operationId: createVectorStore
-      summary: Create vector store (retrieval)
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/VectorStoreInput"
-      responses:
-        '200': { description: OK }
-    get:
-      operationId: listVectorStores
-      summary: List vector stores
-      responses:
-        '200': { description: OK }
-
-  /v1/vector_stores/{vector_store_id}/queries:
-    post:
-      operationId: queryVectorStore
-      summary: Query vector store
-      parameters:
-        - name: vector_store_id
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/VectorStoreQueryInput"
-      responses:
-        '200': { description: OK }
-
-  /v1/models:
-    get:
-      operationId: listModels
-      summary: List models
-      responses:
-        '200': { description: OK }
-
-  /v1/models/{model_id}:
-    get:
-      operationId: getModel
-      summary: Get model
-      parameters:
-        - name: model_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: OK }
-
-  /v1/tools:
-    get:
-      operationId: listTools
-      summary: List all registered tools (Assistants v2)
-      responses:
-        '200': { description: OK }
-        '401': { description: Unauthorized }
-    post:
-      operationId: registerTool
-      summary: Register a new tool (function, retrieval, code_interpreter, file_search, etc.)
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Tool"
-      responses:
-        '200': { description: OK }
-        '400': { description: Invalid input }
-        '401': { description: Unauthorized }
+security:
+  - BearerAuth: []
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
+    # ------------------------------------------
+    # Core Schemas
+    # ------------------------------------------
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          type: string
+          description: Message text or structured content
+
     ChatCompletionInput:
       type: object
       required: [model, messages]
       properties:
-        model:
-          type: string
-          description: The model to use (e.g., gpt-4o, gpt-5)
+        model: { type: string, description: "The model to use (e.g., gpt-4o, gpt-5)" }
         messages:
           type: array
-          description: List of message objects forming the conversation
-          items:
-            type: object
-            required: [role, content]
-            properties:
-              role:
-                type: string
-                enum: [system, user, assistant, tool]
-                description: Role of the message sender
-              content:
-                type: string
-                description: Message text or structured content
-        stream:
-          type: boolean
-          description: Whether to stream output tokens
+          items: { $ref: "#/components/schemas/ChatMessage" }
+        stream: { type: boolean, description: "Whether to stream output tokens" }
+        temperature: { type: number, description: "Sampling temperature (0–2)", default: 1.0 }
+        top_p: { type: number, description: "Nucleus sampling probability (0–1)", default: 1.0 }
+        max_tokens: { type: integer, description: "Maximum tokens to generate" }
         tools:
           type: array
+          items: { $ref: "#/components/schemas/Tool" }
+
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string }
+        created: { type: integer }
+        model: { type: string }
+        choices:
+          type: array
           items:
-            $ref: "#/components/schemas/Tool"
+            type: object
+            properties:
+              index: { type: integer }
+              message: { $ref: "#/components/schemas/ChatMessage" }
+              finish_reason: { type: string }
+        usage:
+          type: object
+          properties:
+            prompt_tokens: { type: integer }
+            completion_tokens: { type: integer }
+            total_tokens: { type: integer }
 
     ResponsesInput:
       type: object
       required: [model, input]
       properties:
-        model:
-          type: string
-          description: The model to use for generation
+        model: { type: string }
         input:
           oneOf:
             - type: string
             - type: array
-              items:
-                type: object
-                properties:
-                  role: { type: string }
-                  content: { type: string }
-          description: The prompt text or conversation array
+              items: { $ref: "#/components/schemas/ChatMessage" }
         tools:
           type: array
-          items:
-            $ref: "#/components/schemas/Tool"
+          items: { $ref: "#/components/schemas/Tool" }
         files:
           type: array
           items: { type: string }
@@ -376,6 +169,8 @@ components:
       properties:
         file: { type: string, format: binary }
         purpose: { type: string }
+        metadata: { type: object, additionalProperties: true }
+        tags: { type: array, items: { type: string } }
 
     VectorStoreInput:
       type: object
@@ -405,4 +200,258 @@ components:
             - browser
         function:
           type: object
-          description: For custom function tools, specify name, description, and parameters.
+          properties:
+            name: { type: string }
+            description: { type: string }
+            parameters: { type: object, additionalProperties: true }
+
+# ------------------------------------------
+# Paths
+# ------------------------------------------
+paths:
+  /v1/chat/completions:
+    post:
+      operationId: createChatCompletion
+      tags: [Chat]
+      summary: Chat with model (stream/tools)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChatCompletionInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatCompletionResponse" }
+
+  /v1/responses:
+    post:
+      operationId: createResponse
+      tags: [Responses]
+      summary: Unified conversational/tool endpoint (stream/tools)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResponsesInput" }
+      responses:
+        "200": { description: OK }
+
+  /v1/embeddings:
+    post:
+      operationId: createEmbedding
+      tags: [Embeddings]
+      summary: Text embeddings
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmbeddingsInput" }
+      responses:
+        "200": { description: OK }
+
+  /v1/images/generations:
+    post:
+      operationId: generateImage
+      tags: [Images]
+      summary: Generate image (DALL·E)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ImageGenerationInput" }
+      responses:
+        "200": { description: OK }
+
+  /v1/audio/transcriptions:
+    post:
+      operationId: transcribeAudio
+      tags: [Audio]
+      summary: Audio transcription (Whisper)
+      requestBody:
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/AudioTranscriptionInput" }
+      responses:
+        "200": { description: OK }
+
+  /v1/audio/speech:
+    post:
+      operationId: generateSpeech
+      tags: [Audio]
+      summary: Text-to-speech (TTS-1)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AudioSpeechInput" }
+      responses:
+        "200": { description: OK }
+
+  /v1/videos:
+    post:
+      operationId: createVideo
+      tags: [Video]
+      summary: Video generation (Sora)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VideoCreationInput" }
+      responses:
+        "200": { description: OK }
+
+  /v1/videos/{video_id}:
+    get:
+      operationId: retrieveVideo
+      tags: [Video]
+      summary: Retrieve a video job's metadata and status
+      parameters:
+        - in: path
+          name: video_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+
+  /v1/videos/{video_id}/remix:
+    post:
+      operationId: remixVideo
+      tags: [Video]
+      summary: Remix Sora video
+      parameters:
+        - in: path
+          name: video_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VideoRemixInput" }
+      responses:
+        "200": { description: OK }
+
+  /v1/files:
+    get:
+      operationId: listFiles
+      tags: [Files]
+      summary: List files
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: after
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+
+    post:
+      operationId: uploadFile
+      tags: [Files]
+      summary: Upload file
+      requestBody:
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/FileUploadInput" }
+      responses:
+        "200": { description: OK }
+
+  /v1/files/{file_id}:
+    get:
+      operationId: getFile
+      tags: [Files]
+      summary: Get file
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+
+    delete:
+      operationId: deleteFile
+      tags: [Files]
+      summary: Delete file
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+
+  /v1/vector_stores:
+    get:
+      operationId: listVectorStores
+      tags: [Vector Stores]
+      summary: List vector stores
+      responses:
+        "200": { description: OK }
+
+    post:
+      operationId: createVectorStore
+      tags: [Vector Stores]
+      summary: Create vector store (retrieval)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VectorStoreInput" }
+      responses:
+        "200": { description: OK }
+
+  /v1/vector_stores/{vector_store_id}/queries:
+    post:
+      operationId: queryVectorStore
+      tags: [Vector Stores]
+      summary: Query vector store
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VectorStoreQueryInput" }
+      responses:
+        "200": { description: OK }
+
+  /v1/models:
+    get:
+      operationId: listModels
+      tags: [Models]
+      summary: List models
+      responses:
+        "200": { description: OK }
+
+  /v1/models/{model_id}:
+    get:
+      operationId: getModel
+      tags: [Models]
+      summary: Get model
+      parameters:
+        - name: model_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+
+  /v1/tools:
+    get:
+      operationId: listTools
+      tags: [Tools]
+      summary: List all registered tools (Assistants v2)
+      responses:
+        "200": { description: OK }
+
+    post:
+      operationId: registerTool
+      tags: [Tools]
+      summary: Register a new tool (function, retrieval, code_interpreter, file_search, etc.)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Tool" }
+      responses:
+        "200": { description: OK }
