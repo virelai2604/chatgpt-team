@@ -203,6 +203,26 @@ paths:
       responses:
         '200': { description: OK }
 
+  /v1/tools:
+    get:
+      operationId: listTools
+      summary: List all registered tools (Assistants v2)
+      responses:
+        '200': { description: OK }
+        '401': { description: Unauthorized }
+    post:
+      operationId: registerTool
+      summary: Register a new tool (function, retrieval, code_interpreter, file_search, etc.)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Tool"
+      responses:
+        '200': { description: OK }
+        '400': { description: Invalid input }
+        '401': { description: Unauthorized }  
+
 components:
   schemas:
     ChatCompletionInput:
@@ -277,12 +297,21 @@ components:
       type: object
       properties:
         query: { type: string }
-
+    
     Tool:
       type: object
       required: [type]
       properties:
         type:
           type: string
-          enum: [file_search, retrieval, code_interpreter, web_search, image_generation, function]
-        function: { type: object }
+          enum:
+            - file_search
+            - retrieval
+            - code_interpreter
+            - web_search
+            - image_generation
+            - function
+            - browser  # (org/beta only; comment out unless private/internal use)
+        function:
+          type: object
+          description: For custom function tools, specify name, description, and parameters.
