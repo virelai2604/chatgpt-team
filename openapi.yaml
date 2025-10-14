@@ -3,7 +3,7 @@ info:
   title: OpenAI Platform API (Minimal, Streaming, No Webhook)
   version: "2025-10"
 servers:
-  - url: https://chatgpt-team-relay.onrender.com/v1
+  - url: https://chatgpt-team-relay.onrender.com/
 paths:
   /v1/chat/completions:
     post:
