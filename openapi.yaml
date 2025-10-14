@@ -115,7 +115,7 @@ paths:
                   expires_at: { type: integer }
                   size: { type: string }
                   seconds: { type: string }
-                  remixed_from_video_id: { type: string }
+                  remixed_from_video_id: { type: string }           
         '404':
           description: Not found
 
