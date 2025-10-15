@@ -19,7 +19,7 @@ ruff
 mypy
 rich
 fpdf
-pydub
+tiktoken
 
 pyyaml
 openapi-spec-validator

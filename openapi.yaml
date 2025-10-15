@@ -35,6 +35,8 @@ tags:
     description: Model discovery and management
   - name: Tools
     description: Custom tool registration and listing
+  - name: Tokens
+    description: Token counting and encoding utilities
 
 security:
   - BearerAuth: []
@@ -204,6 +206,32 @@ components:
             name: { type: string }
             description: { type: string }
             parameters: { type: object, additionalProperties: true }
+
+    # ------------------------------------------
+    # Token Counting Schema
+    # ------------------------------------------
+    TokenCountInput:
+      type: object
+      required: [model]
+      properties:
+        model:
+          type: string
+          description: The model name (e.g., gpt-4, gpt-4o, gpt-3.5-turbo)
+        text:
+          type: string
+          description: Raw text to count tokens for
+        messages:
+          type: array
+          description: Optional list of chat messages to count
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                description: Message role (system, user, assistant)
+              content:
+                type: string
+                description: Message content text
 
 # ------------------------------------------
 # Paths
@@ -455,3 +483,47 @@ paths:
             schema: { $ref: "#/components/schemas/Tool" }
       responses:
         "200": { description: OK }
+
+  /v1/tokens/count:
+    post:
+      operationId: countTokens
+      tags: [Tokens]
+      summary: Count tokens for a given text or chat message array (BIFL-grade)
+      description: |
+        Uses OpenAI's `tiktoken` tokenizer to count tokens for the specified model.
+        Supports raw text or structured chat messages. Matches OpenAI billing tokenization exactly.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenCountInput" }
+      responses:
+        "200":
+          description: Successful token count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  model:
+                    type: string
+                    example: gpt-4o
+                  total_tokens:
+                    type: integer
+                    example: 123
+        "500":
+          description: Internal error during tokenization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        example: token_count_error
+                      message:
+                        type: string
+                        example: Failed to count tokens
