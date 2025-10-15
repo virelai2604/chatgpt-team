@@ -10,7 +10,7 @@ from app.utils.error_handler import error_response
 
 from app.routes import (
     chat, completions, conversations, files, models, openapi, assistants, tools, attachments, audio, images, embeddings,
-    moderations, threads, vector_stores, videos, batch, relay_status, responses, tools
+    moderations, threads, vector_stores, videos, batch, relay_status, tiktoken, responses, tools
 )
 from app.api import passthrough_proxy
 
@@ -63,6 +63,7 @@ app.include_router(videos.router, prefix="/v1/videos")
 app.include_router(batch.router, prefix="/v1/batch")
 app.include_router(attachments.router, prefix="/v1/attachments")
 app.include_router(conversations.router, prefix="/v1/conversations")
+app.include_router(tiktoken.router)
 app.include_router(relay_status.router)
 app.include_router(responses.router)
 app.include_router(openapi.router)
