@@ -4,16 +4,10 @@ info:
   version: "2025-10-23"
   description: >
     OpenAI-compatible relay exposing the unified /v1/responses interface plus Files/Uploads,
-    Images, Audio, Vector Stores (assistants=v2 beta upstream), Models (list), and lightweight
-    health/status. Legacy/sunset endpoints are not included.
-
+    Images, Audio, Vector Stores, and Models (list). Legacy/sunset and UI-native routes removed.
 servers:
   - url: https://chatgpt-team-relay.onrender.com
-  - url: http://localhost:8000
-
 tags:
-  - name: Health
-  - name: Relay
   - name: Responses
   - name: Models
   - name: Files
@@ -23,89 +17,52 @@ tags:
   - name: Vector Stores
 
 paths:
-  /v1/health:
-    get:
-      tags: [Health]
-      summary: Liveness probe
-      operationId: getHealth
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Health"
-
-  /v1/relay/status:
-    get:
-      tags: [Relay]
-      summary: Relay status / diagnostics
-      operationId: getRelayStatus
-      responses:
-        "200":
-          description: Status payload
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GenericObject"
-
-  # === Unified Responses API (preferred) ===
+  # === RESPONSES (5) ===
   /v1/responses:
     post:
       tags: [Responses]
-      summary: Create a model response (text/JSON, optional tools, optional streaming)
-      description: >
-        Unified endpoint for chat/completions/function-calls; supports SSE/NDJSON streaming.
       operationId: createResponse
+      summary: Create a model response (text/JSON; optional tools; optional streaming)
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/GenericObject"
+              $ref: '#/components/schemas/ResponseRequest'
       responses:
         "200":
-          description: Non-stream JSON result or streaming events (SSE/NDJSON).
+          description: Non-stream response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
-            text/event-stream:
-              schema:
-                type: string
-                description: SSE stream
-            application/x-ndjson:
-              schema:
-                type: string
-                description: NDJSON stream
+                $ref: '#/components/schemas/ResponseObject'
+        "202":
+          description: Stream begun (SSE/NDJSON). Proxy streams directly.
 
   /v1/responses/{response_id}:
     get:
       tags: [Responses]
-      summary: Get a model response by id
       operationId: getResponse
+      summary: Get a response by id
       parameters:
-        - in: path
-          name: response_id
+        - name: response_id
+          in: path
           required: true
           schema: { type: string }
       responses:
         "200":
-          description: Response object or stream
+          description: Response object (or stream if requested upstream)
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
-            text/event-stream:
-              schema:
-                type: string
+                $ref: '#/components/schemas/ResponseObject'
     delete:
       tags: [Responses]
-      summary: Delete a model response by id
       operationId: deleteResponse
+      summary: Delete a response by id
       parameters:
-        - in: path
-          name: response_id
+        - name: response_id
+          in: path
           required: true
           schema: { type: string }
       responses:
@@ -114,16 +71,16 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/GenericObject'
 
   /v1/responses/{response_id}/cancel:
     post:
       tags: [Responses]
-      summary: Cancel a background response
       operationId: cancelResponse
+      summary: Cancel a background response
       parameters:
-        - in: path
-          name: response_id
+        - name: response_id
+          in: path
           required: true
           schema: { type: string }
       responses:
@@ -132,39 +89,58 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/GenericObject'
 
-  # === Models (list only) ===
+  /v1/responses/{response_id}/input_items:
+    get:
+      tags: [Responses]
+      operationId: listResponseInputItems
+      summary: List input items associated with a response
+      parameters:
+        - name: response_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Array of input items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/GenericObject' }
+
+  # === MODELS (1) ===
   /v1/models:
     get:
       tags: [Models]
-      summary: List available models
       operationId: listModels
+      summary: List available models
       responses:
         "200":
           description: Model list
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/ModelList'
 
-  # === Files & Uploads ===
+  # === FILES (5) ===
   /v1/files:
     get:
       tags: [Files]
-      summary: List files
       operationId: listFiles
+      summary: List files
       responses:
         "200":
           description: Files
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/FileList'
     post:
       tags: [Files]
-      summary: Upload a file (single-part)
       operationId: createFile
+      summary: Upload a file (single-part)
       requestBody:
         required: true
         content:
@@ -177,23 +153,23 @@ paths:
                   format: binary
                 purpose:
                   type: string
-              additionalProperties: true
+              required: [file, purpose]
       responses:
         "200":
           description: File created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/FileObject'
 
   /v1/files/{file_id}:
     get:
       tags: [Files]
-      summary: Retrieve file metadata
       operationId: getFile
+      summary: Retrieve file metadata
       parameters:
-        - in: path
-          name: file_id
+        - name: file_id
+          in: path
           required: true
           schema: { type: string }
       responses:
@@ -202,14 +178,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/FileObject'
     delete:
       tags: [Files]
-      summary: Delete a file
       operationId: deleteFile
+      summary: Delete a file
       parameters:
-        - in: path
-          name: file_id
+        - name: file_id
+          in: path
           required: true
           schema: { type: string }
       responses:
@@ -218,16 +194,16 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/GenericObject'
 
   /v1/files/{file_id}/content:
     get:
       tags: [Files]
-      summary: Download file content
       operationId: getFileContent
+      summary: Download file content
       parameters:
-        - in: path
-          name: file_id
+        - name: file_id
+          in: path
           required: true
           schema: { type: string }
       responses:
@@ -239,34 +215,39 @@ paths:
                 type: string
                 format: binary
 
-  # New multi-part upload flow
+  # === UPLOADS (3) ===
   /v1/uploads:
     post:
       tags: [Uploads]
-      summary: Create an upload (multipart session)
       operationId: createUpload
+      summary: Create a multipart upload session
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/GenericObject"
+              type: object
+              properties:
+                filename: { type: string }
+                purpose: { type: string }
+                mime_type: { type: string }
+              required: [filename, purpose]
       responses:
         "200":
           description: Upload created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/UploadObject'
 
   /v1/uploads/{upload_id}/parts:
     post:
       tags: [Uploads]
-      summary: Upload a part
       operationId: uploadPart
+      summary: Upload a part
       parameters:
-        - in: path
-          name: upload_id
+        - name: upload_id
+          in: path
           required: true
           schema: { type: string }
       requestBody:
@@ -282,181 +263,140 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/UploadPartObject'
 
   /v1/uploads/{upload_id}/complete:
     post:
       tags: [Uploads]
-      summary: Complete the upload
       operationId: completeUpload
+      summary: Complete the upload
       parameters:
-        - in: path
-          name: upload_id
+        - name: upload_id
+          in: path
           required: true
           schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadCompleteRequest'
       responses:
         "200":
           description: Upload completed
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/FileObject'
 
-  # === Images ===
+  # === IMAGES (3) ===
   /v1/images/generations:
     post:
       tags: [Images]
+      operationId: createImage
       summary: Generate an image
-      operationId: createImageGeneration
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                model: { type: string }
-                prompt: { type: string }
-                size: { type: string }
-              additionalProperties: true
+              $ref: '#/components/schemas/ImageGenerationRequest'
       responses:
         "200":
           description: Image generation result
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/ImageResult'
 
   /v1/images/edits:
     post:
       tags: [Images]
+      operationId: editImage
       summary: Edit an image
-      operationId: createImageEdit
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
-              type: object
-              properties:
-                image:
-                  type: string
-                  format: binary
-                mask:
-                  type: string
-                  format: binary
-                prompt:
-                  type: string
-              additionalProperties: true
+              $ref: '#/components/schemas/ImageEditRequest'
       responses:
         "200":
           description: Image edit result
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/ImageResult'
 
   /v1/images/variations:
     post:
       tags: [Images]
-      summary: Create image variations
       operationId: createImageVariation
+      summary: Create image variations
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
-              type: object
-              properties:
-                image:
-                  type: string
-                  format: binary
-                n:
-                  type: integer
-                size:
-                  type: string
-              additionalProperties: true
+              $ref: '#/components/schemas/ImageVariationRequest'
       responses:
         "200":
           description: Variation result
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/ImageResult'
 
-  # === Audio ===
+  # === AUDIO (3) ===
   /v1/audio/transcriptions:
     post:
       tags: [Audio]
-      summary: Speech-to-text transcription
       operationId: createTranscription
+      summary: Speech-to-text transcription
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-                model:
-                  type: string
-                language:
-                  type: string
-              additionalProperties: true
+              $ref: '#/components/schemas/AudioTranscriptionRequest'
       responses:
         "200":
           description: Transcription
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/GenericObject'
 
   /v1/audio/translations:
     post:
       tags: [Audio]
-      summary: Speech-to-text translation
       operationId: createTranslation
+      summary: Speech-to-text translation
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-                model:
-                  type: string
-                target_language:
-                  type: string
-              additionalProperties: true
+              $ref: '#/components/schemas/AudioTranslationRequest'
       responses:
         "200":
           description: Translation
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/GenericObject'
 
   /v1/audio/speech:
     post:
       tags: [Audio]
-      summary: Text-to-speech
       operationId: createSpeech
+      summary: Text-to-speech
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                model: { type: string }
-                voice: { type: string }
-                input: { type: string }
-              additionalProperties: true
+              $ref: '#/components/schemas/AudioSpeechRequest'
       responses:
         "200":
           description: Audio stream or JSON
@@ -467,47 +407,49 @@ paths:
                 format: binary
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/GenericObject'
 
-  # === Vector Stores (assistants=v2 upstream) ===
+  # === VECTOR STORES (10) ===
   /v1/vector_stores:
     get:
       tags: [Vector Stores]
-      summary: List vector stores
       operationId: listVectorStores
+      summary: List vector stores
       responses:
         "200":
           description: Vector store list
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/VectorStoreList'
     post:
       tags: [Vector Stores]
-      summary: Create vector store
       operationId: createVectorStore
+      summary: Create vector store
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/GenericObject"
+              type: object
+              properties: {}
+              additionalProperties: true
       responses:
         "200":
           description: Created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/VectorStore'
 
   /v1/vector_stores/{vector_store_id}:
     get:
       tags: [Vector Stores]
-      summary: Retrieve vector store
       operationId: getVectorStore
+      summary: Retrieve vector store
       parameters:
-        - in: path
-          name: vector_store_id
+        - name: vector_store_id
+          in: path
           required: true
           schema: { type: string }
       responses:
@@ -516,14 +458,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/VectorStore'
     delete:
       tags: [Vector Stores]
-      summary: Delete vector store
       operationId: deleteVectorStore
+      summary: Delete vector store
       parameters:
-        - in: path
-          name: vector_store_id
+        - name: vector_store_id
+          in: path
           required: true
           schema: { type: string }
       responses:
@@ -532,16 +474,16 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/GenericObject'
 
   /v1/vector_stores/{vector_store_id}/files:
     get:
       tags: [Vector Stores]
-      summary: List files in a vector store
       operationId: listVectorStoreFiles
+      summary: List files in a vector store
       parameters:
-        - in: path
-          name: vector_store_id
+        - name: vector_store_id
+          in: path
           required: true
           schema: { type: string }
       responses:
@@ -550,14 +492,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/VectorStoreFileList'
     post:
       tags: [Vector Stores]
-      summary: Add files to a vector store
       operationId: addVectorStoreFiles
+      summary: Add files to a vector store
       parameters:
-        - in: path
-          name: vector_store_id
+        - name: vector_store_id
+          in: path
           required: true
           schema: { type: string }
       requestBody:
@@ -565,27 +507,29 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/GenericObject"
+              type: object
+              properties: {}
+              additionalProperties: true
       responses:
         "200":
           description: Accepted
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/GenericObject'
 
   /v1/vector_stores/{vector_store_id}/files/{file_id}:
     delete:
       tags: [Vector Stores]
-      summary: Remove a file from a vector store
       operationId: deleteVectorStoreFile
+      summary: Remove a file from a vector store
       parameters:
-        - in: path
-          name: vector_store_id
+        - name: vector_store_id
+          in: path
           required: true
           schema: { type: string }
-        - in: path
-          name: file_id
+        - name: file_id
+          in: path
           required: true
           schema: { type: string }
       responses:
@@ -594,21 +538,90 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GenericObject"
+                $ref: '#/components/schemas/GenericObject'
+
+  /v1/vector_stores/{vector_store_id}/file_batches:
+    post:
+      tags: [Vector Stores]
+      operationId: createVectorStoreFileBatch
+      summary: Create a file batch
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VectorStoreFileBatchCreateRequest'
+      responses:
+        "200":
+          description: Batch created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorStoreFileBatch'
+
+  /v1/vector_stores/{vector_store_id}/file_batches/{batch_id}:
+    get:
+      tags: [Vector Stores]
+      operationId: getVectorStoreFileBatch
+      summary: Get a file batch
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: batch_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Batch detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorStoreFileBatch'
+
+  /v1/vector_stores/{vector_store_id}/file_batches/{batch_id}/files/{file_id}:
+    delete:
+      tags: [Vector Stores]
+      operationId: deleteVectorStoreBatchFile
+      summary: Remove a file from a batch
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: batch_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObject'
 
 components:
   schemas:
+    # Generic helpers
     GenericObject:
       type: object
+      description: Arbitrary JSON object
       properties: {}
       additionalProperties: true
-    Health:
-      type: object
-      required: [status]
-      properties:
-        status:
-          type: string
-    Error:
+
+    ErrorResponse:
       type: object
       properties:
         error:
@@ -616,9 +629,311 @@ components:
           properties:
             type: { type: string }
             message: { type: string }
-            detail:
-              $ref: "#/components/schemas/GenericObject"
-          additionalProperties: true
-      additionalProperties: false
+            detail: { $ref: '#/components/schemas/GenericObject' }
+          required: [type, message]
+
+    # Responses API
+    TextConfig:
+      type: object
+      properties:
+        format: { type: string, description: "e.g., 'text', 'json_object' (Structured Outputs)" }
+        verbosity: { type: string }
+      additionalProperties: true
+
+    FunctionTool:
+      type: object
+      required: [type, function]
+      properties:
+        type:
+          type: string
+          enum: [function]
+        function:
+          type: object
+          required: [name]
+          properties:
+            name: { type: string }
+            description: { type: string }
+            parameters:
+              type: object
+              description: "JSON Schema for args"
+              properties: {}
+              additionalProperties: true
+
+    BuiltInTool:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [code_interpreter, file_search, web_search, image_generation, retrieval, browser]
+        config:
+          $ref: '#/components/schemas/GenericObject'
+
+    Tool:
+      description: "Function tool or built-in tool"
+      oneOf:
+        - $ref: '#/components/schemas/FunctionTool'
+        - $ref: '#/components/schemas/BuiltInTool'
+
+    ResponseRequest:
+      type: object
+      required: [model]
+      properties:
+        model: { type: string, example: "gpt-4.1" }
+        input:
+          oneOf:
+            - { type: string }
+            - { type: array, items: { $ref: '#/components/schemas/GenericObject' } }
+        instructions: { type: string }
+        tools:
+          type: array
+          items: { $ref: '#/components/schemas/Tool' }
+        tool_choice:
+          oneOf:
+            - { type: string }
+            - { $ref: '#/components/schemas/GenericObject' }
+        text: { $ref: '#/components/schemas/TextConfig' }
+        temperature: { type: number, default: 1 }
+        top_p: { type: number, default: 1 }
+        top_logprobs: { type: integer, default: 0 }
+        truncation:
+          type: string
+          enum: [auto, disabled]
+          default: disabled
+        stream: { type: boolean, default: false }
+        stream_options: { $ref: '#/components/schemas/GenericObject' }
+        include:
+          type: array
+          items: { type: string }
+        previous_response_id: { type: string }
+        conversation:
+          oneOf:
+            - { type: string }
+            - { $ref: '#/components/schemas/GenericObject' }
+        parallel_tool_calls: { type: boolean, default: true }
+        max_output_tokens: { type: integer }
+        max_tool_calls: { type: integer }
+        reasoning: { $ref: '#/components/schemas/GenericObject' }
+        safety_identifier: { type: string }
+        service_tier:
+          type: string
+          enum: [auto, default, flex, priority]
+          default: auto
+        store: { type: boolean, default: true }
+        prompt_cache_key: { type: string }
+        metadata: { $ref: '#/components/schemas/GenericObject' }
+
+    ResponseMessage:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, example: "message" }
+        role: { type: string, example: "assistant" }
+        status: { type: string }
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/GenericObject' }
+
+    ResponseObject:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string, example: "response" }
+        created_at: { type: integer }
+        status: { type: string }
+        model: { type: string }
+        output:
+          type: array
+          items:
+            anyOf:
+              - $ref: '#/components/schemas/ResponseMessage'
+              - { $ref: '#/components/schemas/GenericObject' }
+        usage: { $ref: '#/components/schemas/GenericObject' }
+        error: { $ref: '#/components/schemas/GenericObject' }
+      additionalProperties: true
+
+    # Models
+    Model:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string, example: "model" }
+        created: { type: integer }
+        owned_by: { type: string }
+      additionalProperties: true
+
+    ModelList:
+      type: object
+      properties:
+        object: { type: string, example: "list" }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Model' }
+
+    # Files / Uploads
+    FileObject:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string, example: "file" }
+        filename: { type: string }
+        bytes: { type: integer }
+        created_at: { type: integer }
+        purpose: { type: string }
+        status: { type: string }
+      additionalProperties: true
+
+    FileList:
+      type: object
+      properties:
+        object: { type: string, example: "list" }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/FileObject' }
+
+    UploadObject:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string, example: "upload" }
+        status: { type: string }
+      additionalProperties: true
+
+    UploadPartObject:
+      type: object
+      properties:
+        id: { type: string }
+        etag: { type: string }
+      additionalProperties: true
+
+    UploadCompleteRequest:
+      type: object
+      properties:
+        part_ids:
+          type: array
+          items: { type: string }
+      additionalProperties: true
+
+    # Images
+    ImageGenerationRequest:
+      type: object
+      required: [model, prompt]
+      properties:
+        model: { type: string }
+        prompt: { type: string }
+        size: { type: string, example: "1024x1024" }
+      additionalProperties: true
+
+    ImageEditRequest:
+      type: object
+      properties:
+        image: { type: string, format: binary }
+        mask: { type: string, format: binary }
+        prompt: { type: string }
+      required: [image, prompt]
+      additionalProperties: true
+
+    ImageVariationRequest:
+      type: object
+      properties:
+        image: { type: string, format: binary }
+        n: { type: integer, minimum: 1, default: 1 }
+        size: { type: string }
+      required: [image]
+      additionalProperties: true
+
+    ImageResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              url: { type: string }
+              b64_json: { type: string }
+            additionalProperties: true
+      additionalProperties: true
+
+    # Audio
+    AudioTranscriptionRequest:
+      type: object
+      properties:
+        file: { type: string, format: binary }
+        model: { type: string }
+        prompt: { type: string }
+        temperature: { type: number }
+      required: [file, model]
+      additionalProperties: true
+
+    AudioTranslationRequest:
+      type: object
+      properties:
+        file: { type: string, format: binary }
+        model: { type: string }
+      required: [file, model]
+      additionalProperties: true
+
+    AudioSpeechRequest:
+      type: object
+      properties:
+        model: { type: string }
+        input: { type: string }
+        voice: { type: string }
+        format: { type: string }
+      required: [model, input]
+      additionalProperties: true
+
+    # Vector Stores
+    VectorStore:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string, example: "vector_store" }
+        name: { type: string }
+        status: { type: string }
+      additionalProperties: true
+
+    VectorStoreList:
+      type: object
+      properties:
+        object: { type: string, example: "list" }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/VectorStore' }
+
+    VectorStoreFile:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string, example: "vector_store.file" }
+        file_id: { type: string }
+        status: { type: string }
+      additionalProperties: true
+
+    VectorStoreFileList:
+      type: object
+      properties:
+        object: { type: string, example: "list" }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/VectorStoreFile' }
+
+    VectorStoreFileBatch:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string, example: "vector_store.file_batch" }
+        status: { type: string }
+      additionalProperties: true
+
+    VectorStoreFileBatchCreateRequest:
+      type: object
+      properties:
+        file_ids:
+          type: array
+          items: { type: string }
+      required: [file_ids]
+      additionalProperties: true
 
 security: []
