@@ -4,9 +4,7 @@ C:.
 |   .env
 |   .gitignore
 |   all_tools.json
-|   chatgpt-team.zip
 |   client.py
-|   gdrive.yaml
 |   openapi.yaml
 |   project-tree.md
 |   README.md
@@ -9686,9 +9684,6 @@ C:.
 |           tqdm.exe
 |           uvicorn.exe
 |           
-+---.well-known
-|       ai-plugin.json
-|       
 +---app
 |   |   main.py
 |   |   __init__.py
@@ -9712,6 +9707,7 @@ C:.
 |   |   |   chat.py
 |   |   |   completions.py
 |   |   |   conversations.py
+|   |   |   core.py
 |   |   |   embeddings.py
 |   |   |   files.py
 |   |   |   images.py
@@ -9722,11 +9718,16 @@ C:.
 |   |   |   responses.py
 |   |   |   threads.py
 |   |   |   tiktoken.py
-|   |   |   tools.py
+|   |   |   usage.py
 |   |   |   vector_stores.py
 |   |   |   videos.py
 |   |   |   __init__.py
 |   |   |   
+|   |   +---services
+|   |   |       tool_registry.py
+|   |   |       tool_router.py
+|   |   |       __init__.py
+|   |   |       
 |   |   \---__pycache__
 |   |           assistants.cpython-313.pyc
 |   |           audio.cpython-313.pyc
@@ -9769,6 +9770,7 @@ C:.
 |           __init__.py
 |           
 +---Downloads
+|   |   20251011_2355_New Video_simple_compose_01k7a34m4zf23tjfwc82bqdc7t.mp4
 |   |   image_1760442301_False.png
 |   |   video_68ee35778a8481918315005f70d6910504b794058e56c65c_sora-2_original.mp4
 |   |   video_68ef00e2908c81919d8731ec3074be9508c17ea8b46cc00a_sora2pro_trailer.mp4
@@ -9802,6 +9804,13 @@ C:.
 |       sample.txt
 |       test_upload.jsonl
 |       
++---Static
+|   |   __init__.py
+|   |   
+|   \---.well-known
+|           ai-plugin.json
+|           __init__.py
+|           
 \---__pycache__
         bifl_test.cpython-313-pytest-8.4.2.pyc
         helper.cpython-313.pyc

@@ -1,3 +1,4 @@
+# app/api/forward.py
 import os
 from fastapi import Request
 from fastapi.responses import StreamingResponse, Response, JSONResponse
@@ -12,14 +13,10 @@ OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
 
 def is_beta_assistants_endpoint(endpoint: str) -> bool:
     """
-    Returns True if endpoint needs v2 assistants header
+    BIFL v2.1: Restrict the Assistants v2 beta header strictly to vector_stores,
+    since tools/assistants/threads are blocked or not exposed.
     """
-    return (
-        endpoint.startswith("/v1/assistants") or
-        endpoint.startswith("/v1/threads") or
-        endpoint.startswith("/v1/vector_stores") or
-        endpoint.startswith("/v1/tools")
-    )
+    return endpoint.startswith("/v1/vector_stores")
 
 async def forward_openai(request: Request, endpoint: str):
     """
@@ -38,7 +35,7 @@ async def forward_openai(request: Request, endpoint: str):
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
 
-    # BIFL v2: Add v2 beta header for eligible endpoints
+    # BIFL v2.1 beta header policy
     if is_beta_assistants_endpoint(endpoint):
         headers["OpenAI-Beta"] = "assistants=v2"
 
@@ -61,7 +58,7 @@ async def forward_openai(request: Request, endpoint: str):
                     headers=headers,
                     content=body
                 ) as resp:
-                    # Error? Relay as non-stream for readable error
+                    # If upstream error and not true SSE, return buffered body for readability
                     if resp.status_code >= 400 and not resp.headers.get("content-type", "").startswith("text/event-stream"):
                         content = await resp.aread()
                         return Response(
@@ -70,6 +67,7 @@ async def forward_openai(request: Request, endpoint: str):
                             headers=dict(resp.headers),
                             media_type=resp.headers.get("content-type")
                         )
+
                     async def streamer():
                         try:
                             async for chunk in resp.aiter_bytes():
@@ -79,6 +77,7 @@ async def forward_openai(request: Request, endpoint: str):
                         except Exception as ex:
                             print("Error streaming:", ex)
                             return
+
                     return StreamingResponse(
                         streamer(),
                         status_code=resp.status_code,

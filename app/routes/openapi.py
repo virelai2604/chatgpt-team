@@ -1,15 +1,18 @@
 # app/routes/openapi.py
-
-from fastapi import APIRouter
-from fastapi.responses import FileResponse
 import os
+from fastapi import APIRouter, Response, Request
 
 router = APIRouter()
 
 @router.get("/openapi.yaml")
-async def get_openapi_yaml():
+async def serve_openapi_yaml(request: Request):
     """
-    Serve the OpenAPI spec file.
+    Serve the OpenAPI 3.1.0 document as text/yaml.
+    Looks for ./openapi.yaml at project root.
     """
-    openapi_path = os.path.join(os.path.dirname(__file__), "../../openapi.yaml")
-    return FileResponse(openapi_path, media_type="text/yaml")
+    path = os.path.abspath(os.path.join(os.getcwd(), "openapi.yaml"))
+    if not os.path.isfile(path):
+        return Response(status_code=404, content="openapi.yaml not found", media_type="text/plain")
+    with open(path, "r", encoding="utf-8") as f:
+        yaml_str = f.read()
+    return Response(content=yaml_str, media_type="application/yaml")

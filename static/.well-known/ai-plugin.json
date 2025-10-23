@@ -1,0 +1,16 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "ChatGPT Team Relay",
+  "name_for_model": "chatgpt_team_relay",
+  "description_for_human": "OpenAI-compatible relay exposing /v1/responses, Files, Images, Audio, Vector Stores, Models and Usage.",
+  "description_for_model": "Relay OpenAI API calls with a BIFL v2.1 surface: /v1/responses (with optional local function tools for non-stream), Files/Uploads, Images, Audio, Vector Stores (assistants=v2 beta upstream), Models (list), and Organization Usage. Streaming passthrough (SSE/NDJSON) is supported.",
+  "auth": { "type": "none" },
+  "api": {
+    "type": "openapi",
+    "url": "https://chatgpt-team-relay.onrender.com/openapi.yaml",
+    "is_user_authenticated": false
+  },
+  "logo_url": "https://chatgpt-team-relay.onrender.com/logo.png",
+  "contact_email": "support@example.com",
+  "legal_info_url": "https://chatgpt-team-relay.onrender.com/legal"
+}
