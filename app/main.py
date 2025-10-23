@@ -1,75 +1,106 @@
-from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
-from dotenv import load_dotenv
-import traceback
+# app/main.py
+from __future__ import annotations
 
-# Load environment variables
+import os
+import traceback
+from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+# Load env early
 load_dotenv()
 
+# --- Utilities (project-local) ---
 from app.utils.error_handler import error_response
-
-from app.routes import (
-    chat, completions, conversations, files, models, openapi, assistants, tools, attachments, audio, images, embeddings,
-    moderations, threads, vector_stores, videos, batch, relay_status, tiktoken, responses, tools
-)
-from app.api import passthrough_proxy
-
 from app.utils.db_logger import init_db
-from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="OpenAI Relay", version="1.0.0")
+# --- Routers (BIFL surface) ---
+# NOTE: these routers define absolute paths (e.g., /v1/responses) or are mounted with a prefix below.
+from app.routes import (
+    responses,         # /v1/responses  (unified)
+    files,             # /v1/files      (mounted with prefix)
+    audio,             # /v1/audio      (mounted with prefix)
+    images,            # /v1/images     (mounted with prefix)
+    vector_stores,     # /v1/vector_stores (mounted with prefix)
+    models,            # /v1/models     (mounted with prefix)
+    openapi,           # /openapi.yaml and helpers
+    relay_status,      # /v1/relay/status or similar
+    usage              # organization usage endpoints (mounted under /v1/organization/usage/*)
+)
 
-# === CORS Middleware for plugin/frontend/browser use ===
+# Catch-all passthrough (must be last)
+from app.api import passthrough_proxy  # blocks legacy endpoints & forwards others. :contentReference[oaicite:3]{index=3}
+
+app = FastAPI(title="OpenAI Relay", version="2025.10.23")
+
+# --- CORS (relax in dev; restrict in prod) ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For dev, allow all. Restrict in prod!
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# --- Startup: ensure DB tables exist ---
 @app.on_event("startup")
-def startup_event():
-    """Ensure all database tables exist before serving requests (BIFL)."""
+def _startup() -> None:
     init_db()
 
+# --- Static mounts for plugin + assets ---
+def _mount_static(app: FastAPI) -> None:
+    """
+    Serve /.well-known/ai-plugin.json and other static assets.
+    Supports either 'static' or 'Static' directory names.
+    """
+    for base in ("static", "Static"):
+        well_known_dir = os.path.join(base, ".well-known")
+        if os.path.isdir(well_known_dir):
+            app.mount("/.well-known", StaticFiles(directory=well_known_dir), name="well_known")
+            break
+
+    # Optional general static (logo.png, legal, etc.)
+    for base in ("static", "Static"):
+        if os.path.isdir(base):
+            app.mount("/static", StaticFiles(directory=base), name="static")
+            break
+
+_mount_static(app)
+
+# --- Health and Root ---
 @app.get("/v1/health")
 async def health():
     return {"status": "ok"}
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "detail": "ChatGPT relay is running."}
+    return {"status": "ok", "detail": "ChatGPT Team Relay is running."}
 
+# --- Global error handler (consistent JSON) ---
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    tb = traceback.format_exc()
-    print(f"[ERROR] {request.method} {request.url}\n{tb}")
+    print(f"[ERROR] {request.method} {request.url}\n{traceback.format_exc()}")
     return error_response("internal_server_error", str(exc), status_code=500)
 
-# === Register all routers ===
-app.include_router(chat.router, prefix="/v1/chat")
-app.include_router(completions.router, prefix="/v1/completions")
-app.include_router(models.router, prefix="/v1/models")
-app.include_router(files.router, prefix="/v1/files")
-app.include_router(assistants.router, prefix="/v1/assistants")
-app.include_router(tools.router, prefix="/v1/tools")
-app.include_router(audio.router, prefix="/v1/audio")
-app.include_router(images.router, prefix="/v1/images")
-app.include_router(embeddings.router, prefix="/v1/embeddings")
-app.include_router(moderations.router, prefix="/v1/moderations")
-app.include_router(threads.router, prefix="/v1/threads")
-app.include_router(vector_stores.router, prefix="/v1/vector_stores")
-app.include_router(videos.router, prefix="/v1/videos")
-app.include_router(batch.router, prefix="/v1/batch")
-app.include_router(attachments.router, prefix="/v1/attachments")
-app.include_router(conversations.router, prefix="/v1/conversations")
-app.include_router(tiktoken.router)
+# --- First-class routers (specific routes first) ---
+# Unified responses
+app.include_router(responses.router)  # /v1/responses etc. (non-stream tool loop; stream passthrough) 
+
+# Resource families (mounted with prefixes)
+app.include_router(files.router,         prefix="/v1/files")           # list/get/delete/content, uploads, etc.
+app.include_router(audio.router,         prefix="/v1/audio")           # transcriptions/translations/speech
+app.include_router(images.router,        prefix="/v1/images")          # generations/edits/variations
+app.include_router(vector_stores.router, prefix="/v1/vector_stores")   # vector store + batch/file ops
+app.include_router(models.router,        prefix="/v1/models")          # model list
+
+# Organization Usage (enterprise metrics)
+# Exposes: /v1/organization/usage/images, /audio_transcriptions, /code_interpreter_sessions :contentReference[oaicite:5]{index=5}
+app.include_router(usage.router, prefix="/v1/organization/usage")
+
+# Relay status + OpenAPI surface
 app.include_router(relay_status.router)
-app.include_router(responses.router)
 app.include_router(openapi.router)
 
-# === Passthrough proxy registered LAST ===
-app.include_router(passthrough_proxy.router)  # <- Catches all unmatched /v1/* requests
-
-# Static files (e.g. for .well-known/ai-plugin.json)
-app.mount("/.well-known", StaticFiles(directory=".well-known"), name="well-known")
+# --- Catch-all passthrough (MUST be last) ---
+# Deny-lists legacy routes and proxies the rest to OpenAI (SSE/NDJSON safe). :contentReference[oaicite:6]{index=6}
+app.include_router(passthrough_proxy.router)
