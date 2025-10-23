@@ -6,13 +6,21 @@ router = APIRouter()
 
 @router.get("/openapi.yaml")
 async def serve_openapi_yaml(request: Request):
-    """
-    Serve the OpenAPI 3.1.0 document as text/yaml.
-    Looks for ./openapi.yaml at project root.
-    """
     path = os.path.abspath(os.path.join(os.getcwd(), "openapi.yaml"))
     if not os.path.isfile(path):
         return Response(status_code=404, content="openapi.yaml not found", media_type="text/plain")
     with open(path, "r", encoding="utf-8") as f:
-        yaml_str = f.read()
-    return Response(content=yaml_str, media_type="application/yaml")
+        return Response(content=f.read(), media_type="application/yaml")
+
+@router.get("/.well-known/ai-plugin.json")
+async def serve_ai_plugin(request: Request):
+    # Try static/.well-known first, then project root
+    candidates = [
+        os.path.abspath(os.path.join(os.getcwd(), "static", ".well-known", "ai-plugin.json")),
+        os.path.abspath(os.path.join(os.getcwd(), "ai-plugin.json")),
+    ]
+    for p in candidates:
+        if os.path.isfile(p):
+            with open(p, "r", encoding="utf-8") as f:
+                return Response(content=f.read(), media_type="application/json")
+    return Response(status_code=404, content="ai-plugin.json not found", media_type="text/plain")
