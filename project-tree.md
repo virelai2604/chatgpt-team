@@ -13,6 +13,7 @@ C:.
 |   sora.py
 |   test_openai_relay_full.py
 |   test_upload.jsonl
+|   __init__.py
 |   
 +---.github
 |   \---workflows
@@ -9684,6 +9685,10 @@ C:.
 |           tqdm.exe
 |           uvicorn.exe
 |           
++---.well-known
+|       ai-plugin.json
+|       __init__.py
+|       
 +---app
 |   |   main.py
 |   |   __init__.py
@@ -9724,10 +9729,14 @@ C:.
 |   |   |   __init__.py
 |   |   |   
 |   |   +---services
-|   |   |       tool_registry.py
-|   |   |       tool_router.py
-|   |   |       __init__.py
-|   |   |       
+|   |   |   |   tool_registry.py
+|   |   |   |   tool_router.py
+|   |   |   |   __init__.py
+|   |   |   |   
+|   |   |   \---__pycache__
+|   |   |           tool_registry.cpython-313.pyc
+|   |   |           __init__.cpython-313.pyc
+|   |   |           
 |   |   \---__pycache__
 |   |           assistants.cpython-313.pyc
 |   |           audio.cpython-313.pyc
@@ -9745,6 +9754,7 @@ C:.
 |   |           responses.cpython-313.pyc
 |   |           threads.cpython-313.pyc
 |   |           tools.cpython-313.pyc
+|   |           usage.cpython-313.pyc
 |   |           vector_stores.cpython-313.pyc
 |   |           __init__.cpython-313.pyc
 |   |           __init__.py
@@ -9804,13 +9814,6 @@ C:.
 |       sample.txt
 |       test_upload.jsonl
 |       
-+---Static
-|   |   __init__.py
-|   |   
-|   \---.well-known
-|           ai-plugin.json
-|           __init__.py
-|           
 \---__pycache__
         bifl_test.cpython-313-pytest-8.4.2.pyc
         helper.cpython-313.pyc
