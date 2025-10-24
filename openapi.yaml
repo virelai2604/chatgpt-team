@@ -8,7 +8,7 @@ info:
   description: |
     OpenAI-compatible relay exposing unified /v1/responses plus non-UI-native surfaces:
     Files/Uploads, Images, Audio, Vector Stores, Videos (Sora 2 Pro), Realtime, Embeddings, and Jobs.
-    Legacy/sunset routes excluded. Exactly 30 operations.
+    Legacy/sunset routes excluded. Exactly 28 operations.
 servers:
   - url: https://chatgpt-team-relay.onrender.com
 security:
@@ -19,7 +19,7 @@ tags:
   - name: Models
     description: Retrieve available models
   - name: Files
-    description: File upload and retrieval
+    description: File upload, retrieval, and content streaming
   - name: Uploads
     description: Multipart upload management
   - name: Images
@@ -27,7 +27,7 @@ tags:
   - name: Audio
     description: Audio transcription and speech
   - name: Vector Stores
-    description: Vector store creation and query endpoints
+    description: Vector store creation, querying, and batch operations
   - name: Videos
     description: Video generation and remixing using Sora 2 Pro
   - name: Realtime
@@ -201,6 +201,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorObject'
+  /v1/files/{file_id}/content:
+    get:
+      tags:
+        - Files
+      summary: Download raw file content
+      operationId: getFileContent
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File binary content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
   /v1/uploads:
     post:
       tags:
@@ -343,6 +369,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VectorStoreObject'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+  /v1/vector_stores/{vector_store_id}/batches:
+    get:
+      tags:
+        - Vector Stores
+      summary: List all batches for a vector store
+      operationId: listVectorStoreBatches
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of batches
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObject'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+    post:
+      tags:
+        - Vector Stores
+      summary: Create a batch import for embeddings or files
+      operationId: createVectorStoreBatch
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file_ids:
+                  type: array
+                  items:
+                    type: string
+              required:
+                - file_ids
+      responses:
+        '200':
+          description: Batch import started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObject'
         '400':
           description: Bad request
           content:
@@ -557,6 +645,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorObject'
   /v1/jobs:
+    get:
+      tags:
+        - Jobs
+      summary: List all asynchronous jobs
+      operationId: listJobs
+      responses:
+        '200':
+          description: Job list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericObject'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
     post:
       tags:
         - Jobs
@@ -602,6 +708,31 @@ paths:
                 $ref: '#/components/schemas/JobObject'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorObject'
+  /v1/jobs/{job_id}/cancel:
+    post:
+      tags:
+        - Jobs
+      summary: Cancel a running asynchronous job
+      operationId: cancelJob
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Job cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckObject'
+        '404':
+          description: Job not found
           content:
             application/json:
               schema:
