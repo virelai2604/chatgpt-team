@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: ChatGPT Team Relay (BIFL Surface)
-  version: '2025-10-24'
+  version: "2025-10-24"
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
@@ -34,6 +34,7 @@ tags:
     description: Realtime GPT-5/4o session initialization
   - name: Jobs
     description: Unified background job operations
+
 paths:
   /v1/responses:
     post:
@@ -46,20 +47,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ResponseCreate'
+              $ref: "#/components/schemas/ResponseCreate"
       responses:
-        '200':
+        "200":
           description: Model response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResponseObject'
-        '400':
+                $ref: "#/components/schemas/ResponseObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/responses/{response_id}:
     get:
       tags:
@@ -73,18 +75,19 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Response object
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResponseObject'
-        '404':
+                $ref: "#/components/schemas/ResponseObject"
+        "404":
           description: Not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/responses/{response_id}/cancel:
     post:
       tags:
@@ -98,18 +101,19 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Cancelled
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AckObject'
-        '400':
+                $ref: "#/components/schemas/AckObject"
+        "400":
           description: Invalid ID
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/models:
     get:
       tags:
@@ -117,18 +121,19 @@ paths:
       summary: List models
       operationId: listModels
       responses:
-        '200':
+        "200":
           description: Model list
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObject'
-        '400':
+                $ref: "#/components/schemas/GenericObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/files:
     get:
       tags:
@@ -136,18 +141,18 @@ paths:
       summary: List files
       operationId: listFiles
       responses:
-        '200':
+        "200":
           description: Files
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FileObject'
-        '400':
+                $ref: "#/components/schemas/FileObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
     post:
       tags:
         - Files
@@ -163,19 +168,21 @@ paths:
                 file:
                   type: string
                   format: binary
+              additionalProperties: false
       responses:
-        '200':
+        "200":
           description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FileObject'
-        '400':
+                $ref: "#/components/schemas/FileObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/files/{file_id}:
     get:
       tags:
@@ -189,18 +196,19 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: File object
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FileObject'
-        '404':
+                $ref: "#/components/schemas/FileObject"
+        "404":
           description: Not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/files/{file_id}/content:
     get:
       tags:
@@ -214,19 +222,20 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: File binary content
           content:
             application/octet-stream:
               schema:
                 type: string
                 format: binary
-        '404':
+        "404":
           description: File not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/uploads:
     post:
       tags:
@@ -238,20 +247,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UploadObject'
+              $ref: "#/components/schemas/UploadObject"
       responses:
-        '200':
+        "200":
           description: Upload created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UploadObject'
-        '400':
+                $ref: "#/components/schemas/UploadObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/images/generations:
     post:
       tags:
@@ -263,20 +273,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GenericObject'
+              $ref: "#/components/schemas/GenericObject"
       responses:
-        '200':
+        "200":
           description: Image result
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObject'
-        '400':
+                $ref: "#/components/schemas/GenericObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/audio/transcriptions:
     post:
       tags:
@@ -293,19 +304,21 @@ paths:
                 file:
                   type: string
                   format: binary
+              additionalProperties: true
       responses:
-        '200':
+        "200":
           description: Transcription
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObject'
-        '400':
+                $ref: "#/components/schemas/GenericObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/audio/speech:
     post:
       tags:
@@ -317,21 +330,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GenericObject'
+              $ref: "#/components/schemas/GenericObject"
       responses:
-        '200':
+        "200":
           description: Audio stream
           content:
             audio/mpeg:
               schema:
                 type: string
                 format: binary
-        '400':
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/vector_stores:
     get:
       tags:
@@ -339,18 +353,18 @@ paths:
       summary: List vector stores
       operationId: listVectorStores
       responses:
-        '200':
+        "200":
           description: Vector store list
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VectorStoreObject'
-        '400':
+                $ref: "#/components/schemas/VectorStoreObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
     post:
       tags:
         - Vector Stores
@@ -361,20 +375,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VectorStoreObject'
+              $ref: "#/components/schemas/VectorStoreObject"
       responses:
-        '200':
+        "200":
           description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VectorStoreObject'
-        '400':
+                $ref: "#/components/schemas/VectorStoreObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/vector_stores/{vector_store_id}/batches:
     get:
       tags:
@@ -388,18 +403,18 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: List of batches
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObject'
-        '404':
+                $ref: "#/components/schemas/GenericObject"
+        "404":
           description: Not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
     post:
       tags:
         - Vector Stores
@@ -425,18 +440,19 @@ paths:
               required:
                 - file_ids
       responses:
-        '200':
+        "200":
           description: Batch import started
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObject'
-        '400':
+                $ref: "#/components/schemas/GenericObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/videos:
     post:
       tags:
@@ -448,20 +464,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VideoCreate'
+              $ref: "#/components/schemas/VideoCreate"
       responses:
-        '200':
+        "200":
           description: Video job created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VideoObject'
-        '400':
+                $ref: "#/components/schemas/VideoObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/videos/{video_id}:
     get:
       tags:
@@ -475,18 +492,19 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Video metadata
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VideoObject'
-        '404':
+                $ref: "#/components/schemas/VideoObject"
+        "404":
           description: Not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/videos/{video_id}/content:
     get:
       tags:
@@ -500,19 +518,20 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Video stream
           content:
             video/mp4:
               schema:
                 type: string
                 format: binary
-        '404':
+        "404":
           description: Not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/videos/{video_id}/remix:
     post:
       tags:
@@ -530,20 +549,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VideoRemix'
+              $ref: "#/components/schemas/VideoRemix"
       responses:
-        '200':
+        "200":
           description: Remix job created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VideoObject'
-        '400':
+                $ref: "#/components/schemas/VideoObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/realtime/sessions:
     post:
       tags:
@@ -572,7 +592,7 @@ paths:
               required:
                 - model
       responses:
-        '200':
+        "200":
           description: Session initialized
           content:
             application/json:
@@ -585,12 +605,13 @@ paths:
                     type: string
                   expires_in:
                     type: integer
-        '400':
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/embeddings:
     post:
       tags:
@@ -617,7 +638,7 @@ paths:
                 - model
                 - input
       responses:
-        '200':
+        "200":
           description: Embedding vector
           content:
             application/json:
@@ -638,12 +659,13 @@ paths:
                             type: number
                         index:
                           type: integer
-        '400':
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/jobs:
     get:
       tags:
@@ -651,18 +673,18 @@ paths:
       summary: List all asynchronous jobs
       operationId: listJobs
       responses:
-        '200':
+        "200":
           description: Job list
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericObject'
-        '400':
+                $ref: "#/components/schemas/GenericObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
     post:
       tags:
         - Jobs
@@ -673,20 +695,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/JobObject'
+              $ref: "#/components/schemas/JobObject"
       responses:
-        '200':
+        "200":
           description: Job created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JobObject'
-        '400':
+                $ref: "#/components/schemas/JobObject"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/jobs/{job_id}:
     get:
       tags:
@@ -700,18 +723,19 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Job status
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JobObject'
-        '404':
+                $ref: "#/components/schemas/JobObject"
+        "404":
           description: Not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
   /v1/jobs/{job_id}/cancel:
     post:
       tags:
@@ -725,23 +749,25 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Job cancelled successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AckObject'
-        '404':
+                $ref: "#/components/schemas/AckObject"
+        "404":
           description: Job not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorObject'
+                $ref: "#/components/schemas/ErrorObject"
+
 components:
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
+
   schemas:
     ErrorObject:
       type: object
@@ -758,6 +784,7 @@ components:
             - message
       required:
         - error
+
     AckObject:
       type: object
       properties:
@@ -766,6 +793,7 @@ components:
           default: true
       required:
         - ok
+
     GenericObject:
       type: object
       properties:
@@ -776,52 +804,123 @@ components:
         note:
           type: string
       additionalProperties: true
+
     ResponseCreate:
       type: object
       properties:
         model:
           type: string
+          description: Model name to use
         input:
-          type: string
+          description: Input text or prompt
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        stream:
+          type: boolean
+          description: If true, server may stream the response
+          default: false
+        temperature:
+          type: number
+          description: Sampling temperature
+        tool_choice:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
       additionalProperties: true
+
     ResponseObject:
       type: object
       properties:
         id:
           type: string
+        object:
+          type: string
+          default: response
         status:
           type: string
         output:
-          type: string
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                additionalProperties: true
+        usage:
+          type: object
+          properties:
+            input_tokens:
+              type: integer
+            output_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+          additionalProperties: false
       additionalProperties: true
+
     FileObject:
       type: object
       properties:
         id:
           type: string
+        object:
+          type: string
+          default: file
         filename:
           type: string
         bytes:
           type: integer
+        created_at:
+          type: integer
+        purpose:
+          type: string
+        status:
+          type: string
+      required:
+        - id
+        - filename
       additionalProperties: true
+
     UploadObject:
       type: object
       properties:
         id:
           type: string
+        object:
+          type: string
+          default: upload
         status:
           type: string
+        created_at:
+          type: integer
+      required:
+        - id
       additionalProperties: true
+
     VectorStoreObject:
       type: object
       properties:
         id:
           type: string
+        object:
+          type: string
+          default: vector_store
         name:
           type: string
         created_at:
           type: integer
+        status:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+      required:
+        - id
       additionalProperties: true
+
     VideoCreate:
       type: object
       properties:
@@ -836,6 +935,8 @@ components:
       required:
         - model
         - prompt
+      additionalProperties: false
+
     VideoRemix:
       type: object
       properties:
@@ -846,11 +947,16 @@ components:
           additionalProperties: true
       required:
         - prompt
+      additionalProperties: true
+
     VideoObject:
       type: object
       properties:
         id:
           type: string
+        object:
+          type: string
+          default: video
         model:
           type: string
         status:
@@ -864,10 +970,22 @@ components:
           type: number
         created_at:
           type: integer
+        seconds:
+          type: integer
+        size:
+          type: string
+        purpose:
+          type: string
+        remixed_from_video_id:
+          oneOf:
+            - type: string
+            - type: "null"
       required:
         - id
         - model
         - status
+      additionalProperties: true
+
     JobObject:
       type: object
       properties:
@@ -889,6 +1007,12 @@ components:
             - failed
         created_at:
           type: integer
+        params:
+          type: object
+          additionalProperties: true
+        result:
+          type: object
+          additionalProperties: true
       required:
         - id
         - type
