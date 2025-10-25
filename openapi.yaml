@@ -1,21 +1,22 @@
 openapi: 3.1.0
 info:
   title: ChatGPT Team Relay (BIFL Surface)
-  version: "2025-10-24"
+  version: "2025-10-25"
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
   description: |
     OpenAI-compatible relay exposing unified /v1/responses plus non-UI-native surfaces:
-    Files/Uploads, Images, Audio, Vector Stores, Videos (Sora 2 Pro), Realtime, Embeddings, and Jobs.
-    Legacy/sunset routes excluded. Exactly 28 operations.
+    Files/Uploads, Images, Audio, Vector Stores, Realtime, Embeddings, and Jobs.
+    Legacy /v1/videos routes replaced by /v1/responses with tools[].
 servers:
   - url: https://chatgpt-team-relay.onrender.com
 security:
   - BearerAuth: []
+
 tags:
   - name: Responses
-    description: Unified response creation and control
+    description: Unified response creation and control (text, image, audio, video)
   - name: Models
     description: Retrieve available models
   - name: Files
@@ -28,8 +29,6 @@ tags:
     description: Audio transcription and speech
   - name: Vector Stores
     description: Vector store creation, querying, and batch operations
-  - name: Videos
-    description: Video generation and remixing using Sora 2 Pro
   - name: Realtime
     description: Realtime GPT-5/4o session initialization
   - name: Jobs
@@ -38,9 +37,12 @@ tags:
 paths:
   /v1/responses:
     post:
-      tags:
-        - Responses
-      summary: Create a model response
+      tags: [Responses]
+      summary: Create a model response (text, image, audio, or video)
+      description: |
+        Unified endpoint for multimodal generation.
+        Supports text, image, audio, and video via tools[].
+        Replaces legacy /v1/videos routes.
       operationId: createResponse
       requestBody:
         required: true
@@ -64,8 +66,7 @@ paths:
 
   /v1/responses/{response_id}:
     get:
-      tags:
-        - Responses
+      tags: [Responses]
       summary: Retrieve a response
       operationId: getResponse
       parameters:
@@ -90,8 +91,7 @@ paths:
 
   /v1/responses/{response_id}/cancel:
     post:
-      tags:
-        - Responses
+      tags: [Responses]
       summary: Cancel a running response
       operationId: cancelResponse
       parameters:
@@ -116,8 +116,7 @@ paths:
 
   /v1/models:
     get:
-      tags:
-        - Models
+      tags: [Models]
       summary: List models
       operationId: listModels
       responses:
@@ -127,17 +126,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GenericObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
 
   /v1/files:
     get:
-      tags:
-        - Files
+      tags: [Files]
       summary: List files
       operationId: listFiles
       responses:
@@ -147,15 +139,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FileObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
     post:
-      tags:
-        - Files
+      tags: [Files]
       summary: Upload file
       operationId: createFile
       requestBody:
@@ -168,7 +153,6 @@ paths:
                 file:
                   type: string
                   format: binary
-              additionalProperties: false
       responses:
         "200":
           description: Created
@@ -176,17 +160,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FileObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
 
   /v1/files/{file_id}:
     get:
-      tags:
-        - Files
+      tags: [Files]
       summary: Get file metadata
       operationId: getFile
       parameters:
@@ -202,17 +179,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FileObject"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
 
   /v1/files/{file_id}/content:
     get:
-      tags:
-        - Files
+      tags: [Files]
       summary: Download raw file content
       operationId: getFileContent
       parameters:
@@ -229,17 +199,10 @@ paths:
               schema:
                 type: string
                 format: binary
-        "404":
-          description: File not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
 
   /v1/uploads:
     post:
-      tags:
-        - Uploads
+      tags: [Uploads]
       summary: Create upload session
       operationId: createUpload
       requestBody:
@@ -255,17 +218,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UploadObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
 
   /v1/images/generations:
     post:
-      tags:
-        - Images
+      tags: [Images]
       summary: Generate or edit image
       operationId: createImageGeneration
       requestBody:
@@ -281,17 +237,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GenericObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
 
   /v1/audio/transcriptions:
     post:
-      tags:
-        - Audio
+      tags: [Audio]
       summary: Transcribe audio to text
       operationId: createTranscription
       requestBody:
@@ -304,7 +253,6 @@ paths:
                 file:
                   type: string
                   format: binary
-              additionalProperties: true
       responses:
         "200":
           description: Transcription
@@ -312,17 +260,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GenericObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
 
   /v1/audio/speech:
     post:
-      tags:
-        - Audio
+      tags: [Audio]
       summary: Text to speech
       operationId: createSpeech
       requestBody:
@@ -339,17 +280,10 @@ paths:
               schema:
                 type: string
                 format: binary
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
 
   /v1/vector_stores:
     get:
-      tags:
-        - Vector Stores
+      tags: [Vector Stores]
       summary: List vector stores
       operationId: listVectorStores
       responses:
@@ -359,15 +293,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/VectorStoreObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
     post:
-      tags:
-        - Vector Stores
+      tags: [Vector Stores]
       summary: Create vector store
       operationId: createVectorStore
       requestBody:
@@ -383,191 +310,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/VectorStoreObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
-
-  /v1/vector_stores/{vector_store_id}/batches:
-    get:
-      tags:
-        - Vector Stores
-      summary: List all batches for a vector store
-      operationId: listVectorStoreBatches
-      parameters:
-        - name: vector_store_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: List of batches
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GenericObject"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
-    post:
-      tags:
-        - Vector Stores
-      summary: Create a batch import for embeddings or files
-      operationId: createVectorStoreBatch
-      parameters:
-        - name: vector_store_id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                file_ids:
-                  type: array
-                  items:
-                    type: string
-              required:
-                - file_ids
-      responses:
-        "200":
-          description: Batch import started
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GenericObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
-
-  /v1/videos:
-    post:
-      tags:
-        - Videos
-      summary: Create a video generation job (Sora 2 Pro)
-      operationId: createVideo
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/VideoCreate"
-      responses:
-        "200":
-          description: Video job created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VideoObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
-
-  /v1/videos/{video_id}:
-    get:
-      tags:
-        - Videos
-      summary: Retrieve a video job
-      operationId: getVideo
-      parameters:
-        - name: video_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Video metadata
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VideoObject"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
-
-  /v1/videos/{video_id}/content:
-    get:
-      tags:
-        - Videos
-      summary: Download or stream generated video
-      operationId: getVideoContent
-      parameters:
-        - name: video_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Video stream
-          content:
-            video/mp4:
-              schema:
-                type: string
-                format: binary
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
-
-  /v1/videos/{video_id}/remix:
-    post:
-      tags:
-        - Videos
-      summary: Remix an existing video using Sora 2 Pro
-      operationId: remixVideo
-      parameters:
-        - name: video_id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/VideoRemix"
-      responses:
-        "200":
-          description: Remix job created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VideoObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
 
   /v1/realtime/sessions:
     post:
-      tags:
-        - Realtime
+      tags: [Realtime]
       summary: Initialize realtime chat/audio/video session
       operationId: createRealtimeSession
       requestBody:
@@ -584,13 +330,8 @@ paths:
                   type: string
                 mode:
                   type: string
-                  enum:
-                    - text
-                    - audio
-                    - video
+                  enum: [text, audio, video]
                   default: text
-              required:
-                - model
       responses:
         "200":
           description: Session initialized
@@ -599,23 +340,13 @@ paths:
               schema:
                 type: object
                 properties:
-                  session_id:
-                    type: string
-                  url:
-                    type: string
-                  expires_in:
-                    type: integer
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
+                  session_id: { type: string }
+                  url: { type: string }
+                  expires_in: { type: integer }
 
   /v1/embeddings:
     post:
-      tags:
-        - Vector Stores
+      tags: [Vector Stores]
       summary: Create text or multimodal embeddings
       operationId: createEmbedding
       requestBody:
@@ -632,11 +363,7 @@ paths:
                   oneOf:
                     - type: string
                     - type: array
-                      items:
-                        type: string
-              required:
-                - model
-                - input
+                      items: { type: string }
       responses:
         "200":
           description: Embedding vector
@@ -645,9 +372,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  object:
-                    type: string
-                    default: embedding
+                  object: { type: string, default: embedding }
                   data:
                     type: array
                     items:
@@ -655,21 +380,12 @@ paths:
                       properties:
                         embedding:
                           type: array
-                          items:
-                            type: number
-                        index:
-                          type: integer
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
+                          items: { type: number }
+                        index: { type: integer }
 
   /v1/jobs:
     get:
-      tags:
-        - Jobs
+      tags: [Jobs]
       summary: List all asynchronous jobs
       operationId: listJobs
       responses:
@@ -679,15 +395,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GenericObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
     post:
-      tags:
-        - Jobs
+      tags: [Jobs]
       summary: Create unified asynchronous job
       operationId: createJob
       requestBody:
@@ -703,64 +412,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/JobObject"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
-
-  /v1/jobs/{job_id}:
-    get:
-      tags:
-        - Jobs
-      summary: Retrieve a job’s current status
-      operationId: getJob
-      parameters:
-        - name: job_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Job status
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/JobObject"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
-
-  /v1/jobs/{job_id}/cancel:
-    post:
-      tags:
-        - Jobs
-      summary: Cancel a running asynchronous job
-      operationId: cancelJob
-      parameters:
-        - name: job_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Job cancelled successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AckObject"
-        "404":
-          description: Job not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorObject"
 
 components:
   securitySchemes:
@@ -775,245 +426,145 @@ components:
         error:
           type: object
           properties:
-            type:
-              type: string
-            message:
-              type: string
-          required:
-            - type
-            - message
-      required:
-        - error
+            type: { type: string }
+            message: { type: string }
+      required: [error]
 
     AckObject:
       type: object
       properties:
-        ok:
-          type: boolean
-          default: true
-      required:
-        - ok
+        ok: { type: boolean, default: true }
+      required: [ok]
 
     GenericObject:
       type: object
       properties:
-        id:
-          type: string
-        object:
-          type: string
-        note:
-          type: string
+        id: { type: string }
+        object: { type: string }
+        note: { type: string }
       additionalProperties: true
 
     ResponseCreate:
       type: object
       properties:
-        model:
-          type: string
-          description: Model name to use
+        model: { type: string, description: Model name to use }
         input:
-          description: Input text or prompt
           oneOf:
             - type: string
             - type: array
-              items:
-                type: string
-        stream:
-          type: boolean
-          description: If true, server may stream the response
-          default: false
-        temperature:
-          type: number
-          description: Sampling temperature
-        tool_choice:
-          oneOf:
-            - type: string
-            - type: object
-              additionalProperties: true
-      additionalProperties: true
+              items: { type: string }
+        stream: { type: boolean, default: false }
+        temperature: { type: number, default: 0.7 }
+        tools:
+          type: array
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/ToolVideoGeneration"
+              - $ref: "#/components/schemas/ToolVideoRemix"
+              - $ref: "#/components/schemas/ToolImageGeneration"
+              - $ref: "#/components/schemas/ToolAudioTranscription"
+      required: [model, input]
 
     ResponseObject:
       type: object
       properties:
-        id:
-          type: string
-        object:
-          type: string
-          default: response
-        status:
-          type: string
+        id: { type: string }
+        object: { type: string, default: response }
+        status: { type: string }
         output:
           oneOf:
             - type: string
             - type: array
-              items:
-                type: object
-                additionalProperties: true
+              items: { type: object }
         usage:
           type: object
           properties:
-            input_tokens:
-              type: integer
-            output_tokens:
-              type: integer
-            total_tokens:
-              type: integer
-          additionalProperties: false
-      additionalProperties: true
+            input_tokens: { type: integer }
+            output_tokens: { type: integer }
+            total_tokens: { type: integer }
 
     FileObject:
       type: object
       properties:
-        id:
-          type: string
-        object:
-          type: string
-          default: file
-        filename:
-          type: string
-        bytes:
-          type: integer
-        created_at:
-          type: integer
-        purpose:
-          type: string
-        status:
-          type: string
-      required:
-        - id
-        - filename
-      additionalProperties: true
+        id: { type: string }
+        object: { type: string, default: file }
+        filename: { type: string }
+        bytes: { type: integer }
+        created_at: { type: integer }
+        purpose: { type: string }
+        status: { type: string }
+      required: [id, filename]
 
     UploadObject:
       type: object
       properties:
-        id:
-          type: string
-        object:
-          type: string
-          default: upload
-        status:
-          type: string
-        created_at:
-          type: integer
-      required:
-        - id
-      additionalProperties: true
+        id: { type: string }
+        object: { type: string, default: upload }
+        status: { type: string }
+        created_at: { type: integer }
+      required: [id]
 
     VectorStoreObject:
       type: object
       properties:
-        id:
-          type: string
-        object:
-          type: string
-          default: vector_store
-        name:
-          type: string
-        created_at:
-          type: integer
-        status:
-          type: string
-        metadata:
-          type: object
-          additionalProperties: true
-      required:
-        - id
-      additionalProperties: true
-
-    VideoCreate:
-      type: object
-      properties:
-        model:
-          type: string
-          default: sora-2-pro
-        prompt:
-          type: string
-        seconds:
-          type: integer
-          default: 10
-      required:
-        - model
-        - prompt
-      additionalProperties: false
-
-    VideoRemix:
-      type: object
-      properties:
-        prompt:
-          type: string
-        parameters:
-          type: object
-          additionalProperties: true
-      required:
-        - prompt
-      additionalProperties: true
-
-    VideoObject:
-      type: object
-      properties:
-        id:
-          type: string
-        object:
-          type: string
-          default: video
-        model:
-          type: string
-        status:
-          type: string
-          enum:
-            - queued
-            - processing
-            - completed
-            - failed
-        progress:
-          type: number
-        created_at:
-          type: integer
-        seconds:
-          type: integer
-        size:
-          type: string
-        purpose:
-          type: string
-        remixed_from_video_id:
-          oneOf:
-            - type: string
-            - type: "null"
-      required:
-        - id
-        - model
-        - status
-      additionalProperties: true
+        id: { type: string }
+        object: { type: string, default: vector_store }
+        name: { type: string }
+        created_at: { type: integer }
+        status: { type: string }
 
     JobObject:
       type: object
       properties:
-        id:
-          type: string
-        type:
-          type: string
-          enum:
-            - fine_tuning
-            - batch
-            - video
-            - custom
-        status:
-          type: string
-          enum:
-            - queued
-            - running
-            - completed
-            - failed
-        created_at:
-          type: integer
-        params:
+        id: { type: string }
+        type: { type: string, enum: [fine_tuning, batch, video, custom] }
+        status: { type: string, enum: [queued, running, completed, failed] }
+        created_at: { type: integer }
+
+    ToolVideoGeneration:
+      type: object
+      properties:
+        type: { type: string, enum: [video_generation] }
+        model: { type: string, default: sora-2-pro }
+        parameters:
           type: object
-          additionalProperties: true
-        result:
+          properties:
+            seconds: { type: integer, default: 10 }
+            size: { type: string, example: "1920x1080" }
+      required: [type, model]
+
+    ToolVideoRemix:
+      type: object
+      properties:
+        type: { type: string, enum: [video_remix] }
+        model: { type: string, default: sora-2-pro }
+        parameters:
           type: object
-          additionalProperties: true
-      required:
-        - id
-        - type
-        - status
+          properties:
+            source_video_id: { type: string }
+            prompt: { type: string }
+            strength: { type: number, default: 0.6 }
+      required: [type, parameters]
+
+    ToolImageGeneration:
+      type: object
+      properties:
+        type: { type: string, enum: [image_generation] }
+        model: { type: string, default: gpt-image-1 }
+        parameters:
+          type: object
+          properties:
+            size: { type: string, example: "1024x1024" }
+            n: { type: integer, default: 1 }
+      required: [type, model]
+
+    ToolAudioTranscription:
+      type: object
+      properties:
+        type: { type: string, enum: [audio_transcription] }
+        model: { type: string, default: gpt-audio }
+        parameters:
+          type: object
+          properties:
+            language: { type: string, example: "en" }
+      required: [type, model]
