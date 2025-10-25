@@ -11,13 +11,14 @@ DENYLIST_PREFIXES = [
     "/v1/chat/completions",
     "/v1/assistants",
     "/v1/threads",
-    "/v1/moderations",
+    "/v1/moderations",  
     "/v1/fine_tuning/jobs",
     "/v1/organization/costs",
     "/v1/batches",
     "/v1/certificates",
     "/v1/audit_logs",
-    "/v1/tools",  # standalone tools route deprecated in BIFL v2.1
+    "/v1/tools",
+    "/v1/audio/translation",
 ]
 
 def _should_block(path: str) -> bool:
@@ -25,12 +26,7 @@ def _should_block(path: str) -> bool:
 
 @router.api_route("/v1/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def passthrough(request: Request, full_path: str):
-    """
-    BIFL-grade passthrough with legacy endpoint denylist.
-    """
     endpoint = f"/v1/{full_path}"
-
-    # 1) Hard block legacy endpoints so they can't slip through the catch-all
     if _should_block(endpoint):
         return JSONResponse(
             status_code=410,
@@ -42,7 +38,6 @@ async def passthrough(request: Request, full_path: str):
             }
         )
 
-    # 2) normal logging + forward
     raw_body = await request.body()
     headers_json = str(dict(request.headers))
     save_raw_request(endpoint=endpoint, raw_body=raw_body, headers_json=headers_json)

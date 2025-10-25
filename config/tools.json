@@ -1,0 +1,5 @@
+{
+  "get_current_weather": "app.routes.services.tool_registry.get_current_weather",
+  "get_exchange_rate": "app.routes.services.external_tools.get_exchange_rate",
+  "get_crypto_price": "app.routes.services.external_tools.get_crypto_price"
+}
