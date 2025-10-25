@@ -12,9 +12,3 @@ async def audio_speech(request: Request):
 async def audio_transcriptions(request: Request):
     return await forward_openai(request, "/v1/audio/transcriptions")
 
-# /translation is not supported in OpenAI v2
-@router.post("/translation")
-async def audio_translation(request: Request):
-    return JSONResponse(
-        {"error": "audio/translation is not available in OpenAI v2."}, status_code=404
-    )
