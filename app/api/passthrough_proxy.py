@@ -17,7 +17,6 @@ DENYLIST_PREFIXES = [
     "/v1/batches",
     "/v1/certificates",
     "/v1/audit_logs",
-    "/v1/videos",
     "/v1/tools",  # standalone tools route deprecated in BIFL v2.1
 ]
 
