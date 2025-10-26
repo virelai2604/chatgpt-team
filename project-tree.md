@@ -12,6 +12,7 @@ C:.
 |   replacements.txt
 |   requirements.txt
 |   sora.py
+|   test.py
 |   test_openai_relay_full.py
 |   test_upload.jsonl
 |   __init__.py
@@ -46127,6 +46128,7 @@ C:.
 |   +---tools
 |   |   |   code_interpreter.py
 |   |   |   computer_use.py
+|   |   |   echo_tool.py
 |   |   |   file_search.py
 |   |   |   image_generation.py
 |   |   |   moderation.py
@@ -46141,6 +46143,8 @@ C:.
 |   |           code_interpreter.cpython-314.pyc
 |   |           computer_use.cpython-313.pyc
 |   |           computer_use.cpython-314.pyc
+|   |           echo_tool.cpython-313.pyc
+|   |           echo_tool.cpython-314.pyc
 |   |           file_search.cpython-313.pyc
 |   |           file_search.cpython-314.pyc
 |   |           image_generation.cpython-313.pyc
@@ -46171,6 +46175,7 @@ C:.
 |   \---__pycache__
 |           main.cpython-313.pyc
 |           __init__.cpython-313.pyc
+|           __init__.cpython-314.pyc
 |           __init__.py
 |           
 +---data
