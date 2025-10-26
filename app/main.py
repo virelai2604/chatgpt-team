@@ -1,86 +1,67 @@
 # ==========================================================
-#  app/main.py — BIFL v2.3.3-p2
+#  app/main.py — BIFL v2.3.4-fp
 # ==========================================================
-#  Central FastAPI application for ChatGPT-Team relay.
-#  Handles:
-#   • Dynamic route registration
-#   • SQLite logger initialization
-#   • Relay version reporting
-#   • Graceful startup/shutdown
+#  Central FastAPI relay entrypoint.
+#  • Dynamic route registration
+#  • SQLite logger init
+#  • Unified /v1/version + /v1/healthz
+#  • Lifespan startup/shutdown (FastAPI ≥0.118)
 # ==========================================================
 
-import os
-import logging
+import os, logging, contextlib
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from app.routes import register_routes
 from app.utils.db_logger import init_db
-from app.utils.error_handler import error_response
 
-# ──────────────────────────────────────────────
-#  App metadata
-# ──────────────────────────────────────────────
-APP_VERSION = "2.3.3-p2"
+APP_VERSION = "2.3.4-fp"
 BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
 ORG_ID = os.getenv("OPENAI_ORG_ID", "")
 DEBUG_MODE = os.getenv("DEBUG", "false").lower() == "true"
 
-logger = logging.getLogger("bifl.main")
 logging.basicConfig(
     level=logging.DEBUG if DEBUG_MODE else logging.INFO,
     format="[%(asctime)s] [%(levelname)s] %(message)s",
 )
+logger = logging.getLogger("bifl.main")
 
-# ──────────────────────────────────────────────
-#  FastAPI instance
-# ──────────────────────────────────────────────
-app = FastAPI(
-    title="ChatGPT-Team Relay",
-    version=APP_VERSION,
-    description="Cloudflare ChatGPT-Team Relay API (BIFL v2.3.3-p2)",
-)
-
-# ──────────────────────────────────────────────
-#  Global error fallback
-# ──────────────────────────────────────────────
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    logger.error(f"[BIFL] Unhandled exception: {exc}")
-    return error_response("server_error", str(exc), 500, {})
-
-# ──────────────────────────────────────────────
-#  Startup / shutdown
-# ──────────────────────────────────────────────
-@app.on_event("startup")
-async def startup_event():
-    logger.info(f"[BIFL] SQLite database initializing...")
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(f"[BIFL] Initializing database...")
     init_db()
-    logger.info(f"[BIFL] Relay initialized successfully.")
     logger.info(f"[BIFL] Base URL: {BASE_URL}")
     if ORG_ID:
         logger.info(f"[BIFL] Organization: {ORG_ID}")
     logger.info(f"[BIFL] Version: {APP_VERSION}")
-
-@app.on_event("shutdown")
-async def shutdown_event():
+    yield
     logger.info("[BIFL] Relay shutting down gracefully.")
 
-# ──────────────────────────────────────────────
-#  Register all route modules
-# ──────────────────────────────────────────────
+app = FastAPI(
+    title="ChatGPT-Team Relay",
+    version=APP_VERSION,
+    description="Render-deployed OpenAI-compatible relay (BIFL v2.3.4-fp)",
+    lifespan=lifespan,
+)
+
+# Register all routers
 register_routes(app)
 
-# ──────────────────────────────────────────────
-#  Health check endpoint
-# ──────────────────────────────────────────────
-@app.get("/relay/health")
-async def relay_health():
-    """Basic health check and version verification."""
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"[BIFL] Unhandled exception: {exc}")
+    return JSONResponse(
+        {"error": {"type": "server_error", "message": str(exc)}}, status_code=500
+    )
+
+@app.get("/v1/healthz")
+async def healthz():
+    return {"ok": True, "version": APP_VERSION}
+
+@app.get("/v1/version")
+async def version():
     return {
-        "status": "ok",
+        "relay_name": "ChatGPT Team Relay",
         "bifl_version": APP_VERSION,
+        "streaming_enabled": os.getenv("ENABLE_STREAM", "false").lower() == "true",
         "base_url": BASE_URL,
     }
-
-# ==========================================================
-#  End of main.py
-# ==========================================================
