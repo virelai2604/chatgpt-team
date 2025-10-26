@@ -1,3 +1,7 @@
+# ==========================================================
+# main.py — ChatGPT Team Relay Core (BIFL v2.3.4-fp)
+# ==========================================================
+
 import os
 import asyncio
 import logging
@@ -5,11 +9,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.utils.db_logger import init_db
+from dotenv import load_dotenv  # ✅ Load environment file
+
+# --------------------------------------------------------------------------
+# Load .env first (ensures ENABLE_STREAM and other vars are applied)
+# --------------------------------------------------------------------------
+load_dotenv()
 
 # --------------------------------------------------------------------------
 # Configuration and Logging
 # --------------------------------------------------------------------------
-
 logger = logging.getLogger("BIFL")
 
 BIFL_VERSION = "2.3.4-fp"
@@ -17,11 +26,9 @@ OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
 OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
 ENABLE_STREAM = os.getenv("ENABLE_STREAM", "false").lower() == "true"
 
-
 # --------------------------------------------------------------------------
 # FastAPI Lifespan Manager
 # --------------------------------------------------------------------------
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager (replaces FastAPI startup/shutdown)."""
@@ -35,6 +42,7 @@ async def lifespan(app: FastAPI):
     if OPENAI_ORG_ID:
         logger.info(f"[BIFL] Organization: {OPENAI_ORG_ID}")
     logger.info(f"[BIFL] Version: {BIFL_VERSION}")
+    logger.info(f"[BIFL] Streaming Enabled: {ENABLE_STREAM}")
 
     # 🧩 Manual router registration in strict order
     from app.api import tools_api, responses_api, passthrough_proxy
@@ -47,22 +55,18 @@ async def lifespan(app: FastAPI):
     logger.info("[BIFL] Shutting down gracefully...")
     await asyncio.sleep(0.1)
 
-
 # --------------------------------------------------------------------------
 # FastAPI Application
 # --------------------------------------------------------------------------
-
 app = FastAPI(
     title="ChatGPT Relay API",
     version=BIFL_VERSION,
     lifespan=lifespan,
 )
 
-
 # --------------------------------------------------------------------------
 # Global Middleware
 # --------------------------------------------------------------------------
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # tighten in production
@@ -71,16 +75,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # --------------------------------------------------------------------------
 # Base Routes (Health, Version, Root)
 # --------------------------------------------------------------------------
-
 @app.get("/v1/healthz")
 def health():
     """Health check endpoint."""
     return {"status": "ok", "version": BIFL_VERSION}
-
 
 @app.get("/v1/version")
 def version():
@@ -90,7 +91,6 @@ def version():
         "openai_base_url": OPENAI_BASE_URL,
         "enable_stream": ENABLE_STREAM
     }
-
 
 @app.get("/")
 def root():
@@ -103,6 +103,7 @@ def root():
         "message": "ChatGPT Relay is running.",
         "version": BIFL_VERSION,
         "openai_base_url": OPENAI_BASE_URL,
+        "enable_stream": ENABLE_STREAM,
         "endpoints": {
             "health": "/v1/healthz",
             "version": "/v1/version",

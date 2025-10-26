@@ -5,14 +5,15 @@ C:.
 |   .gitignore
 |   all_tools.json
 |   client.py
+|   openai.json
 |   openapi.yaml
 |   payload.json
 |   project-tree.md
 |   README.md
+|   relay.json
 |   replacements.txt
 |   requirements.txt
 |   sora.py
-|   test.py
 |   test_openai_relay_full.py
 |   test_upload.jsonl
 |   __init__.py
@@ -46131,34 +46132,28 @@ C:.
 |   |   |   echo_tool.py
 |   |   |   file_search.py
 |   |   |   image_generation.py
+|   |   |   math_solver.py
 |   |   |   moderation.py
 |   |   |   realtime.py
 |   |   |   speech.py
 |   |   |   tools_manifest.json
 |   |   |   video_generation.py
 |   |   |   web_search.py
+|   |   |   __init__.py
 |   |   |   
 |   |   \---__pycache__
-|   |           code_interpreter.cpython-313.pyc
 |   |           code_interpreter.cpython-314.pyc
-|   |           computer_use.cpython-313.pyc
 |   |           computer_use.cpython-314.pyc
-|   |           echo_tool.cpython-313.pyc
 |   |           echo_tool.cpython-314.pyc
-|   |           file_search.cpython-313.pyc
 |   |           file_search.cpython-314.pyc
-|   |           image_generation.cpython-313.pyc
 |   |           image_generation.cpython-314.pyc
-|   |           moderation.cpython-313.pyc
+|   |           math_solver.cpython-314.pyc
 |   |           moderation.cpython-314.pyc
-|   |           realtime.cpython-313.pyc
 |   |           realtime.cpython-314.pyc
-|   |           speech.cpython-313.pyc
 |   |           speech.cpython-314.pyc
-|   |           video_generation.cpython-313.pyc
 |   |           video_generation.cpython-314.pyc
-|   |           web_search.cpython-313.pyc
 |   |           web_search.cpython-314.pyc
+|   |           __init__.cpython-314.pyc
 |   |           
 |   +---utils
 |   |   |   db_logger.py
@@ -46174,6 +46169,7 @@ C:.
 |   |           
 |   \---__pycache__
 |           main.cpython-313.pyc
+|           verify_tools.cpython-314.pyc
 |           __init__.cpython-313.pyc
 |           __init__.cpython-314.pyc
 |           __init__.py
