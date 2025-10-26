@@ -1,33 +1,80 @@
+# ======================================================
+# 🚀 Core Runtime Dependencies
+# ======================================================
 fastapi>=0.118.0
-uvicorn>=0.37.0
+uvicorn[standard]>=0.37.0
 httpx>=0.28.1
+aiofiles>=24.1.0
 python-dotenv>=1.0.1
 pydantic>=2.11.10
-python-multipart
+python-multipart>=0.0.9
 sseclient-py>=1.8
+jinja2>=3.1.4
+anyio>=4.4.0
+aiohttp
+psutil
 
+
+# ======================================================
+# 🧠 OpenAI / BIFL Relay & API Helpers
+# ======================================================
 requests>=2.32.2
+tiktoken>=0.7.0
+openapi-spec-validator>=0.7.1
+pyyaml>=6.0.2
+
+# ======================================================
+# 🖼️ Multimedia & Data Tools
+# ======================================================
 pillow>=10.3.0
 numpy>=1.26.4
 pydub>=0.25.1
+fpdf>=1.7.2
 
-pytest
-pytest-asyncio
-httpx[cli]
-black
-ruff
-mypy
-rich
-fpdf
-tiktoken
+# ======================================================
+# 💾 Database / Logging Utilities
+# ======================================================
+aiosqlite>=0.20.0
+sqlalchemy>=2.0.34
+rich>=13.8.1
 
-pyyaml
-openapi-spec-validator
+# ======================================================
+# 🧩 Optional: Vector & AI Integration
+# ======================================================
+scikit-learn>=1.5.2
+sentence-transformers>=3.1.1
 
-#USAGE
-#Action	Command
-#Auto-upgrade pip	python -m pip install --upgrade pip
-#Install all requirements	pip install -r requirements.txt
-#Run test script	python bifl_test.py
-#Run test suite (if exists)	pytest
-#Format/lint/typecheck code	black . ruff . mypy .
+# ======================================================
+# 🧪 Testing & Development
+# ======================================================
+pytest>=8.3.3
+pytest-asyncio>=0.24.0
+httpx[cli]>=0.28.1
+black>=24.10.0
+ruff>=0.7.1
+mypy>=1.11.1
+
+# ======================================================
+# 🧰 Optional: CLI / Tooling Enhancements
+# ======================================================
+typer>=0.12.5
+click>=8.1.8
+loguru>=0.7.2
+
+# ======================================================
+# ✅ INSTALLATION NOTES
+# ======================================================
+# 1️⃣ Upgrade pip:
+#     python -m pip install --upgrade pip
+#
+# 2️⃣ Install all requirements:
+#     pip install -r requirements.txt
+#
+# 3️⃣ Run the relay locally:
+#     uvicorn app.main:app --reload --port 8080
+#
+# 4️⃣ Run tests (if bifl_test.py or pytest suite present):
+#     pytest
+#
+# 5️⃣ Format, lint, and type-check:
+#     black . && ruff . && mypy .

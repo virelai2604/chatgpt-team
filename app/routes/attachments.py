@@ -1,77 +1,183 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Response, Query
-from app.utils.db_logger import save_attachment
-from typing import List
-import sqlite3
-import hashlib
+# app/routes/attachments.py
+# BIFL v2.2 — Hybrid Local/Relay File Attachments API
+# Supports local persistence + automatic registration via /v1/files relay.
+
+import os
 import uuid
-from datetime import datetime
-import getpass, socket
+import time
+import sqlite3
+import aiofiles
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
+from typing import List, Dict, Any, Optional
+from app.api.forward import forward_openai
 
-DB_PATH = r"D:\ChatgptDATAB\DB Chatgpt\chatgpt_archive.sqlite"
-router = APIRouter()
 
-@router.post("/upload")
-async def upload_attachment(file: UploadFile = File(...)):
-    content = await file.read()
-    sha256 = hashlib.sha256(content).hexdigest()
-    operator = getpass.getuser()
-    machine = socket.gethostname()
-    now = datetime.utcnow().isoformat()
-    # Unique chat_id: sha256 prefix + uuid4
-    chat_id = f"{sha256[:12]}-{uuid.uuid4().hex[:12]}"
+router = APIRouter(prefix="/v1/attachments", tags=["Attachments"])
 
-    save_attachment(
-        filename=file.filename,
-        mimetype=file.content_type,
-        size=len(content),
-        sha256=sha256,
-        data=content,
-        imported_at=now,
-        source_folder="api-upload",
-        imported_by=operator,
-        imported_on_machine=machine,
-        replaced_at=None,
-        chat_id=chat_id
-    )
-    return {"status": "ok", "sha256": sha256, "chat_id": chat_id}
+# === Config ===
+ATTACHMENTS_DIR = os.getenv("ATTACHMENTS_DIR", "data/uploads")
+DB_PATH = os.path.join(ATTACHMENTS_DIR, "attachments.db")
+os.makedirs(ATTACHMENTS_DIR, exist_ok=True)
 
-@router.get("/{chat_id}/download")
-async def download_attachment(chat_id: str):
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT filename, mimetype, data FROM attachments WHERE chat_id=? ORDER BY version DESC LIMIT 1", (chat_id,))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Attachment not found")
-        filename, mimetype, data = row
-        return Response(
-            content=data,
-            media_type=mimetype,
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+# === Init local DB ===
+def init_db():
+    with sqlite3.connect(DB_PATH) as db:
+        db.execute("""
+        CREATE TABLE IF NOT EXISTS attachments (
+            id TEXT PRIMARY KEY,
+            chat_id TEXT,
+            filename TEXT,
+            bytes INTEGER,
+            file_id TEXT,
+            created_at INTEGER
+        );
+        """)
+init_db()
+
+
+# === Utility ===
+def save_metadata(chat_id: str, filename: str, size: int, file_id: Optional[str] = None):
+    with sqlite3.connect(DB_PATH) as db:
+        db.execute(
+            "INSERT INTO attachments (id, chat_id, filename, bytes, file_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), chat_id, filename, size, file_id, int(time.time()))
         )
+        db.commit()
 
-@router.get("/list")
-def list_attachments(limit: int = Query(25, gt=0, le=100)):
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT chat_id, filename, mimetype, size, imported_at, version FROM attachments ORDER BY imported_at DESC LIMIT ?",
-            (limit,)
-        )
-        rows = cur.fetchall()
+
+def list_metadata(chat_id: str) -> List[Dict[str, Any]]:
+    with sqlite3.connect(DB_PATH) as db:
+        rows = db.execute(
+            "SELECT id, filename, bytes, file_id, created_at FROM attachments WHERE chat_id = ? ORDER BY created_at DESC",
+            (chat_id,)
+        ).fetchall()
         return [
             {
-                "chat_id": r[0], "filename": r[1], "mimetype": r[2],
-                "size": r[3], "imported_at": r[4], "version": r[5]
-            }
-            for r in rows
+                "id": row[0],
+                "object": "file",
+                "filename": row[1],
+                "bytes": row[2],
+                "file_id": row[3],
+                "created_at": row[4],
+                "chat_id": chat_id
+            } for row in rows
         ]
 
-@router.delete("/{chat_id}")
-def delete_attachment(chat_id: str):
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM attachments WHERE chat_id=?", (chat_id,))
-        if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Attachment not found")
-    return {"status": "deleted", "chat_id": chat_id}
+
+def delete_metadata(chat_id: str, filename: str):
+    with sqlite3.connect(DB_PATH) as db:
+        db.execute("DELETE FROM attachments WHERE chat_id = ? AND filename = ?", (chat_id, filename))
+        db.commit()
+
+
+# === Endpoints ===
+
+@router.post("/{chat_id}/upload")
+async def upload_attachment(
+    chat_id: str,
+    file: UploadFile = File(...),
+    relay: bool = Form(True)
+):
+    """Upload a file locally and (optionally) register it via OpenAI /v1/files."""
+    upload_dir = os.path.join(ATTACHMENTS_DIR, chat_id)
+    os.makedirs(upload_dir, exist_ok=True)
+
+    local_path = os.path.join(upload_dir, file.filename)
+    try:
+        # 1️⃣ Save locally
+        async with aiofiles.open(local_path, "wb") as out_file:
+            content = await file.read()
+            await out_file.write(content)
+        size = os.path.getsize(local_path)
+
+        file_id = None
+        # 2️⃣ Optionally register remotely
+        if relay:
+            try:
+                relay_resp = await forward_openai(
+                    path="/v1/files",
+                    method="POST",
+                    files={"file": (file.filename, open(local_path, "rb"))}
+                )
+                if relay_resp and "id" in relay_resp:
+                    file_id = relay_resp["id"]
+            except Exception as e:
+                print(f"[WARN] Relay upload failed: {e}")
+
+        # 3️⃣ Save metadata
+        save_metadata(chat_id, file.filename, size, file_id)
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "object": "file",
+                "filename": file.filename,
+                "bytes": size,
+                "chat_id": chat_id,
+                "file_id": file_id,
+                "local_path": local_path,
+                "relay_synced": bool(file_id)
+            },
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+
+
+@router.get("/{chat_id}")
+async def list_attachments(chat_id: str):
+    """List all attachments for a chat."""
+    files = list_metadata(chat_id)
+    return JSONResponse(content={"object": "list", "data": files})
+
+
+@router.get("/{chat_id}/download/{filename}")
+async def download_attachment(chat_id: str, filename: str):
+    """Download a locally stored attachment."""
+    path = os.path.join(ATTACHMENTS_DIR, chat_id, filename)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    async def file_stream():
+        async with aiofiles.open(path, "rb") as f:
+            chunk = await f.read(8192)
+            while chunk:
+                yield chunk
+                chunk = await f.read(8192)
+
+    headers = {"Content-Disposition": f"attachment; filename={filename}"}
+    return StreamingResponse(file_stream(), headers=headers, media_type="application/octet-stream")
+
+
+@router.delete("/{chat_id}/{filename}")
+async def delete_attachment(chat_id: str, filename: str):
+    """Delete an attachment locally and remove from metadata DB."""
+    path = os.path.join(ATTACHMENTS_DIR, chat_id, filename)
+    if os.path.exists(path):
+        os.remove(path)
+    delete_metadata(chat_id, filename)
+    return JSONResponse(content={"deleted": filename, "chat_id": chat_id})
+
+
+# === Optional: sync missing local→relay ===
+@router.post("/{chat_id}/sync")
+async def sync_missing(chat_id: str):
+    """Force re-upload of missing local files to relay."""
+    upload_dir = os.path.join(ATTACHMENTS_DIR, chat_id)
+    if not os.path.exists(upload_dir):
+        return JSONResponse(content={"synced": 0, "message": "No local directory"})
+    synced = 0
+    for fname in os.listdir(upload_dir):
+        path = os.path.join(upload_dir, fname)
+        try:
+            relay_resp = await forward_openai(
+                path="/v1/files",
+                method="POST",
+                files={"file": (fname, open(path, "rb"))}
+            )
+            if relay_resp and "id" in relay_resp:
+                save_metadata(chat_id, fname, os.path.getsize(path), relay_resp["id"])
+                synced += 1
+        except Exception as e:
+            print(f"[SYNC WARN] {fname}: {e}")
+    return JSONResponse(content={"synced": synced})

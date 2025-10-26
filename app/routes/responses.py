@@ -1,120 +1,99 @@
-# app/routes/responses.py
-"""
-BIFL v2.1 – Unified Responses Endpoint
-Now defaults to sora-2-pro model unless overridden in request.
-Handles both streaming passthrough and non-stream (tool-loop) logic.
-"""
+# ==========================================================
+#  app/routes/responses.py — BIFL v2.3.3-p2
+# ==========================================================
+#  Unified /v1/responses route for standard, stream, and realtime
+#  - Standard responses → JSONResponse
+#  - stream:true → StreamingResponse (NDJSON)
+#  - gpt-5-realtime → proxy to realtime session (future support)
+# ==========================================================
 
-import os, json
-import httpx
-from fastapi import APIRouter, Request, Response
-from fastapi.responses import JSONResponse
-from dotenv import load_dotenv
-
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from app.api.forward import forward_openai
-from app.routes.services.tool_registry import collect_tool_results
+from app.utils.error_handler import error_response
+from app.utils.db_logger import save_raw_request
+import asyncio
+import json
+import uuid
+import os
+import logging
 
-load_dotenv()
+router = APIRouter(prefix="/v1", tags=["Responses"])
+logger = logging.getLogger("bifl.responses")
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "sora-2-pro")
-
-router = APIRouter(tags=["core"])
-
-OPENAI_BASE = "https://api.openai.com"
-MAX_TOOL_ROUNDS = 3  # limit re-entry to avoid loops
-
-# ----------------------------------------------------------------------
-# Helper: Authentication headers
-# ----------------------------------------------------------------------
-def _auth_headers() -> dict:
-    h = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    if OPENAI_ORG_ID:
-        h["OpenAI-Organization"] = OPENAI_ORG_ID
-    return h
-
-
-# ----------------------------------------------------------------------
-# /v1/responses → main unified interface
-# ----------------------------------------------------------------------
-@router.post("/v1/responses")
+# ──────────────────────────────────────────────
+#  Unified /v1/responses endpoint
+# ──────────────────────────────────────────────
+@router.post("/responses")
 async def create_response(request: Request):
-    """
-    Handle response creation:
-    - If 'stream' is True → SSE passthrough to OpenAI
-    - Else → run local tool-loop for function_call handling
-    - Defaults to sora-2-pro if model unspecified
-    """
-    body = await request.json()
+    trace_id = str(uuid.uuid4())
 
-    # Default model fallback
-    if "model" not in body or not body["model"]:
-        body["model"] = DEFAULT_MODEL
+    try:
+        body = await request.json()
+    except Exception:
+        return error_response(
+            "invalid_json", "Request body is not valid JSON", 400, {"trace_id": trace_id}
+        )
 
-    # Streaming passthrough
-    if body.get("stream") is True:
-        return await forward_openai(request, "/v1/responses")
+    model = body.get("model")
+    stream = body.get("stream", False)
 
-    # Non-stream: execute locally with tool-loop
-    headers = _auth_headers()
-    async with httpx.AsyncClient(timeout=None) as client:
-        # Initial request
-        r = await client.post(f"{OPENAI_BASE}/v1/responses", headers=headers, json=body)
-        try:
-            data = r.json()
-        except Exception:
-            return Response(
-                content=r.content,
-                status_code=r.status_code,
-                media_type=r.headers.get("content-type"),
-            )
+    # Log raw request asynchronously
+    asyncio.create_task(
+        asyncio.to_thread(
+            save_raw_request,
+            "/v1/responses",
+            json.dumps(body),
+            "{}",
+            "2.3.3-p2"
+        )
+    )
 
-        rounds = 0
-        while rounds < MAX_TOOL_ROUNDS:
-            tool_results = await collect_tool_results(data)
-            if not tool_results:
-                break
-            follow_up = {
-                "model": body["model"],
-                "previous_response_id": data["id"],
-                "input": tool_results,
-            }
-            r2 = await client.post(
-                f"{OPENAI_BASE}/v1/responses", headers=headers, json=follow_up
-            )
-            data = r2.json()
-            rounds += 1
+    # Detect realtime models (e.g., gpt-5-realtime)
+    if model and "realtime" in model.lower():
+        logger.info(f"[TRACE {trace_id}] Upgrading to realtime session for {model}")
+        return JSONResponse(
+            content={
+                "status": "pending",
+                "note": f"Realtime model {model} requires WebSocket (not REST).",
+                "trace_id": trace_id,
+            },
+            status_code=426,  # Upgrade Required
+        )
 
-        # Final model output
-        return JSONResponse(content=data, status_code=r.status_code)
+    # Handle streaming mode
+    if stream:
+        logger.info(f"[TRACE {trace_id}] → Stream mode active for {model}")
 
+        async def stream_forward():
+            async for chunk in await forward_openai(request, "/v1/responses"):
+                yield chunk
 
-# ----------------------------------------------------------------------
-# Secondary Routes (passthrough)
-# ----------------------------------------------------------------------
-@router.get("/v1/responses/{response_id}")
-async def get_response(request: Request, response_id: str):
-    """Retrieve a response by ID."""
-    return await forward_openai(request, f"/v1/responses/{response_id}")
+        return StreamingResponse(
+            stream_forward(),
+            media_type="application/x-ndjson",
+        )
 
+    # Standard (non-stream) case
+    logger.info(f"[TRACE {trace_id}] → Standard mode for {model}")
+    result = await forward_openai(request, "/v1/responses")
 
-@router.delete("/v1/responses/{response_id}")
-async def delete_response(request: Request, response_id: str):
-    """Delete a response."""
-    return await forward_openai(request, f"/v1/responses/{response_id}")
+    # Ensure pretty JSON output for PowerShell Invoke-RestMethod
+    if isinstance(result, JSONResponse):
+        result.media_type = "application/json"
+    return result
 
-
-@router.post("/v1/responses/{response_id}/cancel")
-async def cancel_response(request: Request, response_id: str):
-    """Cancel an in-progress response."""
-    return await forward_openai(request, f"/v1/responses/{response_id}/cancel")
-
-
-@router.get("/v1/responses/{response_id}/input_items")
-async def list_input_items(request: Request, response_id: str):
-    """List all input items linked to a response."""
-    return await forward_openai(request, f"/v1/responses/{response_id}/input_items")
+# ──────────────────────────────────────────────
+#  Simple tool listing endpoint
+# ──────────────────────────────────────────────
+@router.get("/tools/list")
+async def list_tools():
+    """Return available relay-side tools."""
+    tools = [
+        {"name": "embeddings", "endpoint": "/v1/embeddings"},
+        {"name": "moderations", "endpoint": "/v1/moderations"},
+        {"name": "files", "endpoint": "/v1/files"},
+        {"name": "vector_stores", "endpoint": "/v1/vector_stores"},
+        {"name": "videos", "endpoint": "/v1/videos"},
+    ]
+    return JSONResponse(content={"tools": tools, "version": "2.3.3-p2"})

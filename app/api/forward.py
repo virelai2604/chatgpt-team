@@ -1,102 +1,118 @@
-# app/api/forward.py
-import os
+# app/api/forward.py — BIFL v2.3.3 (Render-Optimized Stable)
+# Compatible with Render shared egress and OpenAI Cloudflare edge.
+
+import os, httpx, json
 from fastapi import Request
-from fastapi.responses import StreamingResponse, Response, JSONResponse
-import httpx
-from dotenv import load_dotenv
-from app.utils.db_logger import save_raw_request
+from fastapi.responses import Response, StreamingResponse
+from app.utils.error_handler import error_response
 
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
+TIMEOUT = int(os.getenv("FORWARD_TIMEOUT", "600"))
 
-def is_beta_assistants_endpoint(endpoint: str) -> bool:
-    # Restrict Assistants v2 beta header to vector stores only.
-    return endpoint.startswith("/v1/vector_stores")
-
-def is_sora_video_endpoint(endpoint: str) -> bool:
-    # Apply Sora beta header for video endpoints.
-    return endpoint.startswith("/v1/videos")
-
-async def forward_openai(request: Request, endpoint: str):
-    body = await request.body()
-    headers_json = str(dict(request.headers))
-    save_raw_request(endpoint=endpoint, raw_body=body, headers_json=headers_json)
-
+# ──────────────────────────────────────────────
+# Build trusted OpenAI headers
+# ──────────────────────────────────────────────
+def _build_headers(request: Request) -> dict:
+    """
+    Build a canonical OpenAI header set for Render hosting.
+    """
     headers = {
-        k.decode(): v.decode()
-        for k, v in request.headers.raw
-        if k.decode().lower() not in ["host", "authorization", "openai-organization"]
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "openai-python/2.6.1 (relay-bifl; Render)",
     }
-    headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
+
+    # Optional org header
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
 
-    # BIFL v2.1 beta headers
-    if is_beta_assistants_endpoint(endpoint):
-        headers["OpenAI-Beta"] = "assistants=v2"
-    elif is_sora_video_endpoint(endpoint):
-        headers["OpenAI-Beta"] = "sora=v1"
+    # Beta model headers (GPT-5, Sora, etc.)
+    beta_header = []
+    model_param = request.query_params.get("model", "")
+    if "gpt-5" in request.url.path or "gpt-5" in model_param:
+        beta_header.append("gpt-5-pro=v1")
+    if "sora" in request.url.path or "video" in request.url.path:
+        beta_header.append("sora-2-pro=v2")
+    if beta_header:
+        headers["OpenAI-Beta"] = ", ".join(beta_header)
 
-    url = f"https://api.openai.com{endpoint}"
+    return headers
 
-    wants_stream = (
-        "text/event-stream" in headers.get("accept", "")
-        or "text/event-stream" in headers.get("content-type", "")
-        or headers.get("accept", "") == "application/octet-stream"
-        or headers.get("accept", "") == "application/x-ndjson"
-        or (("stream" in request.query_params and request.query_params["stream"] == "true"))
+# ──────────────────────────────────────────────
+# Stream response helper
+# ──────────────────────────────────────────────
+async def _stream_response(upstream: httpx.Response) -> StreamingResponse:
+    async def _gen():
+        async for chunk in upstream.aiter_bytes():
+            yield chunk
+    return StreamingResponse(
+        _gen(),
+        status_code=upstream.status_code,
+        headers=upstream.headers,
+        media_type=upstream.headers.get("content-type", "application/x-ndjson"),
     )
 
+# ──────────────────────────────────────────────
+# Forward any request to OpenAI API
+# ──────────────────────────────────────────────
+async def forward_openai(request: Request, endpoint: str):
+    headers = _build_headers(request)
+    method = request.method.upper()
+    url = f"{OPENAI_BASE_URL}{endpoint}"
+
     try:
-        async with httpx.AsyncClient(timeout=None) as client:
-            if wants_stream:
-                async with client.stream(
-                    method=request.method,
-                    url=url,
-                    headers=headers,
-                    content=body
-                ) as resp:
-                    if resp.status_code >= 400 and not resp.headers.get("content-type", "").startswith("text/event-stream"):
-                        content = await resp.aread()
-                        return Response(
-                            content=content,
-                            status_code=resp.status_code,
-                            headers=dict(resp.headers),
-                            media_type=resp.headers.get("content-type")
-                        )
+        body = await request.body()
+        stream_flag = str(request.query_params.get("stream", "")).lower() == "true"
 
-                    async def streamer():
-                        try:
-                            async for chunk in resp.aiter_bytes():
-                                yield chunk
-                        except httpx.StreamClosed:
-                            return
-                        except Exception as ex:
-                            print("Error streaming:", ex)
-                            return
+        # ─── Render-safe HTTP/2 client ───
+        async with httpx.AsyncClient(
+            timeout=TIMEOUT,
+            http2=True,
+            headers=headers,
+            follow_redirects=True,
+        ) as client:
 
-                    return StreamingResponse(
-                        streamer(),
-                        status_code=resp.status_code,
-                        headers=dict(resp.headers),
-                        media_type=resp.headers.get("content-type")
-                    )
-            else:
-                resp = await client.request(
-                    method=request.method,
-                    url=url,
-                    headers=headers,
-                    content=body
-                )
+            # Debug (optional)
+            print(f"[DEBUG] → {method} {url}")
+            print("[DEBUG] Headers:", json.dumps(headers, indent=2))
+
+            resp = await client.request(method, url, content=body or None)
+
+            # ─── Streamed responses ───
+            if stream_flag or resp.headers.get("content-type", "").startswith(
+                ("text/event-stream", "application/x-ndjson")
+            ):
+                return await _stream_response(resp)
+
+            # ─── Standard JSON responses ───
+            if resp.headers.get("content-type", "").startswith("application/json"):
                 return Response(
-                    content=resp.content,
+                    resp.text,
+                    media_type="application/json",
                     status_code=resp.status_code,
-                    headers=dict(resp.headers),
-                    media_type=resp.headers.get("content-type")
                 )
+
+            # ─── Fallback decoding ───
+            try:
+                data = resp.json()
+                return Response(
+                    json.dumps(data),
+                    media_type="application/json",
+                    status_code=resp.status_code,
+                )
+            except Exception:
+                return Response(
+                    resp.content,
+                    status_code=resp.status_code,
+                    media_type=resp.headers.get(
+                        "content-type", "application/octet-stream"
+                    ),
+                )
+
+    except httpx.RequestError as e:
+        return error_response("network_error", str(e), 503)
     except Exception as e:
-        return JSONResponse(
-            status_code=502,
-            content={"error": {"type": "proxy_error", "message": str(e)}}
-        )
+        return error_response("forward_error", str(e), 500)
