@@ -14,3 +14,10 @@ TOOL_SCHEMA = {
     },
     "returns": {"type": "array", "items": {"type": "string", "description": "Image URLs"}}
 }
+def run(payload):
+    """Simulates /v1/images call."""
+    prompt = payload.get("prompt", "test image")
+    return {
+        "object": "image",
+        "url": f"https://mock-images.local/{prompt.replace(' ', '_')}.png"
+    }

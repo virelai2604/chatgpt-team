@@ -9,11 +9,11 @@ from typing import Any, Dict, List
 # -----------------------------------------------------------------------------
 # Tools API - BIFL 2.3.4-fp
 # -----------------------------------------------------------------------------
-# Provides:
-#   • /v1/tools                 → list available tools
-#   • /v1/tools/{id}            → get info about a tool
-#   • /v1/tools/{id}/execute    → run a tool locally
-#   • /v1/tools/schema          → expose JSON schema for all tools (UI + GPT-5)
+# Endpoints:
+#   • GET  /v1/tools              → list available tools
+#   • GET  /v1/tools/schema       → expose JSON schemas for all tools
+#   • GET  /v1/tools/{id}         → get info about a tool
+#   • POST /v1/tools/{id}/execute → run a tool locally
 # -----------------------------------------------------------------------------
 
 logger = logging.getLogger("BIFL.ToolsAPI")
@@ -24,25 +24,22 @@ MANIFEST_PATH = os.path.join(TOOLS_DIR, "tools_manifest.json")
 
 
 # -----------------------------------------------------------------------------
-# Load manifest file (optional)
+# Manifest and Tool Loader
 # -----------------------------------------------------------------------------
 def load_manifest() -> List[Dict[str, Any]]:
+    """Load optional manifest file for tool metadata."""
     try:
         if os.path.exists(MANIFEST_PATH):
             with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-                manifest = json.load(f)
-                if isinstance(manifest, list):
-                    return manifest
-        return []
+                data = json.load(f)
+                return data if isinstance(data, list) else []
     except Exception as e:
-        logger.warning(f"[ToolsAPI] Failed to load manifest: {e}")
-        return []
+        logger.warning(f"[ToolsAPI] Manifest load failed: {e}")
+    return []
 
 
-# -----------------------------------------------------------------------------
-# Dynamic tool loader
-# -----------------------------------------------------------------------------
 def load_tools() -> Dict[str, Any]:
+    """Dynamically import all Python modules from app/tools/."""
     tools = {}
     for _, name, _ in pkgutil.iter_modules([TOOLS_DIR]):
         try:
@@ -64,8 +61,33 @@ TOOL_MANIFEST: List[Dict[str, Any]] = load_manifest()
 # -----------------------------------------------------------------------------
 @router.get("")
 def list_tools() -> Dict[str, Any]:
-    """List all loaded tool IDs."""
+    """Return a list of all available tool IDs."""
     return {"tools": list(TOOL_REGISTRY.keys())}
+
+
+# -----------------------------------------------------------------------------
+# GET /v1/tools/schema
+# -----------------------------------------------------------------------------
+@router.get("/schema")
+def list_tool_schemas() -> Dict[str, Any]:
+    """Expose JSON schemas for each local tool (UI + GPT-5 introspection)."""
+    schemas = []
+    try:
+        for tool_id, mod in TOOL_REGISTRY.items():
+            schema = getattr(mod, "TOOL_SCHEMA", None)
+            if schema:
+                schemas.append(schema)
+            else:
+                # Fallback minimal schema
+                schemas.append({
+                    "name": tool_id,
+                    "description": getattr(mod, "TOOL_DESCRIPTION", "No schema provided."),
+                    "parameters": {"type": "object", "properties": {}}
+                })
+        return {"schemas": schemas}
+    except Exception as e:
+        logger.error(f"[ToolsAPI] Failed to compile tool schemas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # -----------------------------------------------------------------------------
@@ -73,13 +95,12 @@ def list_tools() -> Dict[str, Any]:
 # -----------------------------------------------------------------------------
 @router.get("/{tool_id}")
 def get_tool_info(tool_id: str) -> Dict[str, Any]:
-    """Retrieve metadata about a specific tool."""
+    """Get metadata about a specific tool."""
     tool = TOOL_REGISTRY.get(tool_id)
     if not tool:
         raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found")
 
     manifest = next((t for t in TOOL_MANIFEST if t.get("id") == tool_id), {})
-
     return {
         "id": tool_id,
         "version": getattr(tool, "TOOL_VERSION", "v1"),
@@ -94,48 +115,18 @@ def get_tool_info(tool_id: str) -> Dict[str, Any]:
 # -----------------------------------------------------------------------------
 @router.post("/{tool_id}/execute")
 def execute_tool(tool_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Run the tool's local function implementation."""
+    """Execute a tool locally."""
     tool = TOOL_REGISTRY.get(tool_id)
     if not tool:
         raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found")
 
     try:
         if not hasattr(tool, "run"):
-            raise HTTPException(status_code=400, detail=f"Tool '{tool_id}' has no run() function")
+            raise HTTPException(status_code=400, detail=f"Tool '{tool_id}' missing run()")
         result = tool.run(payload)
         return {"tool": tool_id, "result": result}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"[ToolsAPI] Execution error in '{tool_id}': {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# -----------------------------------------------------------------------------
-# GET /v1/tools/schema
-# -----------------------------------------------------------------------------
-@router.get("/schema")
-def list_tool_schemas() -> Dict[str, Any]:
-    """
-    Expose JSON schema for each tool for UI + GPT-5 model introspection.
-    Each tool module can define TOOL_SCHEMA = {...}.
-    """
-    try:
-        schemas: List[Dict[str, Any]] = []
-        for tool_id, mod in TOOL_REGISTRY.items():
-            schema = getattr(mod, "TOOL_SCHEMA", None)
-            if schema:
-                schemas.append(schema)
-            else:
-                # Fallback if no schema is defined
-                schemas.append({
-                    "name": tool_id,
-                    "description": getattr(mod, "TOOL_DESCRIPTION", "No schema provided."),
-                    "parameters": {"type": "object", "properties": {}}
-                })
-
-        return {"schemas": schemas}
-
-    except Exception as e:
-        logger.error(f"[ToolsAPI] Failed to compile tool schemas: {e}")
         raise HTTPException(status_code=500, detail=str(e))

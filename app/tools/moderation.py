@@ -13,3 +13,10 @@ TOOL_SCHEMA = {
     },
     "returns": {"type": "object", "properties": {"flagged": {"type": "boolean"}, "categories": {"type": "object"}}}
 }
+def run(payload):
+    """Simulates /v1/moderations call."""
+    text = payload.get("input", "")
+    return {
+        "id": "mod_mock_001",
+        "results": [{"flagged": False, "categories": {"violence": False, "sexual": False}}],
+    }

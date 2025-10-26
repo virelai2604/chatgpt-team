@@ -16,7 +16,7 @@ def _build_headers(request: Request) -> dict:
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Accept": "application/json",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
@@ -29,7 +29,6 @@ def _build_headers(request: Request) -> dict:
         beta.append("sora-2-pro=v2")
     if "realtime" in path:
         beta.append("gpt-5-realtime=v1")
-
     if beta:
         headers["OpenAI-Beta"] = ", ".join(beta)
     return headers
@@ -49,10 +48,11 @@ async def _stream_response(resp: httpx.Response):
     async def event_gen():
         async for chunk in resp.aiter_bytes():
             yield chunk
-    return StreamingResponse(event_gen(),
+    return StreamingResponse(
+        event_gen(),
         status_code=resp.status_code,
         headers=resp.headers,
-        media_type=resp.headers.get("content-type", "application/x-ndjson")
+        media_type=resp.headers.get("content-type", "application/x-ndjson"),
     )
 
 async def forward_openai(request: Request, endpoint: str | None = None, override_body: dict | None = None):
@@ -71,11 +71,9 @@ async def forward_openai(request: Request, endpoint: str | None = None, override
         async with httpx.AsyncClient(timeout=TIMEOUT, http2=True, headers=headers) as client:
             resp = await client.request(request.method, url, content=body)
 
-            # ✅ Upstream error passthrough
             if resp.is_error:
                 return error_response("upstream_error", resp.text, resp.status_code)
 
-            # ✅ Streaming support
             if ENABLE_STREAM or "text/event-stream" in resp.headers.get("content-type", ""):
                 return await _stream_response(resp)
 
@@ -85,7 +83,6 @@ async def forward_openai(request: Request, endpoint: str | None = None, override
                 media_type=resp.headers.get("content-type", "application/json"),
                 headers=resp.headers,
             )
-
     except httpx.RequestError as e:
         return error_response("network_error", str(e), 503)
     except Exception as e:

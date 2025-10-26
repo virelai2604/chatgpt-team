@@ -13,3 +13,10 @@ TOOL_SCHEMA = {
     },
     "returns": {"type": "object", "properties": {"session_id": {"type": "string"}, "status": {"type": "string"}}}
 }
+def run(payload):
+    """Simulates /v1/realtime/sessions call."""
+    return {
+        "session_id": "rt_mock_001",
+        "url": "wss://mock.realtime.local/session/rt_mock_001",
+        "expires_in": 3600
+    }
