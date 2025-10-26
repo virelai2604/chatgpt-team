@@ -1,10 +1,16 @@
-from app.routes.services.tool_registry import register_tool
-import math
-
-@register_tool("code_interpreter")
-async def code_interpreter(code: str):
-    """Safely evaluate small Python snippets."""
-    try:
-        return {"output": eval(code, {"math": math, "__builtins__": {}})}
-    except Exception as e:
-        return {"error": str(e)}
+TOOL_ID = "code_interpreter"
+TOOL_VERSION = "v2"
+TOOL_TYPE = "function"
+TOOL_SCHEMA = {
+    "name": "code_interpreter",
+    "description": "Execute Python code in a sandboxed environment.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string", "description": "Python code to execute."}
+        },
+        "required": ["code"]
+    },
+    "returns": {"type": "object", "properties": {
+        "stdout": {"type": "string"}, "stderr": {"type": "string"}, "result": {"type": "string"}}}
+}

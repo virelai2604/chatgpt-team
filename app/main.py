@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.routes import register_routes
+from app.routes.register_routes import register_routes
 from app.utils.db_logger import init_db
 
 # ----------------------------------------------------------

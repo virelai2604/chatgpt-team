@@ -1,13 +1,17 @@
-from app.routes.services.tool_registry import register_tool
-import os, httpx
-
-@register_tool("web_search")
-async def web_search(query: str):
-    """Search the web for up-to-date information."""
-    key = os.getenv("TAVILY_API_KEY")
-    if not key:
-        return {"error": "Missing TAVILY_API_KEY"}
-    async with httpx.AsyncClient() as client:
-        resp = await client.post("https://api.tavily.com/search",
-                                 json={"query": query, "api_key": key})
-        return resp.json()
+TOOL_ID = "web_search"
+TOOL_VERSION = "v1"
+TOOL_TYPE = "web_search"
+TOOL_SCHEMA = {
+    "name": "web_search",
+    "description": "Perform a live web search using OpenAI Search or external sources.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search query text."},
+            "max_results": {"type": "integer", "default": 5}
+        },
+        "required": ["query"]
+    },
+    "returns": {"type": "array", "items": {"type": "object", "properties": {
+        "title": {"type": "string"}, "url": {"type": "string"}, "snippet": {"type": "string"}}}}
+}

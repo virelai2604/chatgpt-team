@@ -1,0 +1,56 @@
+[
+  {
+    "id": "web_search",
+    "version": "v1",
+    "description": "Performs live web queries (OpenAI Search index)",
+    "entry": "app/tools/web_search.py"
+  },
+  {
+    "id": "file_search",
+    "version": "v2",
+    "description": "Semantic search across uploaded files or vector stores",
+    "entry": "app/tools/file_search.py"
+  },
+  {
+    "id": "code_interpreter",
+    "version": "v2",
+    "description": "Executes Python snippets securely (sandboxed)",
+    "entry": "app/tools/code_interpreter.py"
+  },
+  {
+    "id": "computer_use",
+    "version": "v1",
+    "description": "Controls OS actions (MCP-compliant)",
+    "entry": "app/tools/computer_use.py"
+  },
+  {
+    "id": "realtime",
+    "version": "v1",
+    "description": "Interact via audio/video sessions",
+    "entry": "app/tools/realtime.py"
+  },
+  {
+    "id": "speech",
+    "version": "v1",
+    "description": "Text-to-speech via Audio API",
+    "entry": "app/tools/speech.py"
+  },
+  {
+    "id": "moderation",
+    "version": "v1",
+    "description": "Content safety filter",
+    "entry": "app/tools/moderation.py"
+  },
+  {
+    "id": "image_generation",
+    "version": "v1",
+    "description": "Generate images (gpt-image-1, DALL-E)",
+    "entry": "app/tools/image_generation.py"
+  },
+  {
+    "id": "video_generation",
+    "version": "v1",
+    "description": "Generate videos (sora-2-pro)",
+    "entry": "app/tools/video_generation.py"
+  }
+]
