@@ -13,17 +13,19 @@ async def create_response(request: Request):
         body = await request.json()
         model = body.get("model", "").lower()
 
-        # Auto-enable tool container for GPT-5 and similar
+        # Auto-enable compliant tool container for GPT-5 and compatible models
         if any(m in model for m in ["gpt-5", "gpt-4o", "o-series"]) and not body.get("tools"):
             body["tools"] = [{
                 "type": "code_interpreter",
-                "container": {"id": "sandbox", "language": "python", "enabled": True}
+                "container": {"type": "auto"}
             }]
             logger.info(f"[ResponsesAPI] Auto-injected default tool container for model: {model}")
 
+        # Persist raw request for audit/debug
         await save_raw_request("responses", body)
         logger.info(f"[ResponsesAPI] Forwarding model: {model}")
 
+        # Forward to upstream OpenAI API
         return await forward_openai(request, override_body=body)
 
     except Exception as e:
