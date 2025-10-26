@@ -6,7 +6,7 @@ import os, json, httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
 from app.utils.error_handler import error_response
-from app.routes.services.tool_registry import list_local_tools  # ✅ fixed import
+from app.api.tools_api import TOOL_REGISTRY
 
 router = APIRouter(prefix="/v1", tags=["Responses"])
 

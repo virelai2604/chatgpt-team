@@ -31,7 +31,11 @@ ENABLE_STREAM = os.getenv("ENABLE_STREAM", "false").lower() == "true"
 # --------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager (replaces FastAPI startup/shutdown)."""
+    """
+    Lifecycle manager for startup and shutdown.
+    Initializes the database/logging layer, registers all routers
+    in the correct order to ensure OpenAI relay compatibility.
+    """
     logger.info("[BIFL] Initializing database...")
     try:
         await init_db()
@@ -44,10 +48,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"[BIFL] Version: {BIFL_VERSION}")
     logger.info(f"[BIFL] Streaming Enabled: {ENABLE_STREAM}")
 
-    # 🧩 Manual router registration in strict order
-    from app.api import tools_api, responses_api, passthrough_proxy
-    app.include_router(tools_api.router)       # must come first
-    app.include_router(responses_api.router)   # model API second
+    # 🧩 Manual router registration in strict OpenAI relay order
+    # 1️⃣ tools_api → 2️⃣ responses → 3️⃣ passthrough_proxy
+    from app.api import tools_api, responses, passthrough_proxy
+
+    app.include_router(tools_api.router)        # must come first
+    app.include_router(responses.router)        # model API second
     app.include_router(passthrough_proxy.router)  # wildcard last
 
     logger.info("[BIFL] Route registration complete.")
@@ -95,7 +101,7 @@ def version():
 @app.get("/")
 def root():
     """
-    Root route (for browsers and Render health probes).
+    Root route (for browsers and Render/Cloudflare health probes).
     Prevents 404 spam on GET / and HEAD /.
     """
     return {
@@ -108,6 +114,7 @@ def root():
             "health": "/v1/healthz",
             "version": "/v1/version",
             "models": "/v1/models",
-            "responses": "/v1/responses"
+            "responses": "/v1/responses",
+            "tools": "/v1/tools"
         }
     }
