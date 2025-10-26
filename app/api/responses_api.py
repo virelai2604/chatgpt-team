@@ -1,17 +1,23 @@
 import logging
 from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import StreamingResponse
 from app.api.forward_openai import forward_openai
 from app.utils.db_logger import save_raw_request
 
 logger = logging.getLogger("BIFL.ResponsesAPI")
 router = APIRouter(prefix="/v1/responses", tags=["Responses"])
 
+
 @router.post("")
 async def create_response(request: Request):
-    """Unified OpenAI-compatible endpoint for GPT-5, o-series, Sora, and multimodal models."""
+    """
+    Unified OpenAI-compatible endpoint for GPT-5, o-series, Sora, and multimodal models.
+    Supports both standard JSON responses and SSE token streaming.
+    """
     try:
         body = await request.json()
         model = body.get("model", "").lower()
+        stream = body.get("stream", False)
 
         # Auto-enable compliant tool container for GPT-5 and compatible models
         if any(m in model for m in ["gpt-5", "gpt-4o", "o-series"]) and not body.get("tools"):
@@ -21,16 +27,43 @@ async def create_response(request: Request):
             }]
             logger.info(f"[ResponsesAPI] Auto-injected default tool container for model: {model}")
 
-        # Persist raw request for audit/debug
+        # Save the incoming request for auditing / debugging
         await save_raw_request("responses", body)
-        logger.info(f"[ResponsesAPI] Forwarding model: {model}")
+        logger.info(f"[ResponsesAPI] Forwarding model: {model} (stream={stream})")
 
-        # Forward to upstream OpenAI API
-        return await forward_openai(request, override_body=body)
+        # Non-streaming: behave as before
+        if not stream:
+            return await forward_openai(request, override_body=body)
+
+        # ----------------------------------------------------------------------
+        # STREAMING MODE
+        # ----------------------------------------------------------------------
+        async def event_stream():
+            """
+            Async generator that yields upstream events line by line
+            (text/event-stream) as they arrive from OpenAI.
+            """
+            try:
+                async for chunk in forward_openai(
+                    request,
+                    override_body={**body, "stream": True},
+                    stream=True
+                ):
+                    # Each chunk should already be encoded for SSE
+                    yield chunk
+            except Exception as e:
+                logger.error(f"[ResponsesAPI] Streaming error: {e}")
+                yield f"data: [ERROR] {str(e)}\n\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream"
+        )
 
     except Exception as e:
         logger.error(f"[ResponsesAPI] Request forwarding failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/{response_id}")
 async def get_response(response_id: str):
@@ -49,6 +82,7 @@ async def get_response(response_id: str):
     except Exception as e:
         logger.error(f"[ResponsesAPI] Retrieval failed: {e}")
         raise HTTPException(status_code=404, detail="Response not found")
+
 
 @router.get("/schema")
 async def get_schema():
