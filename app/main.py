@@ -6,12 +6,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.utils.db_logger import init_db
 
+# --------------------------------------------------------------------------
+# Configuration and Logging
+# --------------------------------------------------------------------------
+
 logger = logging.getLogger("BIFL")
 
 BIFL_VERSION = "2.3.4-fp"
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
 OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
 ENABLE_STREAM = os.getenv("ENABLE_STREAM", "false").lower() == "true"
+
+
+# --------------------------------------------------------------------------
+# FastAPI Lifespan Manager
+# --------------------------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -39,27 +48,39 @@ async def lifespan(app: FastAPI):
     await asyncio.sleep(0.1)
 
 
+# --------------------------------------------------------------------------
+# FastAPI Application
+# --------------------------------------------------------------------------
+
 app = FastAPI(
     title="ChatGPT Relay API",
     version=BIFL_VERSION,
     lifespan=lifespan,
 )
 
+
 # --------------------------------------------------------------------------
 # Global Middleware
 # --------------------------------------------------------------------------
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten in prod
+    allow_origins=["*"],  # tighten in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+# --------------------------------------------------------------------------
+# Base Routes (Health, Version, Root)
+# --------------------------------------------------------------------------
+
 @app.get("/v1/healthz")
 def health():
     """Health check endpoint."""
     return {"status": "ok", "version": BIFL_VERSION}
+
 
 @app.get("/v1/version")
 def version():
@@ -68,4 +89,24 @@ def version():
         "version": BIFL_VERSION,
         "openai_base_url": OPENAI_BASE_URL,
         "enable_stream": ENABLE_STREAM
+    }
+
+
+@app.get("/")
+def root():
+    """
+    Root route (for browsers and Render health probes).
+    Prevents 404 spam on GET / and HEAD /.
+    """
+    return {
+        "status": "ok",
+        "message": "ChatGPT Relay is running.",
+        "version": BIFL_VERSION,
+        "openai_base_url": OPENAI_BASE_URL,
+        "endpoints": {
+            "health": "/v1/healthz",
+            "version": "/v1/version",
+            "models": "/v1/models",
+            "responses": "/v1/responses"
+        }
     }
