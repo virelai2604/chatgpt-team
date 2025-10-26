@@ -1,63 +1,45 @@
 # ============================================================
-# app/routes/register_routes.py
-# Dynamic route loader for BIFL relay (v2.3.4-fp)
+# app/routes/register_routes.py — Unified Route Loader
+# Automatically registers all routers from app.api & app.routes
 # ============================================================
 
 import os
 import pkgutil
 import importlib
 import logging
+from fastapi import FastAPI
 
-logger = logging.getLogger("BIFL")
+logger = logging.getLogger("BIFL.RegisterRoutes")
 
-
-def register_routes(app):
+def register_routes(app: FastAPI):
     """
     Dynamically discover and include routers from:
-      - app.api.*  (custom APIs like tools_api, responses_api)
-      - app.routes.*  (core endpoints like videos, files, etc.)
-
-    Handles namespace packages safely (no __init__.py required).
+      - app.api.*  (tools_api, responses, passthrough_proxy)
+      - app.routes.*  (audio, images, vector_stores, etc.)
     """
-
-    base_packages = ["app.routes", "app.api"]
+    base_packages = ["app.api", "app.routes"]
     logger.info("[BIFL] Starting router auto-registration...")
 
     for package_name in base_packages:
         try:
-            # Import package (e.g., app.api or app.routes)
             package = importlib.import_module(package_name)
-            package_path = getattr(package, "__file__", None)
+            package_dir = os.path.dirname(package.__file__)
 
-            # Handle namespace packages that lack __file__
-            if not package_path:
-                logger.warning(f"[BIFL] Skipped namespace package {package_name} (no __file__)")
-                continue
-
-            package_dir = os.path.dirname(package_path)
-
-            # Iterate through submodules in the package
             for _, module_name, is_pkg in pkgutil.iter_modules([package_dir]):
                 if is_pkg:
-                    continue  # Skip subfolders
-
-                full_module_name = f"{package_name}.{module_name}"
+                    continue
+                full_module = f"{package_name}.{module_name}"
 
                 try:
-                    module = importlib.import_module(full_module_name)
+                    module = importlib.import_module(full_module)
 
-                    # Attach routers if they exist
                     if hasattr(module, "router"):
                         app.include_router(module.router)
-                        prefix = getattr(module.router, "prefix", "(no prefix)")
-                        logger.info(f"[BIFL] Router attached: {full_module_name} → prefix={prefix}")
-                    else:
-                        logger.debug(f"[BIFL] Skipped {full_module_name}: no router found")
-
+                        prefix = getattr(module.router, "prefix", "")
+                        logger.info(f"[BIFL] Router registered: {full_module} → prefix={prefix}")
                 except Exception as e:
-                    logger.warning(f"[BIFL] Failed to import {full_module_name}: {e}")
-
+                    logger.warning(f"[BIFL] Skipped {full_module}: {e}")
         except Exception as e:
-            logger.error(f"[BIFL] Error loading package {package_name}: {e}")
+            logger.error(f"[BIFL] Error scanning package {package_name}: {e}")
 
     logger.info("[BIFL] Route registration complete.")

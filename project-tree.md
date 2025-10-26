@@ -45537,6 +45537,7 @@ C:.
 |   |       |           _subprocess.cpython-313.pyc
 |   |       |           _types.cpython-313.pyc
 |   |       |           __init__.cpython-313.pyc
+|   |       |           __main__.cpython-313.pyc
 |   |       |           
 |   |       +---uvicorn-0.37.0.dist-info
 |   |       |   |   entry_points.txt
@@ -46049,7 +46050,6 @@ C:.
 |   +---api
 |   |   |   forward_openai.py
 |   |   |   passthrough_proxy.py
-|   |   |   responses_api.py
 |   |   |   tools_api.py
 |   |   |   __init__.py
 |   |   |   
@@ -46070,27 +46070,19 @@ C:.
 |   |               __init__.cpython-314.pyc
 |   |               
 |   +---routes
-|   |   |   attachments.py
 |   |   |   audio.py
-|   |   |   conversations.py
 |   |   |   core.py
 |   |   |   embeddings.py
 |   |   |   files.py
 |   |   |   images.py
-|   |   |   jobs.py
-|   |   |   models.py
-|   |   |   moderations.py
 |   |   |   openapi.py
 |   |   |   register_routes.py
 |   |   |   relay_status.py
 |   |   |   responses.py
-|   |   |   usage.py
 |   |   |   vector_stores.py
 |   |   |   videos.py
 |   |   |   
 |   |   +---services
-|   |   |   |   tools_admin.py
-|   |   |   |   tool_registry.py
 |   |   |   |   __init__.py
 |   |   |   |   
 |   |   |   \---__pycache__
@@ -46128,31 +46120,37 @@ C:.
 |   |       
 |   +---tools
 |   |   |   code_interpreter.py
-|   |   |   computer_use.py
-|   |   |   echo_tool.py
+|   |   |   computer_use_preview.py
 |   |   |   file_search.py
 |   |   |   image_generation.py
-|   |   |   math_solver.py
-|   |   |   moderation.py
-|   |   |   realtime.py
-|   |   |   speech.py
 |   |   |   tools_manifest.json
-|   |   |   video_generation.py
-|   |   |   web_search.py
+|   |   |   web_search_preview.py
 |   |   |   __init__.py
 |   |   |   
 |   |   \---__pycache__
+|   |           code_interpreter.cpython-313.pyc
 |   |           code_interpreter.cpython-314.pyc
+|   |           computer_use.cpython-313.pyc
 |   |           computer_use.cpython-314.pyc
+|   |           echo_tool.cpython-313.pyc
 |   |           echo_tool.cpython-314.pyc
+|   |           file_search.cpython-313.pyc
 |   |           file_search.cpython-314.pyc
+|   |           image_generation.cpython-313.pyc
 |   |           image_generation.cpython-314.pyc
+|   |           math_solver.cpython-313.pyc
 |   |           math_solver.cpython-314.pyc
+|   |           moderation.cpython-313.pyc
 |   |           moderation.cpython-314.pyc
+|   |           realtime.cpython-313.pyc
 |   |           realtime.cpython-314.pyc
+|   |           speech.cpython-313.pyc
 |   |           speech.cpython-314.pyc
+|   |           video_generation.cpython-313.pyc
 |   |           video_generation.cpython-314.pyc
+|   |           web_search.cpython-313.pyc
 |   |           web_search.cpython-314.pyc
+|   |           __init__.cpython-313.pyc
 |   |           __init__.cpython-314.pyc
 |   |           
 |   +---utils

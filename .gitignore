@@ -84,3 +84,7 @@ __pycache__/
 .vscode/
 .idea/
 *.log
+pytest_cache/ 
+*data
+data
+Downloads

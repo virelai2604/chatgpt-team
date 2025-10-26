@@ -1,0 +1,34 @@
+{
+  "tools": [
+    {
+      "id": "code_interpreter",
+      "version": "v2",
+      "description": "Execute Python code securely in a sandboxed environment.",
+      "entry": "app/tools/code_interpreter.py"
+    },
+    {
+      "id": "file_search",
+      "version": "v2",
+      "description": "Semantic search across uploaded files or vector stores.",
+      "entry": "app/tools/file_search.py"
+    },
+    {
+      "id": "web_search_preview",
+      "version": "v1",
+      "description": "Perform live web searches for real-time information.",
+      "entry": "app/tools/web_search_preview.py"
+    },
+    {
+      "id": "image_generation",
+      "version": "v1",
+      "description": "Generate AI images (gpt-image-1, DALL-E).",
+      "entry": "app/tools/image_generation.py"
+    },
+    {
+      "id": "computer_use_preview",
+      "version": "v1",
+      "description": "Simulate or perform computer actions (navigation, typing, file I/O).",
+      "entry": "app/tools/computer_use_preview.py"
+    }
+  ]
+}
