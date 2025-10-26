@@ -1,71 +1,73 @@
-# BIFL v2.3.3 — Unified Video Generation + Remixing
-# Uses /v1/responses with tools[] instead of deprecated /v1/videos direct jobs.
+# ==========================================================
+# app/routes/videos.py — BIFL v2.3.4-fp (finalized)
+# ==========================================================
+# OpenAI-compatible video generation + job proxy.
+# Supports Sora 2 Pro, GPT-5 video tools, and async streaming.
+# ==========================================================
 
-import os, json, uuid, time, asyncio, sqlite3
-from fastapi import APIRouter, HTTPException, Body
-from fastapi.responses import JSONResponse, StreamingResponse
-from app.routes.core import forward_openai
+from fastapi import APIRouter, Request
+from app.api.forward import forward_openai
+from app.utils.db_logger import log_event
 
 router = APIRouter(prefix="/v1/videos", tags=["Videos"])
 
-VIDEO_DIR = os.getenv("VIDEO_DIR", "data/videos")
-DB_PATH = os.path.join(VIDEO_DIR, "videos.db")
-os.makedirs(VIDEO_DIR, exist_ok=True)
+# ----------------------------------------------------------
+# 🎬  Generate Video (stream-enabled)
+# ----------------------------------------------------------
+@router.post("")
+async def generate_video(request: Request):
+    """
+    Create a new video generation job.
+    Supports streaming progress logs via NDJSON.
 
-def record_video_job(model, prompt, seconds, purpose="video_generation", remixed_from=None):
-    job_id = str(uuid.uuid4())
-    with sqlite3.connect(DB_PATH) as db:
-        db.execute(
-            "CREATE TABLE IF NOT EXISTS videos (id TEXT, model TEXT, prompt TEXT, status TEXT, progress REAL, created_at INTEGER, seconds INTEGER, purpose TEXT, remixed_from TEXT)"
-        )
-        db.execute(
-            "INSERT INTO videos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (job_id, model, prompt, "queued", 0.0, int(time.time()), seconds, purpose, remixed_from),
-        )
-        db.commit()
-    return job_id
+    Example:
+      {
+        "model": "sora-2-pro",
+        "prompt": "A flying dragon made of fire",
+        "seconds": 10,
+        "size": "1920x1080",
+        "stream": true
+      }
+    """
+    endpoint = "/v1/responses?tools=video_generation"
+    response = await forward_openai(request, endpoint)
+    try:
+        await log_event("/v1/videos", response.status_code, "video generation started")
+    except Exception:
+        pass
+    return response
 
-@router.post("/")
-async def create_video(body: dict = Body(...)):
-    """Generate video using Sora 2 Pro via /v1/responses tools."""
-    prompt = body.get("prompt")
-    seconds = body.get("seconds", 10)
-    if not prompt:
-        raise HTTPException(status_code=400, detail="Missing 'prompt'")
-    job_id = record_video_job("sora-2-pro", prompt, seconds)
-    relay = await forward_openai(
-        "/v1/responses",
-        "POST",
-        {
-            "model": "gpt-5-pro",
-            "input": f"Generate a video: {prompt}",
-            "tools": [{"type": "video_generation", "model": "sora-2-pro", "parameters": {"seconds": seconds}}],
-        },
-    )
-    return JSONResponse(content={"id": job_id, "relay": relay, "status": "queued"})
 
-@router.post("/{video_id}/remix")
-async def remix_video(video_id: str, body: dict = Body(...)):
-    """Remix a previously generated video."""
-    prompt = body.get("prompt", "")
-    params = body.get("parameters", {"seconds": 10})
-    job_id = record_video_job("sora-2-pro", prompt, params.get("seconds", 10), "video_remix", remixed_from=video_id)
-    relay = await forward_openai(
-        "/v1/responses",
-        "POST",
-        {
-            "model": "gpt-5-pro",
-            "input": f"Remix video {video_id}: {prompt}",
-            "tools": [{"type": "video_generation", "model": "sora-2-pro", "parameters": params}],
-        },
-    )
-    return JSONResponse(content={"object": "video_remix", "id": job_id, "relay": relay})
+# ----------------------------------------------------------
+# 🔍  Get Video Job Status
+# ----------------------------------------------------------
+@router.get("/{job_id}")
+async def get_video_job(request: Request, job_id: str):
+    """
+    Retrieve metadata or progress for a specific video job.
+    Streams progress updates when available.
+    """
+    endpoint = f"/v1/videos/{job_id}"
+    response = await forward_openai(request, endpoint)
+    try:
+        await log_event(endpoint, response.status_code, f"video job {job_id}")
+    except Exception:
+        pass
+    return response
 
-@router.get("/{video_id}/events")
-async def stream_progress(video_id: str):
-    """Simulated progress event stream."""
-    async def progress():
-        for i in range(0, 101, 20):
-            yield f"data: {json.dumps({'video_id': video_id, 'progress': i})}\\n\\n"
-            await asyncio.sleep(0.5)
-    return StreamingResponse(progress(), media_type="text/event-stream")
+
+# ----------------------------------------------------------
+# 🧹  Delete / Cancel Video Job
+# ----------------------------------------------------------
+@router.delete("/{job_id}")
+async def cancel_video_job(request: Request, job_id: str):
+    """
+    Cancel or delete a video generation job.
+    """
+    endpoint = f"/v1/videos/{job_id}"
+    response = await forward_openai(request, endpoint)
+    try:
+        await log_event(endpoint, response.status_code, f"cancel job {job_id}")
+    except Exception:
+        pass
+    return response

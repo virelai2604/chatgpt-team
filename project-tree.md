@@ -45955,7 +45955,6 @@ C:.
 |                   
 +---app
 |   |   main.py
-|   |   routes.zip
 |   |   __init__.py
 |   |   
 |   +---api
@@ -45973,7 +45972,7 @@ C:.
 |   |   |   attachments.py
 |   |   |   audio.py
 |   |   |   conversations.py
-|   |   |   core.py.py
+|   |   |   core.py
 |   |   |   embeddings.py
 |   |   |   files.py
 |   |   |   images.py
@@ -45989,14 +45988,11 @@ C:.
 |   |   |   __init__.py
 |   |   |   
 |   |   +---services
-|   |   |   |   external_tools.py
 |   |   |   |   tools_admin.py
 |   |   |   |   tool_registry.py
-|   |   |   |   tool_router.py
 |   |   |   |   __init__.py
 |   |   |   |   
 |   |   |   \---__pycache__
-|   |   |           external_tools.cpython-313.pyc
 |   |   |           tools_admin.cpython-313.pyc
 |   |   |           tool_registry.cpython-313.pyc
 |   |   |           tool_router.cpython-313.pyc
@@ -46006,6 +46002,7 @@ C:.
 |   |           attachments.cpython-313.pyc
 |   |           audio.cpython-313.pyc
 |   |           conversations.cpython-313.pyc
+|   |           core.cpython-313.pyc
 |   |           embeddings.cpython-313.pyc
 |   |           files.cpython-313.pyc
 |   |           images.cpython-313.pyc
@@ -46041,9 +46038,6 @@ C:.
 |           __init__.cpython-313.pyc
 |           __init__.py
 |           
-+---config
-|       tools.json
-|       
 +---data
 |   +---conversations
 |   |       conversations.db

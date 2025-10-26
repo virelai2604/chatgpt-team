@@ -1,47 +1,29 @@
-# app/utils/db_logger.py — BIFL v2.3.3
-import sqlite3, os, asyncio
-from datetime import datetime
+# app/utils/db_logger.py — BIFL v2.3.4-fp
+import os, aiosqlite, asyncio
 
-DB_PATH = os.getenv("BIFL_DB_PATH", r"D:\ChatgptDATAB\DB Chatgpt\chatgpt_archive.sqlite")
-_log_queue: asyncio.Queue = asyncio.Queue()
+DB_PATH = os.getenv("BIFL_DB_PATH", "/data/chatgpt_archive.sqlite")
 
-async def _writer():
-    """Background async writer for queued DB inserts."""
-    while True:
-        try:
-            func, args = await _log_queue.get()
-            func(*args)
-        except Exception as e:
-            print(f"[DB_LOGGER] Error: {e}")
-        finally:
-            _log_queue.task_done()
-
-def _connect():
-    return sqlite3.connect(DB_PATH)
-
-def save_raw_request(endpoint, raw_body, headers_json, relay_version="2.3.3"):
-    with _connect() as conn:
-        conn.execute(
-            "INSERT INTO raw_requests (timestamp, endpoint, body, headers_json, relay_version) VALUES (?, ?, ?, ?, ?)",
-            (datetime.now().isoformat(), endpoint, raw_body, headers_json, relay_version)
-        )
-
-def init_db():
-    """Ensure tables exist with new columns."""
-    with _connect() as conn:
-        conn.executescript("""
-        CREATE TABLE IF NOT EXISTS raw_requests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            endpoint TEXT,
-            body BLOB,
-            headers_json TEXT,
-            relay_version TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_raw_endpoint ON raw_requests(endpoint);
+async def init_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS relay_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+                route TEXT,
+                status INTEGER,
+                message TEXT
+            )
         """)
-    print("[BIFL] SQLite database initialized.")
+        await db.commit()
 
-async def init_async_writer():
-    asyncio.create_task(_writer())
-    print("[BIFL] Async DB writer started.")
+async def log_event(route: str, status: int, message: str):
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                "INSERT INTO relay_logs (route, status, message) VALUES (?,?,?)",
+                (route, status, message)
+            )
+            await db.commit()
+    except Exception:
+        pass  # non-critical
