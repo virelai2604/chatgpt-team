@@ -1,67 +1,105 @@
 # ==========================================================
-#  app/main.py — BIFL v2.3.4-fp
+# app/main.py — ChatGPT Team Relay
+# BIFL v2.3.4-fp (Future-Proof, Stream-Enabled)
 # ==========================================================
-#  Central FastAPI relay entrypoint.
-#  • Dynamic route registration
-#  • SQLite logger init
-#  • Unified /v1/version + /v1/healthz
-#  • Lifespan startup/shutdown (FastAPI ≥0.118)
-# ==========================================================
-
-import os, logging, contextlib
+import os
+import asyncio
+import logging
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 from app.routes import register_routes
 from app.utils.db_logger import init_db
 
-APP_VERSION = "2.3.4-fp"
-BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
-ORG_ID = os.getenv("OPENAI_ORG_ID", "")
-DEBUG_MODE = os.getenv("DEBUG", "false").lower() == "true"
+# ----------------------------------------------------------
+# 🧠 Base Config
+# ----------------------------------------------------------
+logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(levelname)s] %(message)s')
+logger = logging.getLogger("BIFL")
 
-logging.basicConfig(
-    level=logging.DEBUG if DEBUG_MODE else logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] %(message)s",
-)
-logger = logging.getLogger("bifl.main")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
+RELAY_NAME = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
+BIFL_VERSION = os.getenv("BIFL_VERSION", "2.3.4-fp")
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
-@contextlib.asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info(f"[BIFL] Initializing database...")
-    init_db()
-    logger.info(f"[BIFL] Base URL: {BASE_URL}")
-    if ORG_ID:
-        logger.info(f"[BIFL] Organization: {ORG_ID}")
-    logger.info(f"[BIFL] Version: {APP_VERSION}")
-    yield
-    logger.info("[BIFL] Relay shutting down gracefully.")
-
+# ----------------------------------------------------------
+# ⚙️ FastAPI App
+# ----------------------------------------------------------
 app = FastAPI(
-    title="ChatGPT-Team Relay",
-    version=APP_VERSION,
-    description="Render-deployed OpenAI-compatible relay (BIFL v2.3.4-fp)",
-    lifespan=lifespan,
+    title=RELAY_NAME,
+    version=BIFL_VERSION,
+    description="OpenAI-compatible relay with GPT-5, Sora, and hybrid tools",
 )
 
-# Register all routers
-register_routes(app)
+# ----------------------------------------------------------
+# 🌐 CORS
+# ----------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),
+    allow_methods=os.getenv("CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS").split(","),
+    allow_headers=os.getenv("CORS_ALLOW_HEADERS", "*").split(","),
+)
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    logger.error(f"[BIFL] Unhandled exception: {exc}")
-    return JSONResponse(
-        {"error": {"type": "server_error", "message": str(exc)}}, status_code=500
-    )
+# ----------------------------------------------------------
+# 🧩 Lifespan: Startup + Shutdown
+# ----------------------------------------------------------
+@app.on_event("startup")
+async def startup_event():
+    logger.info("[BIFL] Initializing database...")
+    try:
+        await init_db()  # ✅ Fixed: ensure async initialization
+    except Exception as e:
+        logger.warning(f"[BIFL] Database init failed: {e}")
 
+    logger.info(f"[BIFL] Base URL: {OPENAI_BASE_URL}")
+    if OPENAI_ORG_ID:
+        logger.info(f"[BIFL] Organization: {OPENAI_ORG_ID}")
+    logger.info(f"[BIFL] Version: {BIFL_VERSION}")
+
+    # Register routes dynamically
+    register_routes(app)
+    logger.info("[BIFL] Route registration complete.")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("[BIFL] Shutting down gracefully...")
+    await asyncio.sleep(0.1)
+
+# ----------------------------------------------------------
+# 🧱 Health + Version Endpoints
+# ----------------------------------------------------------
 @app.get("/v1/healthz")
-async def healthz():
-    return {"ok": True, "version": APP_VERSION}
+async def health_check():
+    """Lightweight health check for Render and CI/CD."""
+    return {"status": "ok", "timestamp": datetime.utcnow().isoformat() + "Z"}
+
 
 @app.get("/v1/version")
-async def version():
+async def version_info():
+    """Expose relay version and environment metadata."""
     return {
-        "relay_name": "ChatGPT Team Relay",
-        "bifl_version": APP_VERSION,
-        "streaming_enabled": os.getenv("ENABLE_STREAM", "false").lower() == "true",
-        "base_url": BASE_URL,
+        "relay_name": RELAY_NAME,
+        "version": BIFL_VERSION,
+        "base_url": OPENAI_BASE_URL,
+        "org_id": OPENAI_ORG_ID,
+        "debug": DEBUG,
+        "tools_dir": os.getenv("TOOLS_DIR", "app/tools"),
+        "streaming_enabled": os.getenv("ENABLE_STREAM", "true"),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
     }
+
+
+# ----------------------------------------------------------
+# 🏁 Entrypoint (local dev)
+# ----------------------------------------------------------
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", "8080")),
+        reload=DEBUG,
+    )
