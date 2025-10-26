@@ -1,6 +1,9 @@
 # ==========================================================
 # main.py — ChatGPT Team Relay Core (BIFL v2.3.4-fp)
 # ==========================================================
+# Fully aligned with OpenAI Relay Ground Truth (Oct 2025)
+# Future-proofed for GPT-6, Sora-3, and new /v1 endpoints
+# ==========================================================
 
 import os
 import asyncio
@@ -9,15 +12,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.utils.db_logger import init_db
-from dotenv import load_dotenv  # ✅ Load environment file
+from dotenv import load_dotenv
+from app.routes.register_routes import register_routes  # 🧩 Auto route loader
 
 # --------------------------------------------------------------------------
-# Load .env first (ensures ENABLE_STREAM and other vars are applied)
+# Load environment configuration
 # --------------------------------------------------------------------------
 load_dotenv()
 
 # --------------------------------------------------------------------------
-# Configuration and Logging
+# Logging and configuration setup
 # --------------------------------------------------------------------------
 logger = logging.getLogger("BIFL")
 
@@ -27,86 +31,94 @@ OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
 ENABLE_STREAM = os.getenv("ENABLE_STREAM", "false").lower() == "true"
 
 # --------------------------------------------------------------------------
-# FastAPI Lifespan Manager
+# FastAPI application lifespan manager
 # --------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Lifecycle manager for startup and shutdown.
-    Initializes the database/logging layer, registers all routers
-    in the correct order to ensure OpenAI relay compatibility.
+    Lifecycle management for startup/shutdown.
+    Initializes databases, logs, and registers all routes
+    in strict OpenAI relay-compatible order.
     """
+    # Initialize DB / telemetry
     logger.info("[BIFL] Initializing database...")
     try:
         await init_db()
     except Exception as e:
         logger.warning(f"[BIFL] Database init failed: {e}")
 
+    logger.info(f"[BIFL] Relay Version: {BIFL_VERSION}")
     logger.info(f"[BIFL] Base URL: {OPENAI_BASE_URL}")
     if OPENAI_ORG_ID:
-        logger.info(f"[BIFL] Organization: {OPENAI_ORG_ID}")
-    logger.info(f"[BIFL] Version: {BIFL_VERSION}")
+        logger.info(f"[BIFL] Org ID: {OPENAI_ORG_ID}")
     logger.info(f"[BIFL] Streaming Enabled: {ENABLE_STREAM}")
 
-    # 🧩 Manual router registration in strict OpenAI relay order
-    # 1️⃣ tools_api → 2️⃣ responses → 3️⃣ passthrough_proxy
+    # ----------------------------------------------------------------------
+    # 🧩 Manual registration for core routers (OpenAI ground-truth order)
+    # ----------------------------------------------------------------------
     from app.api import tools_api, responses, passthrough_proxy
 
-    app.include_router(tools_api.router)        # must come first
-    app.include_router(responses.router)        # model API second
-    app.include_router(passthrough_proxy.router)  # wildcard last
+    app.include_router(tools_api.router)          # 1️⃣ Tool Reflection
+    app.include_router(responses.router)          # 2️⃣ Model Responses
+    app.include_router(passthrough_proxy.router)  # 3️⃣ Catch-all Proxy
 
-    logger.info("[BIFL] Route registration complete.")
+    # ----------------------------------------------------------------------
+    # 🧩 Automatic registration for all other /v1 routes
+    # This ensures lifetime compatibility with new OpenAI endpoints
+    # ----------------------------------------------------------------------
+    register_routes(app)
+
+    logger.info("[BIFL] All routers registered successfully.")
     yield
     logger.info("[BIFL] Shutting down gracefully...")
     await asyncio.sleep(0.1)
 
 # --------------------------------------------------------------------------
-# FastAPI Application
+# FastAPI application setup
 # --------------------------------------------------------------------------
 app = FastAPI(
-    title="ChatGPT Relay API",
+    title="ChatGPT Team Relay",
     version=BIFL_VERSION,
     lifespan=lifespan,
 )
 
 # --------------------------------------------------------------------------
-# Global Middleware
+# Global middleware (CORS, etc.)
 # --------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten in production
+    allow_origins=["*"],  # tighten for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # --------------------------------------------------------------------------
-# Base Routes (Health, Version, Root)
+# Base and health routes
 # --------------------------------------------------------------------------
 @app.get("/v1/healthz")
 def health():
-    """Health check endpoint."""
+    """Simple health check endpoint."""
     return {"status": "ok", "version": BIFL_VERSION}
 
 @app.get("/v1/version")
 def version():
-    """Show current relay version and configuration."""
+    """Return relay version and configuration."""
     return {
         "version": BIFL_VERSION,
         "openai_base_url": OPENAI_BASE_URL,
-        "enable_stream": ENABLE_STREAM
+        "enable_stream": ENABLE_STREAM,
     }
 
 @app.get("/")
 def root():
     """
-    Root route (for browsers and Render/Cloudflare health probes).
-    Prevents 404 spam on GET / and HEAD /.
+    Root route for browser checks and platform uptime monitoring.
+    Mirrors the style of OpenAI edge health responses.
     """
     return {
         "status": "ok",
-        "message": "ChatGPT Relay is running.",
+        "message": "ChatGPT Relay is operational.",
         "version": BIFL_VERSION,
         "openai_base_url": OPENAI_BASE_URL,
         "enable_stream": ENABLE_STREAM,
@@ -115,6 +127,7 @@ def root():
             "version": "/v1/version",
             "models": "/v1/models",
             "responses": "/v1/responses",
-            "tools": "/v1/tools"
-        }
+            "tools": "/v1/tools",
+            "auto_routes": True,  # indicates register_routes() is active
+        },
     }
