@@ -1,20 +1,61 @@
 {
   "schema_version": "v1",
-  "name_for_human": "ChatGPT Team Relay",
+  "name_for_human": "ChatGPT Team Relay (BIFL Surface)",
   "name_for_model": "chatgpt_team_relay",
-  "description_for_human": "OpenAI-compatible relay exposing /v1/responses, Files, Images, Audio, Vector Stores, Models and Usage.",
-  "description_for_model": "Relay OpenAI API calls with a BIFL v2.1 surface: /v1/responses (with optional local function tools for non-stream), Files/Uploads, Images, Audio, Vector Stores, Models, and Usage. Supports streaming passthrough (SSE/NDJSON).",
+  "description_for_human": "A unified OpenAI-compatible relay exposing GPT-5, Sora-2-Pro, vector, realtime, and jobs endpoints. Supports text, audio, image, and video generation, plus tool orchestration and streaming.",
+  "description_for_model": "An OpenAI-compatible API relay implementing the /v1/responses endpoint and tool system (video_generation, vector_store, audio, image, and realtime). Designed for GPT-5, Sora-2-Pro, and O-series models.",
   "auth": {
     "type": "service_http",
     "authorization_type": "bearer",
-    "verification_tokens": {}
+    "instructions": "Use your OpenAI-compatible API key in the Authorization header (e.g., Authorization: Bearer sk-...).",
+    "verification_tokens": {
+      "openai": "replace-with-your-verification-token"
+    }
   },
   "api": {
     "type": "openapi",
     "url": "https://chatgpt-team-relay.onrender.com/openapi.yaml",
-    "is_user_authenticated": false
+    "is_user_authenticated": true
   },
-  "logo_url": "https://chatgpt-team-relay.onrender.com/logo.png",
-  "contact_email": "support@example.com",
-  "legal_info_url": "https://chatgpt-team-relay.onrender.com/legal"
+  "logo_url": "https://chatgpt-team-relay.onrender.com/static/logo.png",
+  "contact_email": "support@chatgpt-team-relay.example",
+  "legal_info_url": "https://chatgpt-team-relay.onrender.com/legal",
+  "capabilities": {
+    "supports_stream": true,
+    "supports_vector_stores": true,
+    "supports_video_generation": true,
+    "supports_tool_registry": true,
+    "supports_realtime": true,
+    "supports_jobs": true
+  },
+  "endpoints": {
+    "responses": "/v1/responses",
+    "files": "/v1/files",
+    "images": "/v1/images/generations",
+    "audio": "/v1/audio/speech",
+    "vector_stores": "/v1/vector_stores",
+    "videos": "/v1/responses?tools=video_generation",
+    "realtime": "/v1/realtime/sessions",
+    "jobs": "/v1/jobs"
+  },
+  "examples": [
+    {
+      "name": "Text Completion",
+      "description": "Generate a structured GPT-5 text response via the unified endpoint.",
+      "curl": "curl -X POST https://chatgpt-team-relay.onrender.com/v1/responses -H 'Authorization: Bearer sk-...' -H 'Content-Type: application/json' -d '{\"model\": \"gpt-5-pro\", \"input\": \"Write a short poem about relay servers.\"}'"
+    },
+    {
+      "name": "Video Generation (Sora-2-Pro)",
+      "description": "Generate a cinematic 10-second clip using Sora 2 Pro.",
+      "curl": "curl -X POST https://chatgpt-team-relay.onrender.com/v1/responses -H 'Authorization: Bearer sk-...' -H 'Content-Type: application/json' -d '{\"model\": \"gpt-5-pro\", \"input\": \"Create a 10-second drone shot of snowy mountains at sunrise.\", \"tools\": [{\"type\": \"video_generation\", \"model\": \"sora-2-pro\", \"parameters\": {\"seconds\": 10, \"size\": \"1920x1080\"}}]}'"
+    },
+    {
+      "name": "Realtime Session",
+      "description": "Initialize a realtime GPT-5 session for text or audio.",
+      "curl": "curl -X POST https://chatgpt-team-relay.onrender.com/v1/realtime/sessions -H 'Authorization: Bearer sk-...' -H 'Content-Type: application/json' -d '{\"model\": \"gpt-5-pro-realtime\", \"mode\": \"text\"}'"
+    }
+  ],
+  "terms_of_service_url": "https://chatgpt-team-relay.onrender.com/terms",
+  "privacy_policy_url": "https://chatgpt-team-relay.onrender.com/privacy",
+  "created_at": "2025-10-25T00:00:00Z"
 }
