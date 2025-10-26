@@ -1,13 +1,16 @@
+# ==========================================================
 # app/routes/__init__.py — BIFL v2.3.4-fp
-import importlib, pkgutil
+# Auto-register all FastAPI routers recursively
+# ==========================================================
+import importlib
+import pkgutil
 from fastapi import FastAPI
 
 def register_routes(app: FastAPI):
-    """Auto-import and register all routers under app.routes."""
-    package = __package__
-    for _, mod_name, _ in pkgutil.iter_modules(__path__):
-        if mod_name.startswith("__"): continue
-        module = importlib.import_module(f"{package}.{mod_name}")
+    import app.routes
+    # Recursively walk through all submodules of app.routes
+    for _, module_name, _ in pkgutil.walk_packages(app.routes.__path__, app.routes.__name__ + "."):
+        module = importlib.import_module(module_name)
         if hasattr(module, "router"):
             app.include_router(module.router)
-            print(f"[BIFL] Registered router: {mod_name}")
+            print(f"[BIFL] Registered router: {module_name.split('.')[-1]}")

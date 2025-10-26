@@ -5,9 +5,10 @@
 import os
 import asyncio
 import logging
+from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
+from contextlib import asynccontextmanager
 from app.routes import register_routes
 from app.utils.db_logger import init_db
 
@@ -24,12 +25,38 @@ BIFL_VERSION = os.getenv("BIFL_VERSION", "2.3.4-fp")
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
 # ----------------------------------------------------------
+# 🌱 Lifespan Context (replaces deprecated startup/shutdown)
+# ----------------------------------------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("[BIFL] Initializing database...")
+    try:
+        await init_db()
+    except Exception as e:
+        logger.warning(f"[BIFL] Database init failed: {e}")
+
+    logger.info(f"[BIFL] Base URL: {OPENAI_BASE_URL}")
+    if OPENAI_ORG_ID:
+        logger.info(f"[BIFL] Organization: {OPENAI_ORG_ID}")
+    logger.info(f"[BIFL] Version: {BIFL_VERSION}")
+
+    # Load all routes dynamically
+    register_routes(app)
+    logger.info("[BIFL] Route registration complete.")
+
+    yield  # App runs while context is active
+
+    logger.info("[BIFL] Shutting down gracefully...")
+    await asyncio.sleep(0.1)
+
+# ----------------------------------------------------------
 # ⚙️ FastAPI App
 # ----------------------------------------------------------
 app = FastAPI(
     title=RELAY_NAME,
     version=BIFL_VERSION,
     description="OpenAI-compatible relay with GPT-5, Sora, and hybrid tools",
+    lifespan=lifespan,
 )
 
 # ----------------------------------------------------------
@@ -41,32 +68,6 @@ app.add_middleware(
     allow_methods=os.getenv("CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS").split(","),
     allow_headers=os.getenv("CORS_ALLOW_HEADERS", "*").split(","),
 )
-
-# ----------------------------------------------------------
-# 🧩 Lifespan: Startup + Shutdown
-# ----------------------------------------------------------
-@app.on_event("startup")
-async def startup_event():
-    logger.info("[BIFL] Initializing database...")
-    try:
-        await init_db()  # ✅ Fixed: ensure async initialization
-    except Exception as e:
-        logger.warning(f"[BIFL] Database init failed: {e}")
-
-    logger.info(f"[BIFL] Base URL: {OPENAI_BASE_URL}")
-    if OPENAI_ORG_ID:
-        logger.info(f"[BIFL] Organization: {OPENAI_ORG_ID}")
-    logger.info(f"[BIFL] Version: {BIFL_VERSION}")
-
-    # Register routes dynamically
-    register_routes(app)
-    logger.info("[BIFL] Route registration complete.")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("[BIFL] Shutting down gracefully...")
-    await asyncio.sleep(0.1)
 
 # ----------------------------------------------------------
 # 🧱 Health + Version Endpoints
@@ -90,7 +91,6 @@ async def version_info():
         "streaming_enabled": os.getenv("ENABLE_STREAM", "true"),
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
-
 
 # ----------------------------------------------------------
 # 🏁 Entrypoint (local dev)
