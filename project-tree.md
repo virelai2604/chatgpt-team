@@ -1569,6 +1569,72 @@ C:.
 |   |       |   \---licenses
 |   |       |           LICENSE.txt
 |   |       |           
+|   |       +---h2
+|   |       |   |   config.py
+|   |       |   |   connection.py
+|   |       |   |   errors.py
+|   |       |   |   events.py
+|   |       |   |   exceptions.py
+|   |       |   |   frame_buffer.py
+|   |       |   |   py.typed
+|   |       |   |   settings.py
+|   |       |   |   stream.py
+|   |       |   |   utilities.py
+|   |       |   |   windows.py
+|   |       |   |   __init__.py
+|   |       |   |   
+|   |       |   \---__pycache__
+|   |       |           config.cpython-313.pyc
+|   |       |           connection.cpython-313.pyc
+|   |       |           errors.cpython-313.pyc
+|   |       |           events.cpython-313.pyc
+|   |       |           exceptions.cpython-313.pyc
+|   |       |           frame_buffer.cpython-313.pyc
+|   |       |           settings.cpython-313.pyc
+|   |       |           stream.cpython-313.pyc
+|   |       |           utilities.cpython-313.pyc
+|   |       |           windows.cpython-313.pyc
+|   |       |           __init__.cpython-313.pyc
+|   |       |           
+|   |       +---h2-4.3.0.dist-info
+|   |       |   |   INSTALLER
+|   |       |   |   METADATA
+|   |       |   |   RECORD
+|   |       |   |   top_level.txt
+|   |       |   |   WHEEL
+|   |       |   |   
+|   |       |   \---licenses
+|   |       |           LICENSE
+|   |       |           
+|   |       +---hpack
+|   |       |   |   exceptions.py
+|   |       |   |   hpack.py
+|   |       |   |   huffman.py
+|   |       |   |   huffman_constants.py
+|   |       |   |   huffman_table.py
+|   |       |   |   py.typed
+|   |       |   |   struct.py
+|   |       |   |   table.py
+|   |       |   |   __init__.py
+|   |       |   |   
+|   |       |   \---__pycache__
+|   |       |           exceptions.cpython-313.pyc
+|   |       |           hpack.cpython-313.pyc
+|   |       |           huffman.cpython-313.pyc
+|   |       |           huffman_constants.cpython-313.pyc
+|   |       |           huffman_table.cpython-313.pyc
+|   |       |           struct.cpython-313.pyc
+|   |       |           table.cpython-313.pyc
+|   |       |           __init__.cpython-313.pyc
+|   |       |           
+|   |       +---hpack-4.1.0.dist-info
+|   |       |       INSTALLER
+|   |       |       LICENSE
+|   |       |       METADATA
+|   |       |       RECORD
+|   |       |       top_level.txt
+|   |       |       WHEEL
+|   |       |       
 |   |       +---httpcore
 |   |       |   |   py.typed
 |   |       |   |   _api.py
@@ -2129,6 +2195,27 @@ C:.
 |   |       |           
 |   |       +---huggingface_hub-0.36.0.dist-info
 |   |       |       entry_points.txt
+|   |       |       INSTALLER
+|   |       |       LICENSE
+|   |       |       METADATA
+|   |       |       RECORD
+|   |       |       top_level.txt
+|   |       |       WHEEL
+|   |       |       
+|   |       +---hyperframe
+|   |       |   |   exceptions.py
+|   |       |   |   flags.py
+|   |       |   |   frame.py
+|   |       |   |   py.typed
+|   |       |   |   __init__.py
+|   |       |   |   
+|   |       |   \---__pycache__
+|   |       |           exceptions.cpython-313.pyc
+|   |       |           flags.cpython-313.pyc
+|   |       |           frame.cpython-313.pyc
+|   |       |           __init__.cpython-313.pyc
+|   |       |           
+|   |       +---hyperframe-6.1.0.dist-info
 |   |       |       INSTALLER
 |   |       |       LICENSE
 |   |       |       METADATA
@@ -45958,16 +46045,28 @@ C:.
 |   |   __init__.py
 |   |   
 |   +---api
-|   |   |   forward.py
+|   |   |   forward_openai.py
 |   |   |   passthrough_proxy.py
+|   |   |   responses_api.py
+|   |   |   tools_api.py
 |   |   |   __init__.py
 |   |   |   
 |   |   \---__pycache__
-|   |           forward.cpython-313.pyc
-|   |           passthrough_proxy.cpython-313.pyc
-|   |           __init__.cpython-313.pyc
-|   |           __init__.py
-|   |           
+|   |       |   forward.cpython-313.pyc
+|   |       |   forward_openai.cpython-313.pyc
+|   |       |   passthrough_proxy.cpython-313.pyc
+|   |       |   passthrough_proxy.cpython-314.pyc
+|   |       |   responses_api.cpython-313.pyc
+|   |       |   tools_api.cpython-313.pyc
+|   |       |   tools_api.cpython-314.pyc
+|   |       |   __init__.cpython-313.pyc
+|   |       |   __init__.cpython-314.pyc
+|   |       |   __init__.py
+|   |       |   
+|   |       \---__pycache__
+|   |               __init__.cpython-313.pyc
+|   |               __init__.cpython-314.pyc
+|   |               
 |   +---routes
 |   |   |   attachments.py
 |   |   |   audio.py
@@ -45980,12 +46079,12 @@ C:.
 |   |   |   models.py
 |   |   |   moderations.py
 |   |   |   openapi.py
+|   |   |   register_routes.py
 |   |   |   relay_status.py
 |   |   |   responses.py
 |   |   |   usage.py
 |   |   |   vector_stores.py
 |   |   |   videos.py
-|   |   |   __init__.py
 |   |   |   
 |   |   +---services
 |   |   |   |   tools_admin.py
@@ -46010,6 +46109,7 @@ C:.
 |   |       |   models.cpython-313.pyc
 |   |       |   moderations.cpython-313.pyc
 |   |       |   openapi.cpython-313.pyc
+|   |       |   register_routes.cpython-313.pyc
 |   |       |   relay_status.cpython-313.pyc
 |   |       |   responses.cpython-313.pyc
 |   |       |   usage.cpython-313.pyc
@@ -46025,18 +46125,37 @@ C:.
 |   |       __init__.py
 |   |       
 |   +---tools
-|   |       audio_gen.py
-|   |       code_interpreter.py
-|   |       echo_tool.py
-|   |       file_search.py
-|   |       image_gen.py
-|   |       math_solver.py
-|   |       retrieval_tool.py
-|   |       system_tool.py
-|   |       url_scraper.py
-|   |       video_gen.py
-|   |       web_search.py
-|   |       
+|   |   |   code_interpreter.py
+|   |   |   computer_use.py
+|   |   |   file_search.py
+|   |   |   image_generation.py
+|   |   |   moderation.py
+|   |   |   realtime.py
+|   |   |   speech.py
+|   |   |   tools_manifest.json
+|   |   |   video_generation.py
+|   |   |   web_search.py
+|   |   |   
+|   |   \---__pycache__
+|   |           code_interpreter.cpython-313.pyc
+|   |           code_interpreter.cpython-314.pyc
+|   |           computer_use.cpython-313.pyc
+|   |           computer_use.cpython-314.pyc
+|   |           file_search.cpython-313.pyc
+|   |           file_search.cpython-314.pyc
+|   |           image_generation.cpython-313.pyc
+|   |           image_generation.cpython-314.pyc
+|   |           moderation.cpython-313.pyc
+|   |           moderation.cpython-314.pyc
+|   |           realtime.cpython-313.pyc
+|   |           realtime.cpython-314.pyc
+|   |           speech.cpython-313.pyc
+|   |           speech.cpython-314.pyc
+|   |           video_generation.cpython-313.pyc
+|   |           video_generation.cpython-314.pyc
+|   |           web_search.cpython-313.pyc
+|   |           web_search.cpython-314.pyc
+|   |           
 |   +---utils
 |   |   |   db_logger.py
 |   |   |   error_handler.py
@@ -46109,6 +46228,7 @@ C:.
 |           video_68ee2f01be14819092b2b8c5285e7765052c1ae6f005cb13_sora-2-pro_original.mp4
 |           video_video_68ed9a0af4e88190a4738d48c18a1e380fa5fdc91bb9eccf_content.mp4
 |           
++---logs
 +---samples files
 |       bifl_test_audio.mp3
 |       bifl_test_audio.wav

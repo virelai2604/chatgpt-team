@@ -1,29 +1,50 @@
-# app/utils/db_logger.py — BIFL v2.3.4-fp
-import os, aiosqlite, asyncio
+# ============================================================
+# app/utils/db_logger.py — BIFL Database & Logging Utility
+# Version: 2.3.4-fp
+# ============================================================
 
-DB_PATH = os.getenv("BIFL_DB_PATH", "/data/chatgpt_archive.sqlite")
+import os
+import json
+import logging
+from datetime import datetime
+from typing import Any, Dict
 
+logger = logging.getLogger("BIFL.DBLogger")
+
+# ------------------------------------------------------------
+# Configuration
+# ------------------------------------------------------------
+LOG_DIR = os.getenv("BIFL_LOG_DIR", "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+
+# ------------------------------------------------------------
+# 🧩 init_db — Initialize logging/DB layer (async-safe)
+# ------------------------------------------------------------
 async def init_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS relay_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-                route TEXT,
-                status INTEGER,
-                message TEXT
-            )
-        """)
-        await db.commit()
-
-async def log_event(route: str, status: int, message: str):
+    """Initialize the database or file-based logging directory (async-safe)."""
     try:
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute(
-                "INSERT INTO relay_logs (route, status, message) VALUES (?,?,?)",
-                (route, status, message)
-            )
-            await db.commit()
-    except Exception:
-        pass  # non-critical
+        os.makedirs(LOG_DIR, exist_ok=True)
+        logger.info(f"[DBLogger] Initialized log directory at: {LOG_DIR}")
+        return True
+    except Exception as e:
+        logger.error(f"[DBLogger] Failed to initialize DB logger: {e}")
+        return False
+
+
+# ------------------------------------------------------------
+# 💾 save_raw_request — Log raw request payloads for observability
+# ------------------------------------------------------------
+async def save_raw_request(endpoint: str, body: Dict[str, Any]):
+    """Save raw API request body as a local JSON file for debugging/auditing."""
+    try:
+        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%SZ")
+        filename = os.path.join(LOG_DIR, f"{endpoint}_{timestamp}.json")
+
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(body, f, indent=2)
+
+        logger.info(f"[DBLogger] Saved raw request: {filename}")
+
+    except Exception as e:
+        logger.warning(f"[DBLogger] Failed to log request: {e}")
