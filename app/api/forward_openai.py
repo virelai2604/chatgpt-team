@@ -12,6 +12,10 @@ OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
 TIMEOUT = int(os.getenv("RELAY_TIMEOUT", "600"))
 ENABLE_STREAM = os.getenv("ENABLE_STREAM", "false").lower() == "true"
 
+
+# --------------------------------------------------------------------------
+# HEADER BUILDER
+# --------------------------------------------------------------------------
 def _build_headers(request: Request) -> dict:
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -21,6 +25,7 @@ def _build_headers(request: Request) -> dict:
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
 
+    # Optional beta flags based on path
     beta = []
     path = request.url.path.lower()
     if "gpt-5" in path:
@@ -33,6 +38,10 @@ def _build_headers(request: Request) -> dict:
         headers["OpenAI-Beta"] = ", ".join(beta)
     return headers
 
+
+# --------------------------------------------------------------------------
+# AUTO-INJECT TOOLS (used by /v1/responses)
+# --------------------------------------------------------------------------
 def inject_tools(payload: dict) -> dict:
     """Auto-inject available tools if model supports them."""
     model = payload.get("model", "")
@@ -44,18 +53,40 @@ def inject_tools(payload: dict) -> dict:
         payload.setdefault("tool_choice", "auto")
     return payload
 
+
+# --------------------------------------------------------------------------
+# STREAMING HANDLER (async generator)
+# --------------------------------------------------------------------------
 async def _stream_response(resp: httpx.Response):
     async def event_gen():
-        async for chunk in resp.aiter_bytes():
-            yield chunk
+        try:
+            async for chunk in resp.aiter_bytes():
+                yield chunk
+        except Exception as e:
+            # Graceful SSE error propagation
+            yield f"data: [ERROR] {str(e)}\n\n".encode("utf-8")
+
     return StreamingResponse(
         event_gen(),
         status_code=resp.status_code,
-        headers=resp.headers,
-        media_type=resp.headers.get("content-type", "application/x-ndjson"),
+        headers={k: v for k, v in resp.headers.items() if k.lower() != "transfer-encoding"},
+        media_type=resp.headers.get("content-type", "text/event-stream"),
     )
 
-async def forward_openai(request: Request, endpoint: str | None = None, override_body: dict | None = None):
+
+# --------------------------------------------------------------------------
+# MAIN FORWARD FUNCTION
+# --------------------------------------------------------------------------
+async def forward_openai(
+    request: Request,
+    endpoint: str | None = None,
+    override_body: dict | None = None,
+    stream: bool | None = None
+):
+    """
+    Forward any OpenAI-compatible request upstream.
+    Supports both standard and streaming modes.
+    """
     headers = _build_headers(request)
     endpoint = endpoint or request.url.path
     url = f"{OPENAI_BASE_URL}{endpoint}"
@@ -68,21 +99,31 @@ async def forward_openai(request: Request, endpoint: str | None = None, override
         else:
             body = await request.body() or None
 
+        # Force streaming if explicitly requested
+        if stream is None:
+            stream = ENABLE_STREAM
+
         async with httpx.AsyncClient(timeout=TIMEOUT, http2=True, headers=headers) as client:
+            # If streaming, enable raw byte iteration
+            if stream or (override_body and override_body.get("stream")):
+                async with client.stream(request.method, url, content=body) as resp:
+                    if resp.is_error:
+                        return error_response("upstream_error", await resp.aread(), resp.status_code)
+                    return await _stream_response(resp)
+
+            # Non-streaming (standard)
             resp = await client.request(request.method, url, content=body)
 
             if resp.is_error:
                 return error_response("upstream_error", resp.text, resp.status_code)
 
-            if ENABLE_STREAM or "text/event-stream" in resp.headers.get("content-type", ""):
-                return await _stream_response(resp)
-
             return Response(
                 resp.content,
                 status_code=resp.status_code,
                 media_type=resp.headers.get("content-type", "application/json"),
-                headers=resp.headers,
+                headers={k: v for k, v in resp.headers.items() if k.lower() != "transfer-encoding"},
             )
+
     except httpx.RequestError as e:
         return error_response("network_error", str(e), 503)
     except Exception as e:
