@@ -16,3 +16,11 @@ TOOL_SCHEMA = {
     "returns": {"type": "array", "items": {"type": "object", "properties": {
         "filename": {"type": "string"}, "score": {"type": "number"}, "excerpt": {"type": "string"}}}}
 }
+def run(payload):
+    """Simulates /v1/file_search call."""
+    query = payload.get("query", "")
+    return {
+        "object": "list",
+        "data": [{"filename": "mock.txt", "excerpt": f"Found match for '{query}'"}],
+        "has_more": False
+    }

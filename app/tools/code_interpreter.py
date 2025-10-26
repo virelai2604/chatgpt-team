@@ -14,3 +14,21 @@ TOOL_SCHEMA = {
     "returns": {"type": "object", "properties": {
         "stdout": {"type": "string"}, "stderr": {"type": "string"}, "result": {"type": "string"}}}
 }
+def run(payload):
+    """Simulates /v1/code_interpreter call."""
+    code = payload.get("code", "print('Hello')")
+    return {
+        "id": "ci_mock_001",
+        "status": "completed",
+        "stdout": f"Executed: {code}",
+        "outputs": [{"type": "text", "content": "Hello from interpreter"}]
+    }
+def run(payload):
+    """Simulates /v1/code_interpreter call."""
+    code = payload.get("code", "print('Hello')")
+    return {
+        "id": "ci_mock_001",
+        "status": "completed",
+        "stdout": f"Executed: {code}",
+        "outputs": [{"type": "text", "content": "Hello from interpreter"}]
+    }

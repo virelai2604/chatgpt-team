@@ -19,3 +19,14 @@ TOOL_SCHEMA = {
         "download_url": {"type": "string"}
     }}
 }
+def run(payload):
+    """Simulates /v1/videos call."""
+    prompt = payload.get("prompt", "test video")
+    return {
+        "id": "video_mock_001",
+        "object": "video",
+        "status": "completed",
+        "model": "sora-2",
+        "prompt": prompt,
+        "download_url": f"https://mock-videos.local/{prompt.replace(' ', '_')}.mp4"
+    }

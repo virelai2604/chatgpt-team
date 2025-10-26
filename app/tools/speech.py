@@ -14,3 +14,11 @@ TOOL_SCHEMA = {
     },
     "returns": {"type": "object", "properties": {"audio_url": {"type": "string"}}}
 }
+def run(payload):
+    """Simulates /v1/audio/speech call."""
+    text = payload.get("text", "")
+    return {
+        "id": "sp_mock_001",
+        "object": "audio",
+        "url": f"https://mock-audio.local/{text[:10] or 'speech'}.mp3"
+    }
