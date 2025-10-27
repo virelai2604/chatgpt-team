@@ -33,6 +33,8 @@ def _build_headers() -> dict:
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json",
         "Accept": "application/json",
+        # disable Brotli/gzip compression to avoid PowerShell 7 decompression errors
+        "Accept-Encoding": "identity",
     }
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
