@@ -27,7 +27,7 @@ import pprint
 # 🌍 Ensure environment variables load before anything else
 # ----------------------------------------------------------
 from dotenv import load_dotenv
-load_dotenv()  # <--- critical fix: loads .env before accessing OPENAI_API_KEY
+load_dotenv()  # Loads .env before accessing OPENAI_API_KEY
 
 router = APIRouter()
 
@@ -158,4 +158,37 @@ async def forward_openai(request: Request, path: str):
             )
 
         # Log upstream results and error bodies
-        print(f"[Relay → OpenAI] {
+        print(f"[Relay → OpenAI] {r.status_code} {url}")
+        if r.status_code >= 400:
+            try:
+                err_preview = (await r.aread()).decode("utf-8", errors="ignore")[:800]
+                print("[Upstream Error Body]", err_preview)
+                return JSONResponse(
+                    status_code=r.status_code,
+                    content={"error": "upstream_error", "body": err_preview},
+                )
+            except Exception:
+                pass
+
+        return await _buffered_openai_response(r)
+
+    except httpx.RequestError as e:
+        return JSONResponse(
+            status_code=502, content={"error": "upstream_unreachable", "detail": str(e)}
+        )
+    except asyncio.TimeoutError:
+        return JSONResponse(
+            status_code=504,
+            content={"error": "timeout", "detail": "OpenAI upstream timeout"},
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": "relay_internal_error", "detail": str(e)},
+        )
+
+
+@router.on_event("shutdown")
+async def close_client():
+    """Gracefully close shared HTTP client."""
+    await client.aclose()
