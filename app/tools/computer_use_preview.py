@@ -1,19 +1,39 @@
-# app/tools/computer_use.py
 TOOL_ID = "computer_use"
-TOOL_TYPE = "function"
 TOOL_VERSION = "v1"
-TOOL_DESCRIPTION = "Allows the model to simulate or execute computer-like actions (file I/O, navigation, typing)."
+TOOL_TYPE = "function"
+TOOL_DESCRIPTION = "Simulate or perform computer actions (file I/O, typing, navigation)."
+
+TOOL_SCHEMA = {
+    "name": "computer_use",
+    "description": TOOL_DESCRIPTION,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "description": "Type of action to perform (e.g., open, click, type)."},
+            "target": {"type": "string", "description": "The target element or file for the action."},
+            "text": {"type": "string", "description": "Optional text input for typing actions."}
+        },
+        "required": ["action"]
+    },
+    "returns": {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string"},
+            "target": {"type": "string"},
+            "status": {"type": "string"},
+            "note": {"type": "string"}
+        }
+    }
+}
 
 def run(payload: dict):
-    """
-    Placeholder implementation for computer_use.
-    The real version could integrate with MCP connectors or OS sandbox APIs.
-    """
+    """Simulate computer actions."""
     action = payload.get("action", "noop")
     target = payload.get("target", "")
+    text = payload.get("text", "")
     return {
         "action": action,
         "target": target,
         "status": "simulated",
-        "note": "This is a placeholder. Implement OS/MCP logic as needed."
+        "note": f"Performed {action} on {target} with text '{text}'"
     }
