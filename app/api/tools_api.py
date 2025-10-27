@@ -33,8 +33,10 @@ def load_manifest() -> List[Dict[str, Any]]:
             with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, dict) and "tools" in data:
+                    logger.info(f"[ToolsAPI] Loaded manifest: {MANIFEST_PATH}")
                     return data["tools"]
                 elif isinstance(data, list):
+                    logger.info(f"[ToolsAPI] Loaded manifest list format: {MANIFEST_PATH}")
                     return data
     except Exception as e:
         logger.warning(f"[ToolsAPI] Manifest load failed: {e}")
@@ -129,15 +131,33 @@ def execute_tool(tool_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 # 🔁 Async wrappers for /v1/responses orchestration
 # --------------------------------------------------------------------------
 def list_local_tools() -> list:
-    """Expose minimal list of tool descriptors for /v1/responses injection."""
-    return [
-        {
-            "type": getattr(mod, "TOOL_TYPE", "function"),
-            "id": tool_id,
-            "description": getattr(mod, "TOOL_DESCRIPTION", "")
-        }
-        for tool_id, mod in TOOL_REGISTRY.items()
-    ]
+    """Expose OpenAI-compatible tool objects for /v1/responses injection."""
+    tools = []
+    for tool_id, mod in TOOL_REGISTRY.items():
+        schema = getattr(mod, "TOOL_SCHEMA", None)
+        tool_type = getattr(mod, "TOOL_TYPE", "function")
+
+        # Prefer valid schema from the tool definition
+        if schema and "parameters" in schema:
+            tools.append({
+                "type": tool_type,
+                "function": {
+                    "name": schema.get("name", tool_id),
+                    "description": schema.get("description", getattr(mod, "TOOL_DESCRIPTION", "")),
+                    "parameters": schema.get("parameters", {"type": "object", "properties": {}})
+                }
+            })
+        else:
+            # Fallback when no schema exists
+            tools.append({
+                "type": tool_type,
+                "function": {
+                    "name": tool_id,
+                    "description": getattr(mod, "TOOL_DESCRIPTION", ""),
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            })
+    return tools
 
 async def run_tool(tool_name: str, payload: dict) -> dict:
     """Async-compatible tool executor for /v1/responses."""
