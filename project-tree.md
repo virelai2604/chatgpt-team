@@ -3,6 +3,7 @@
   📄 __init__.py
   📄 generate_tree.py
   📄 main.py
+  📄 openapi.yaml
   📄 project-tree.md
   📄 requirements.txt
   📁 app
@@ -21,11 +22,10 @@
       📄 chat.py
       📄 core.py
       📄 files.py
-      📄 model.py
+      📄 models.py
       📄 openapi.py
       📄 realtime.py
       📄 register_routes.py
-      📄 relay_status - Copy.py
       📄 relay_status.py
       📄 vector_stores.py
     📁 tools
