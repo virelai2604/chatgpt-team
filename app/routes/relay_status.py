@@ -1,15 +1,33 @@
-# app/routes/relay_status.py — BIFL v2.3.4-fp
+# ==========================================================
+# app/routes/relay_status.py — Relay Health & Diagnostics
+# ==========================================================
+# Provides runtime information about the relay, including
+# version, uptime, active tools, and model availability.
+# Mirrors the OpenAI system route `/v1/relay/status`.
+# ==========================================================
+
 import os
+import platform
+import time
 from fastapi import APIRouter
+from app.api.tools_api import TOOL_REGISTRY
 
-router = APIRouter(prefix="/v1/relay_status", tags=["Relay Status"])
+START_TIME = time.time()
 
-@router.get("")
-async def status():
+router = APIRouter(prefix="/v1/relay", tags=["Relay"])
+
+@router.get("/status")
+async def relay_status():
+    """
+    Return current system status and runtime metadata.
+    """
+    uptime = time.time() - START_TIME
     return {
-        "relay_name": "ChatGPT Team Relay",
-        "bifl_version": "2.3.4-fp",
-        "streaming_enabled": os.getenv("ENABLE_STREAM", "false").lower() == "true",
-        "base_url": os.getenv("OPENAI_BASE_URL"),
-        "organization": os.getenv("OPENAI_ORG_ID", None),
+        "object": "relay.status",
+        "status": "ok",
+        "uptime_seconds": round(uptime, 2),
+        "python_version": platform.python_version(),
+        "relay_version": os.getenv("RELAY_VERSION", "2025-10"),
+        "available_tools": list(TOOL_REGISTRY.keys()),
+        "environment": os.getenv("RELAY_ENV", "production")
     }

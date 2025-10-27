@@ -1,12 +1,13 @@
 # ==========================================================
-# app/routes/files.py — BIFL v2.3.4-fp
+# app/routes/files.py — Relay v2025-10 Ground Truth Mirror
 # ==========================================================
-# Unified async file endpoint compatible with OpenAI /v1/files.
-# Handles uploads, downloads, listing, and deletion.
+# OpenAI-compatible /v1/files endpoint for uploads, listing,
+# retrieval, content download, and deletion.
+# Fully async, DB-logged, and proxy-safe for streaming.
 # ==========================================================
 
 from fastapi import APIRouter, Request
-from app.api.forward import forward_openai
+from app.api.forward_openai import forward_openai
 from app.utils.db_logger import log_event
 
 router = APIRouter(prefix="/v1/files", tags=["Files"])
@@ -18,9 +19,7 @@ router = APIRouter(prefix="/v1/files", tags=["Files"])
 async def upload_file(request: Request):
     """
     Upload a file to OpenAI (multipart/form-data supported).
-    Example:
-        POST /v1/files
-        Content-Type: multipart/form-data
+    Mirrors POST /v1/files.
     """
     response = await forward_openai(request, "/v1/files")
     try:
@@ -45,15 +44,30 @@ async def list_files(request: Request):
 
 
 # ----------------------------------------------------------
-# 📥  Retrieve File
+# 📥  Retrieve File Metadata
 # ----------------------------------------------------------
 @router.get("/{file_id}")
 async def retrieve_file(request: Request, file_id: str):
-    """Retrieve metadata or the file content itself."""
+    """Retrieve file metadata."""
     endpoint = f"/v1/files/{file_id}"
     response = await forward_openai(request, endpoint)
     try:
         await log_event("/v1/files/retrieve", response.status_code, f"file {file_id}")
+    except Exception:
+        pass
+    return response
+
+
+# ----------------------------------------------------------
+# 📂  Retrieve File Content
+# ----------------------------------------------------------
+@router.get("/{file_id}/content")
+async def retrieve_file_content(request: Request, file_id: str):
+    """Download the raw content of a file."""
+    endpoint = f"/v1/files/{file_id}/content"
+    response = await forward_openai(request, endpoint)
+    try:
+        await log_event(endpoint, response.status_code, f"download {file_id}")
     except Exception:
         pass
     return response

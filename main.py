@@ -1,133 +1,142 @@
 # ==========================================================
-# main.py — ChatGPT Team Relay Core (BIFL v2.3.4-fp)
+# main.py — ChatGPT Team Relay (Render Deployment Edition)
 # ==========================================================
-# Fully aligned with OpenAI Relay Ground Truth (Oct 2025)
-# Future-proofed for GPT-6, Sora-3, and new /v1 endpoints
+# Production entrypoint for ChatGPT Relay deployed on Render.
+# Mirrors OpenAI’s v1 API surface, including /v1/responses,
+# chat completions, realtime, and file/vector endpoints.
 # ==========================================================
 
 import os
+import sys
 import asyncio
 import logging
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
-from app.utils.db_logger import init_db
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from app.routes.register_routes import register_routes  # 🧩 Auto route loader
 
-# --------------------------------------------------------------------------
-# Load environment configuration
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------
+# 🌍 Load Environment Variables
+# ----------------------------------------------------------
 load_dotenv()
 
-# --------------------------------------------------------------------------
-# Logging and configuration setup
-# --------------------------------------------------------------------------
-logger = logging.getLogger("BIFL")
+# ----------------------------------------------------------
+# 🧱 Core Imports
+# ----------------------------------------------------------
+from app.utils.db_logger import init_db
+from app.routes.register_routes import register_routes
+from app.api.tools_api import TOOL_REGISTRY
+from app.utils.error_handler import register_error_handlers
 
+# ----------------------------------------------------------
+# 🧾 Metadata
+# ----------------------------------------------------------
+APP_NAME = "ChatGPT Team Relay"
 BIFL_VERSION = "2.3.4-fp"
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
-OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
-ENABLE_STREAM = os.getenv("ENABLE_STREAM", "false").lower() == "true"
+RELAY_ENV = os.getenv("RELAY_ENV", "production")
 
-# --------------------------------------------------------------------------
-# FastAPI application lifespan manager
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------
+# 🧠 Logging Configuration
+# ----------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+logger = logging.getLogger("ChatGPTRelay")
+
+# ----------------------------------------------------------
+# 🌐 Lifespan Context
+# ----------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Lifecycle management for startup/shutdown.
-    Initializes databases, logs, and registers all routes
-    in strict OpenAI relay-compatible order.
+    Startup and shutdown lifecycle:
+    - Initialize DB logger
+    - Log environment and tools
+    - Graceful teardown
     """
-    # Initialize DB / telemetry
-    logger.info("[BIFL] Initializing database...")
+    logger.info(f"[Relay] Starting {APP_NAME} (v{BIFL_VERSION}) in {RELAY_ENV} mode...")
     try:
-        await init_db()
+        if os.getenv("ENABLE_DB_LOGGING", "true").lower() == "true":
+            await init_db()
+            logger.info("[Relay] Database layer initialized successfully.")
+        else:
+            logger.info("[Relay] Database logging disabled by environment.")
     except Exception as e:
-        logger.warning(f"[BIFL] Database init failed: {e}")
+        logger.error(f"[Relay] Failed to initialize database: {e}")
 
-    logger.info(f"[BIFL] Relay Version: {BIFL_VERSION}")
-    logger.info(f"[BIFL] Base URL: {OPENAI_BASE_URL}")
-    if OPENAI_ORG_ID:
-        logger.info(f"[BIFL] Org ID: {OPENAI_ORG_ID}")
-    logger.info(f"[BIFL] Streaming Enabled: {ENABLE_STREAM}")
+    # Tool discovery
+    logger.info(f"[Relay] Loaded tools: {len(TOOL_REGISTRY)} registered.")
+    for tool_id in TOOL_REGISTRY:
+        logger.info(f"  └── {tool_id}")
 
-    # ----------------------------------------------------------------------
-    # 🧩 Manual registration for core routers (OpenAI ground-truth order)
-    # ----------------------------------------------------------------------
-    from app.api import tools_api, responses, passthrough_proxy
+    yield  # ---- Application runs ----
 
-    app.include_router(tools_api.router)          # 1️⃣ Tool Reflection
-    app.include_router(responses.router)          # 2️⃣ Model Responses
-    app.include_router(passthrough_proxy.router)  # 3️⃣ Catch-all Proxy
+    logger.info("[Relay] Shutting down gracefully...")
+    await asyncio.sleep(0.2)
+    logger.info("[Relay] Shutdown complete.")
 
-    # ----------------------------------------------------------------------
-    # 🧩 Automatic registration for all other /v1 routes
-    # This ensures lifetime compatibility with new OpenAI endpoints
-    # ----------------------------------------------------------------------
-    register_routes(app)
-
-    logger.info("[BIFL] All routers registered successfully.")
-    yield
-    logger.info("[BIFL] Shutting down gracefully...")
-    await asyncio.sleep(0.1)
-
-# --------------------------------------------------------------------------
-# FastAPI application setup
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------
+# 🚀 FastAPI App Initialization
+# ----------------------------------------------------------
 app = FastAPI(
-    title="ChatGPT Team Relay",
+    title=APP_NAME,
     version=BIFL_VERSION,
+    description="OpenAI-compatible relay for ChatGPT Actions and Team Orchestration.",
     lifespan=lifespan,
 )
 
-# --------------------------------------------------------------------------
-# Global middleware (CORS, etc.)
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------
+# 🔒 CORS Middleware (Dynamic from Environment)
+# ----------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),
+    allow_methods=os.getenv("CORS_ALLOW_METHODS", "*").split(","),
+    allow_headers=os.getenv("CORS_ALLOW_HEADERS", "*").split(","),
 )
 
-# --------------------------------------------------------------------------
-# Base and health routes
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------
+# 🧩 Route Registration & Error Handlers
+# ----------------------------------------------------------
+register_routes(app)
+register_error_handlers(app)
+
+# ----------------------------------------------------------
+# 💡 Core Health Endpoints
+# ----------------------------------------------------------
+@app.get("/")
+async def root():
+    """Landing endpoint for relay root."""
+    return {
+        "object": "relay.root",
+        "status": "ok",
+        "version": BIFL_VERSION,
+        "environment": RELAY_ENV,
+        "service_url": "https://chatgpt-team-relay.onrender.com"
+    }
+
 @app.get("/v1/healthz")
-def health():
-    """Simple health check endpoint."""
-    return {"status": "ok", "version": BIFL_VERSION}
+async def health_check():
+    """Render health check endpoint."""
+    return Response(status_code=200, content="ok")
 
 @app.get("/v1/version")
-def version():
-    """Return relay version and configuration."""
+async def version_check():
+    """Version endpoint for diagnostics."""
     return {
+        "object": "relay.version",
         "version": BIFL_VERSION,
-        "openai_base_url": OPENAI_BASE_URL,
-        "enable_stream": ENABLE_STREAM,
+        "env": RELAY_ENV
     }
 
-@app.get("/")
-def root():
-    """
-    Root route for browser checks and platform uptime monitoring.
-    Mirrors the style of OpenAI edge health responses.
-    """
-    return {
-        "status": "ok",
-        "message": "ChatGPT Relay is operational.",
-        "version": BIFL_VERSION,
-        "openai_base_url": OPENAI_BASE_URL,
-        "enable_stream": ENABLE_STREAM,
-        "endpoints": {
-            "health": "/v1/healthz",
-            "version": "/v1/version",
-            "models": "/v1/models",
-            "responses": "/v1/responses",
-            "tools": "/v1/tools",
-            "auto_routes": True,  # indicates register_routes() is active
-        },
-    }
+# ----------------------------------------------------------
+# 🧭 Entry Point (Render Startup)
+# ----------------------------------------------------------
+if __name__ == "__main__":
+    import uvicorn
+    host = os.getenv("RELAY_HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", os.getenv("RELAY_PORT", "8000")))
+    logger.info(f"[Relay] Listening on {host}:{port}")
+    uvicorn.run("main:app", host=host, port=port, reload=False)
