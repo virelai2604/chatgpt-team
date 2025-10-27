@@ -14,10 +14,10 @@
   },
   "api": {
     "type": "openapi",
-    "url": "https://chatgpt-team-relay.onrender.com/openapi.yaml",
+    "url": "https://chatgpt-team-relay.onrender.com/v1/openapi.yaml",
     "is_user_authenticated": true
   },
-  "logo_url": "https://chatgpt-team-relay.onrender.com/static/logo.png",
+  "logo_url": "https://chatgpt-team-relay.onrender.com/static/.well-known/logo.png",
   "contact_email": "support@chatgpt-team-relay.example",
   "legal_info_url": "https://chatgpt-team-relay.onrender.com/legal",
   "terms_of_service_url": "https://chatgpt-team-relay.onrender.com/terms",

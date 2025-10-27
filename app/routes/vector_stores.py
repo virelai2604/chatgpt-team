@@ -1,13 +1,13 @@
 # ==========================================================
-# app/routes/vector_stores.py — BIFL v2.3.4-fp (finalized)
+# app/routes/vector_stores.py — Relay v2025-10 Ground Truth Mirror
 # ==========================================================
-# OpenAI-compatible proxy for vector store operations.
-# Supports creation, retrieval, update, deletion, and batch import.
-# Async, streaming-safe, and integrated with db_logger.
+# Fully OpenAI-compatible /v1/vector_stores endpoint.
+# Supports creation, retrieval, updates, deletion,
+# and batch embedding imports.
 # ==========================================================
 
 from fastapi import APIRouter, Request
-from app.api.forward import forward_openai
+from app.api.forward_openai import forward_openai
 from app.utils.db_logger import log_event
 
 router = APIRouter(prefix="/v1/vector_stores", tags=["Vector Stores"])
@@ -20,6 +20,7 @@ async def vector_store_root(request: Request):
     """
     GET → list vector stores
     POST → create a new vector store
+    Mirrors OpenAI /v1/vector_stores
     """
     response = await forward_openai(request, "/v1/vector_stores")
     try:
@@ -30,7 +31,7 @@ async def vector_store_root(request: Request):
 
 
 # ----------------------------------------------------------
-# 🔍  Retrieve or Update Specific Store
+# 🔍  Retrieve / Update / Delete Specific Store
 # ----------------------------------------------------------
 @router.api_route("/{store_id}", methods=["GET", "PATCH", "DELETE"])
 async def manage_vector_store(request: Request, store_id: str):
@@ -38,6 +39,7 @@ async def manage_vector_store(request: Request, store_id: str):
     GET → retrieve store details
     PATCH → update metadata
     DELETE → remove store
+    Mirrors OpenAI /v1/vector_stores/{store_id}
     """
     endpoint = f"/v1/vector_stores/{store_id}"
     response = await forward_openai(request, endpoint)
@@ -49,13 +51,13 @@ async def manage_vector_store(request: Request, store_id: str):
 
 
 # ----------------------------------------------------------
-# 📤  Batch Import or File Attachments
+# 📤  Batch Import or Attachments
 # ----------------------------------------------------------
 @router.api_route("/{store_id}/batches", methods=["GET", "POST"])
 async def handle_vector_batches(request: Request, store_id: str):
     """
-    Handles large file uploads or embeddings batch imports.
-    Automatically streams NDJSON for progress tracking.
+    Handles large embedding imports or NDJSON-based
+    batch uploads. Mirrors OpenAI /v1/vector_stores/{id}/batches
     """
     endpoint = f"/v1/vector_stores/{store_id}/batches"
     response = await forward_openai(request, endpoint)

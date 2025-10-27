@@ -17,7 +17,6 @@ logger = logging.getLogger("BIFL.DBLogger")
 LOG_DIR = os.getenv("BIFL_LOG_DIR", "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
-
 # ------------------------------------------------------------
 # 🧩 init_db — Initialize logging/DB layer (async-safe)
 # ------------------------------------------------------------
@@ -31,7 +30,6 @@ async def init_db():
         logger.error(f"[DBLogger] Failed to initialize DB logger: {e}")
         return False
 
-
 # ------------------------------------------------------------
 # 💾 save_raw_request — Log raw request payloads for observability
 # ------------------------------------------------------------
@@ -40,11 +38,21 @@ async def save_raw_request(endpoint: str, body: Dict[str, Any]):
     try:
         timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%SZ")
         filename = os.path.join(LOG_DIR, f"{endpoint}_{timestamp}.json")
-
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(body, f, indent=2)
-
         logger.info(f"[DBLogger] Saved raw request: {filename}")
-
     except Exception as e:
         logger.warning(f"[DBLogger] Failed to log request: {e}")
+
+# ------------------------------------------------------------
+# 🧾 log_event — Append brief relay activity log
+# ------------------------------------------------------------
+async def log_event(endpoint: str, status_code: int, message: str):
+    """Record a brief event log entry."""
+    try:
+        timestamp = datetime.utcnow().isoformat()
+        filename = os.path.join(LOG_DIR, "relay_events.log")
+        with open(filename, "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] {endpoint} ({status_code}) - {message}\n")
+    except Exception as e:
+        logger.warning(f"[DBLogger] Failed to log event: {e}")

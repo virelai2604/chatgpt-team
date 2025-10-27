@@ -1,3 +1,10 @@
+# ==========================================================
+# app/api/forward_openai.py — Relay v2025-10 Ground Truth Mirror
+# ==========================================================
+# Universal async OpenAI proxy for all /v1 endpoints.
+# Handles streaming, realtime, binary content, and tool orchestration.
+# ==========================================================
+
 import os
 import json
 import httpx
@@ -13,37 +20,51 @@ TIMEOUT = int(os.getenv("RELAY_TIMEOUT", "600"))
 ENABLE_STREAM = os.getenv("ENABLE_STREAM", "false").lower() == "true"
 
 
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------
 # HEADER BUILDER
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------
 def _build_headers(request: Request) -> dict:
+    """Construct upstream OpenAI headers dynamically."""
+    auth_header = request.headers.get("Authorization")
     headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Accept": "application/json",
+        "Authorization": auth_header or f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
+
+    # Accept header negotiation (SSE vs JSON)
+    if "stream" in str(request.url.path).lower():
+        headers["Accept"] = "text/event-stream"
+    else:
+        headers["Accept"] = "application/json"
+
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
 
-    # Optional beta flags based on path
+    # Auto Beta flags (OpenAI 2025 spec)
     beta = []
     path = request.url.path.lower()
     if "gpt-5" in path:
         beta.append("gpt-5-pro=v1")
+    if "gpt-4o" in path:
+        beta.append("gpt-4o=v1")
     if "sora" in path or "video" in path:
         beta.append("sora-2-pro=v2")
-    if "realtime" in path:
+    if "realtime" in path or "o-series" in path:
         beta.append("gpt-5-realtime=v1")
     if beta:
         headers["OpenAI-Beta"] = ", ".join(beta)
+
     return headers
 
 
-# --------------------------------------------------------------------------
-# AUTO-INJECT TOOLS (used by /v1/responses)
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------
+# TOOL INJECTION (for /v1/responses)
+# ----------------------------------------------------------
 def inject_tools(payload: dict) -> dict:
-    """Auto-inject available tools if model supports them."""
+    """
+    Auto-inject registered tools if model supports them
+    (GPT-5, GPT-4o, or O-Series models).
+    """
     model = payload.get("model", "")
     if not payload.get("tools") and any(k in model for k in ["gpt-5", "gpt-4o", "o-series"]):
         payload["tools"] = [
@@ -54,16 +75,15 @@ def inject_tools(payload: dict) -> dict:
     return payload
 
 
-# --------------------------------------------------------------------------
-# STREAMING HANDLER (async generator)
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------
+# STREAMING HANDLER
+# ----------------------------------------------------------
 async def _stream_response(resp: httpx.Response):
     async def event_gen():
         try:
             async for chunk in resp.aiter_bytes():
                 yield chunk
         except Exception as e:
-            # Graceful SSE error propagation
             yield f"data: [ERROR] {str(e)}\n\n".encode("utf-8")
 
     return StreamingResponse(
@@ -74,9 +94,9 @@ async def _stream_response(resp: httpx.Response):
     )
 
 
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------
 # MAIN FORWARD FUNCTION
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------
 async def forward_openai(
     request: Request,
     endpoint: str | None = None,
@@ -85,13 +105,15 @@ async def forward_openai(
 ):
     """
     Forward any OpenAI-compatible request upstream.
-    Supports both standard and streaming modes.
+    Supports standard & streaming modes, tool injection,
+    binary transfer, and automatic header management.
     """
     headers = _build_headers(request)
     endpoint = endpoint or request.url.path
     url = f"{OPENAI_BASE_URL}{endpoint}"
 
     try:
+        # Serialize body (override or raw)
         if override_body is not None:
             if endpoint.startswith("/v1/responses"):
                 override_body = inject_tools(override_body)
@@ -99,21 +121,21 @@ async def forward_openai(
         else:
             body = await request.body() or None
 
-        # Force streaming if explicitly requested
+        # Determine if streaming mode
         if stream is None:
             stream = ENABLE_STREAM
+        if override_body and "stream" in override_body:
+            stream = override_body.get("stream")
 
         async with httpx.AsyncClient(timeout=TIMEOUT, http2=True, headers=headers) as client:
-            # If streaming, enable raw byte iteration
-            if stream or (override_body and override_body.get("stream")):
+            if stream:
                 async with client.stream(request.method, url, content=body) as resp:
                     if resp.is_error:
                         return error_response("upstream_error", await resp.aread(), resp.status_code)
                     return await _stream_response(resp)
 
-            # Non-streaming (standard)
+            # Standard mode
             resp = await client.request(request.method, url, content=body)
-
             if resp.is_error:
                 return error_response("upstream_error", resp.text, resp.status_code)
 

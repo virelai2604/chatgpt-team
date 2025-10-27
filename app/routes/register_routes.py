@@ -1,45 +1,35 @@
-# ============================================================
-# app/routes/register_routes.py — Unified Route Loader
-# Automatically registers all routers from app.api & app.routes
-# ============================================================
+# ==========================================================
+# app/routes/register_routes.py — Relay Route Registration
+# ==========================================================
+# Imports and mounts all public API routes and orchestration endpoints.
+# This file defines the callable REST API surface of the relay.
+# ==========================================================
 
-import os
-import pkgutil
-import importlib
-import logging
-from fastapi import FastAPI
+from app.routes import (
+    core,
+    chat,
+    models,
+    files,
+    vector_stores,
+    realtime,
+    relay_status,
+    openapi
+)
+from app.api import responses
 
-logger = logging.getLogger("BIFL.RegisterRoutes")
-
-def register_routes(app: FastAPI):
+def register_routes(app):
     """
-    Dynamically discover and include routers from:
-      - app.api.*  (tools_api, responses, passthrough_proxy)
-      - app.routes.*  (audio, images, vector_stores, etc.)
+    Mount all public and orchestration routes into the FastAPI application.
     """
-    base_packages = ["app.api", "app.routes"]
-    logger.info("[BIFL] Starting router auto-registration...")
+    # ---- Public API routes ----
+    app.include_router(core.router)            # /v1/core/ping
+    app.include_router(chat.router)            # /v1/chat/completions
+    app.include_router(models.router)          # /v1/models
+    app.include_router(files.router)           # /v1/files*
+    app.include_router(vector_stores.router)   # /v1/vector_stores*
+    app.include_router(realtime.router)        # /v1/realtime/*
+    app.include_router(relay_status.router)    # /v1/relay/status
+    app.include_router(openapi.router)         # /v1/openapi.yaml
 
-    for package_name in base_packages:
-        try:
-            package = importlib.import_module(package_name)
-            package_dir = os.path.dirname(package.__file__)
-
-            for _, module_name, is_pkg in pkgutil.iter_modules([package_dir]):
-                if is_pkg:
-                    continue
-                full_module = f"{package_name}.{module_name}"
-
-                try:
-                    module = importlib.import_module(full_module)
-
-                    if hasattr(module, "router"):
-                        app.include_router(module.router)
-                        prefix = getattr(module.router, "prefix", "")
-                        logger.info(f"[BIFL] Router registered: {full_module} → prefix={prefix}")
-                except Exception as e:
-                    logger.warning(f"[BIFL] Skipped {full_module}: {e}")
-        except Exception as e:
-            logger.error(f"[BIFL] Error scanning package {package_name}: {e}")
-
-    logger.info("[BIFL] Route registration complete.")
+    # ---- Core Orchestrator ----
+    app.include_router(responses.router)       # /v1/responses
