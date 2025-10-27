@@ -131,13 +131,19 @@ async def forward_openai(
             if stream:
                 async with client.stream(request.method, url, content=body) as resp:
                     if resp.is_error:
-                        return error_response("upstream_error", await resp.aread(), resp.status_code)
+                        raw = await resp.aread()
+                        msg = raw.decode("utf-8", errors="replace") if isinstance(raw, (bytes, bytearray)) else str(raw)
+                        return error_response("upstream_error", msg, resp.status_code)
                     return await _stream_response(resp)
 
             # Standard mode
             resp = await client.request(request.method, url, content=body)
             if resp.is_error:
-                return error_response("upstream_error", resp.text, resp.status_code)
+                msg = resp.text
+                # Defensive check in case resp.text fails
+                if isinstance(msg, (bytes, bytearray)):
+                    msg = msg.decode("utf-8", errors="replace")
+                return error_response("upstream_error", msg, resp.status_code)
 
             return Response(
                 resp.content,
@@ -149,4 +155,11 @@ async def forward_openai(
     except httpx.RequestError as e:
         return error_response("network_error", str(e), 503)
     except Exception as e:
-        return error_response("forward_error", str(e), 500)
+        # If e is bytes or contains bytes, decode safely
+        msg = str(e)
+        if isinstance(e, (bytes, bytearray)):
+            try:
+                msg = e.decode("utf-8", errors="replace")
+            except Exception:
+                msg = str(e)
+        return error_response("forward_error", msg, 500)
