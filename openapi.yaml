@@ -7,7 +7,8 @@ info:
 servers:
   - url: https://chatgpt-team-relay.onrender.com
     description: Production Relay Server
-
+  - url: http://localhost:8000
+    description: Local Development
 
 paths:
   /v1/core/ping:
