@@ -1,13 +1,21 @@
 openapi: 3.1.0
 info:
   title: ChatGPT Team Relay API
-  description: Relay-compatible OpenAI API surface (ChatGPT Team architecture).
+  description: |
+    Relay-compatible OpenAI API surface (ChatGPT Team architecture).
+
+    This relay behaves like api.openai.com — it accepts any
+    `Authorization: Bearer <token>` header, including a dummy
+    value when used inside ChatGPT Actions.  The relay forwards
+    requests upstream using its internal OPENAI_API_KEY.
   version: 2025-10
 
 servers:
   - url: https://chatgpt-team-relay.onrender.com
     description: Production Relay Server
 
+security:
+  - bearerAuth: []
 
 paths:
   /v1/core/ping:
@@ -30,9 +38,11 @@ paths:
       description: |
         Core model inference endpoint.
         Mirrors POST /v1/chat/completions from the OpenAI API.
-        Handles GPT-family models (GPT-4, GPT-5, O-Series) with
-        streaming, tool use, and multimodal content.
+        Handles GPT-family models (GPT-4, GPT-5, O-Series)
+        with streaming, tool use, and multimodal content.
       operationId: chat_completions_v1_chat_completions_post
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Successful Response
@@ -45,9 +55,12 @@ paths:
       tags: [Models]
       summary: List Models
       description: |
-        Mirrors GET /v1/models
-        Returns all model IDs, owners, and categories available through the relay.
+        Mirrors GET /v1/models.
+        Returns all model IDs, owners, and categories
+        available through the relay.
       operationId: list_models_v1_models_get
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Successful Response
@@ -61,23 +74,19 @@ paths:
       summary: List Files
       description: List files available in the account or organization.
       operationId: list_files_v1_files_get
+      security:
+        - bearerAuth: []
       responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
+        '200': { description: Successful Response }
     post:
       tags: [Files]
       summary: Upload File
-      description: Upload a file to OpenAI (multipart/form-data supported).
+      description: Upload a file (multipart/form-data supported).
       operationId: upload_file_v1_files_post
+      security:
+        - bearerAuth: []
       responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
+        '200': { description: Successful Response }
 
   /v1/files/{file_id}:
     get:
@@ -90,6 +99,8 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
     delete:
@@ -102,6 +113,8 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
 
@@ -116,6 +129,8 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
 
@@ -124,16 +139,20 @@ paths:
       tags: [Vector Stores]
       summary: Vector Store Root
       description: |
-        GET → list vector stores
-        POST → create a new vector store
-        Mirrors OpenAI /v1/vector_stores
+        GET → list vector stores  
+        POST → create a new vector store  
+        Mirrors OpenAI /v1/vector_stores.
       operationId: vector_store_root_v1_vector_stores_get
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
     post:
       tags: [Vector Stores]
       summary: Create Vector Store
       operationId: vector_store_root_v1_vector_stores_post
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
 
@@ -148,6 +167,8 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
     patch:
@@ -159,6 +180,8 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
     delete:
@@ -170,6 +193,8 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
 
@@ -184,6 +209,8 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
 
@@ -193,6 +220,8 @@ paths:
       summary: Create Session
       description: Creates a new realtime session (text, audio, or video).
       operationId: create_session_v1_realtime_sessions_post
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
 
@@ -207,6 +236,8 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
 
@@ -224,11 +255,13 @@ paths:
       tags: [Responses]
       summary: Create Response
       description: |
-        Main ChatGPT relay endpoint.
-        - Forwards user input to OpenAI /v1/responses
-        - Handles local tool invocation
-        - Supports both streaming and non-streaming responses.
+        Main ChatGPT relay endpoint.  
+        Forwards user input to OpenAI /v1/responses, handles
+        local tool invocation, and supports both streaming and
+        non-streaming responses.
       operationId: create_response_v1_responses_post
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
 
@@ -238,6 +271,8 @@ paths:
       summary: List Tools
       description: List all available local tools known to the relay.
       operationId: list_tools_v1_responses_tools_get
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
 
@@ -252,10 +287,17 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      security:
+        - bearerAuth: []
       responses:
         '200': { description: Successful Response }
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     HTTPValidationError:
       type: object
