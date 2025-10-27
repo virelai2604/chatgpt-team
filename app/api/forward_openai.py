@@ -23,9 +23,16 @@ import json
 import asyncio
 import pprint
 
+# ----------------------------------------------------------
+# 🌍 Ensure environment variables load before anything else
+# ----------------------------------------------------------
+from dotenv import load_dotenv
+load_dotenv()  # <--- critical fix: loads .env before accessing OPENAI_API_KEY
+
 router = APIRouter()
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_BASE_URL = "https://api.openai.com"
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
 
 # Limit relay response size for ChatGPT Actions (bytes)
 MAX_RELAY_RESPONSE_BYTES = 4_000_000  # ~4 MB safe for ChatGPT Actions
@@ -34,10 +41,12 @@ MAX_RELAY_RESPONSE_BYTES = 4_000_000  # ~4 MB safe for ChatGPT Actions
 client = httpx.AsyncClient(
     timeout=httpx.Timeout(120.0, connect=10.0),
     follow_redirects=True,
-    http2=True
+    http2=True,
 )
 
-
+# ----------------------------------------------------------
+# ⚙️ Helpers: Streaming / Buffered response forwarding
+# ----------------------------------------------------------
 async def _stream_openai_response(upstream_response: httpx.Response) -> StreamingResponse:
     """Stream bytes from OpenAI to the relay client."""
     headers = dict(upstream_response.headers)
@@ -52,7 +61,7 @@ async def _stream_openai_response(upstream_response: httpx.Response) -> Streamin
         byte_generator(),
         status_code=upstream_response.status_code,
         headers=headers,
-        media_type=headers.get("content-type", "application/json")
+        media_type=headers.get("content-type", "application/json"),
     )
 
 
@@ -63,7 +72,10 @@ async def _buffered_openai_response(upstream_response: httpx.Response) -> Respon
     if len(content) > MAX_RELAY_RESPONSE_BYTES:
         return JSONResponse(
             status_code=502,
-            content={"error": "ResponseTooLargeError", "hint": "Try smaller output or set max_tokens."}
+            content={
+                "error": "ResponseTooLargeError",
+                "hint": "Try smaller output or set max_tokens.",
+            },
         )
 
     try:
@@ -73,10 +85,15 @@ async def _buffered_openai_response(upstream_response: httpx.Response) -> Respon
         return Response(
             content=content,
             status_code=upstream_response.status_code,
-            media_type=upstream_response.headers.get("content-type", "application/octet-stream")
+            media_type=upstream_response.headers.get(
+                "content-type", "application/octet-stream"
+            ),
         )
 
 
+# ----------------------------------------------------------
+# 🚀 Core Forwarding Route
+# ----------------------------------------------------------
 @router.api_route("/v1/{path:path}", methods=["GET", "POST", "DELETE", "PATCH"])
 async def forward_openai(request: Request, path: str):
     """
@@ -85,14 +102,14 @@ async def forward_openai(request: Request, path: str):
     """
     method = request.method
     url = f"{OPENAI_BASE_URL.rstrip('/')}/{path.lstrip('/')}"
+
+    # Rebuild headers safely
     headers = dict(request.headers)
     headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
-
-    # Remove hop-by-hop headers that break proxying
     for key in ["host", "content-length", "transfer-encoding"]:
         headers.pop(key, None)
 
-    # Parse request body safely across platforms
+    # Parse request JSON (resilient to PowerShell and cURL quirks)
     try:
         json_data = await request.json()
     except Exception:
@@ -102,24 +119,28 @@ async def forward_openai(request: Request, path: str):
         except Exception:
             json_data = {}
 
-    # Debugging output to verify payloads during testing
+    # Debugging output for diagnostics
     print(f"\n>>> [Relay Debug] Forwarding {method} {url}")
     pprint.pprint(json_data)
-    print(">>> Headers:", {k.lower(): v for k, v in headers.items() if k.lower() in ['content-type', 'authorization']})
+    print(
+        ">>> Headers:",
+        {k.lower(): v for k, v in headers.items() if k.lower() in ["content-type", "authorization"]},
+    )
+    print(f"[Relay Auth Check] Key loaded: {'✅ yes' if OPENAI_API_KEY else '❌ missing'}")
 
-    # Default fields for /v1/chat/completions
+    # Defaults for chat completions
     if "chat/completions" in path:
         if not json_data.get("model"):
             json_data["model"] = "gpt-4o-mini"
         if "messages" not in json_data or not isinstance(json_data["messages"], list):
             json_data["messages"] = [{"role": "user", "content": "Hello from relay"}]
 
-    # Add sensible token cap if none specified
+    # Add token cap if none specified
     if method == "POST" and json_data and "max_tokens" not in json_data:
         json_data["max_tokens"] = 256
 
     try:
-        # Decide streaming vs buffered mode
+        # Streaming vs buffered mode
         if path.startswith("chat/completions") and json_data.get("stream", False):
             async with client.stream("POST", url, headers=headers, json=json_data) as r:
                 return await _stream_openai_response(r)
@@ -132,29 +153,9 @@ async def forward_openai(request: Request, path: str):
         elif method == "PATCH":
             r = await client.patch(url, headers=headers, json=json_data)
         else:
-            return JSONResponse(status_code=405, content={"error": "method_not_allowed"})
+            return JSONResponse(
+                status_code=405, content={"error": "method_not_allowed"}
+            )
 
-        # Log upstream result and extract error bodies if any
-        print(f"[Relay → OpenAI] {r.status_code} {url}")
-        if r.status_code >= 400:
-            try:
-                err_preview = (await r.aread()).decode("utf-8", errors="ignore")[:800]
-                print("[Upstream Error Body]", err_preview)
-                return JSONResponse(status_code=r.status_code, content={"error": "upstream_error", "body": err_preview})
-            except Exception:
-                pass
-
-        return await _buffered_openai_response(r)
-
-    except httpx.RequestError as e:
-        return JSONResponse(status_code=502, content={"error": "upstream_unreachable", "detail": str(e)})
-    except asyncio.TimeoutError:
-        return JSONResponse(status_code=504, content={"error": "timeout", "detail": "OpenAI upstream timeout"})
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": "relay_internal_error", "detail": str(e)})
-
-
-@router.on_event("shutdown")
-async def close_client():
-    """Gracefully close shared HTTP client."""
-    await client.aclose()
+        # Log upstream results and error bodies
+        print(f"[Relay → OpenAI] {
