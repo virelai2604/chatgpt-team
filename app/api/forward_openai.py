@@ -1,145 +1,140 @@
-# ==========================================================
-# app/api/forward_openai.py — Relay v2025-10 ChatGPT Action Mode (Final)
-# ==========================================================
-# Universal async OpenAI proxy for all /v1 endpoints.
-# Handles streaming, realtime, binary content, and tool orchestration.
-# Always authenticates using the relay's internal OPENAI_API_KEY.
-# ==========================================================
+"""
+forward_openai.py
+-----------------
+Transparent proxy between ChatGPT Team Relay and the upstream OpenAI API.
 
+Handles:
+- POST /v1/chat/completions
+- GET /v1/models
+- Any other /v1/* endpoints supported by OpenAI
+Adds resilience against:
+- Content-Length / streaming mismatches
+- Large response payloads (ResponseTooLargeError)
+- Automatic relay authentication
+"""
+
+from fastapi import APIRouter, Request, Response
+from fastapi.responses import StreamingResponse, JSONResponse
+import httpx
 import os
 import json
-import httpx
-from fastapi import Request
-from fastapi.responses import Response, StreamingResponse
-from app.utils.error_handler import error_response
-from app.api.tools_api import TOOL_REGISTRY
+import asyncio
 
-# ----------------------------------------------------------
-# 🔧 Environment Configuration
-# ----------------------------------------------------------
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
-TIMEOUT = int(os.getenv("RELAY_TIMEOUT", "600"))
-ENABLE_STREAM = os.getenv("ENABLE_STREAM", "false").lower() == "true"
+router = APIRouter()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_BASE_URL = "https://api.openai.com"
 
+# Limit relay response size for ChatGPT Actions (bytes)
+MAX_RELAY_RESPONSE_BYTES = 4_000_000  # ~4 MB safe for ChatGPT Actions
 
-# ----------------------------------------------------------
-# 🧱 Header Builder — Always Use Internal Key
-# ----------------------------------------------------------
-def _build_headers() -> dict:
-    """Construct upstream OpenAI headers (ignore any client Authorization)."""
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        # disable Brotli/gzip compression to avoid PowerShell 7 decompression errors
-        "Accept-Encoding": "identity",
-    }
-    if OPENAI_ORG_ID:
-        headers["OpenAI-Organization"] = OPENAI_ORG_ID
+# Shared async client
+client = httpx.AsyncClient(
+    timeout=httpx.Timeout(120.0, connect=10.0),
+    follow_redirects=True,
+    http2=True
+)
 
-    # Optional 2025 beta flags
-    headers["OpenAI-Beta"] = "gpt-4o=v1, gpt-5-pro=v1"
-    return headers
+async def _stream_openai_response(upstream_response: httpx.Response) -> StreamingResponse:
+    """
+    Streams bytes from upstream OpenAI API to the relay client.
+    Strips Content-Length headers to prevent uvicorn mismatches.
+    """
+    headers = dict(upstream_response.headers)
+    headers.pop("content-length", None)  # Avoid runtime mismatch
+    headers.pop("transfer-encoding", None)
 
-
-# ----------------------------------------------------------
-# 🧩 Tool Injection (for /v1/responses)
-# ----------------------------------------------------------
-def inject_tools(payload: dict) -> dict:
-    """Auto-inject registered tools if model supports them."""
-    model = payload.get("model", "")
-    if not payload.get("tools") and any(k in model for k in ["gpt-5", "gpt-4o", "o-series"]):
-        payload["tools"] = [
-            {"type": getattr(m, "TOOL_TYPE", "function"), "id": tid}
-            for tid, m in TOOL_REGISTRY.items()
-        ]
-        payload.setdefault("tool_choice", "auto")
-    return payload
-
-
-# ----------------------------------------------------------
-# 🔄 Stream Handler
-# ----------------------------------------------------------
-async def _stream_response(resp: httpx.Response):
-    async def event_gen():
-        try:
-            async for chunk in resp.aiter_bytes():
-                yield chunk
-        except Exception as e:
-            yield f"data: [ERROR] {str(e)}\n\n".encode("utf-8")
+    async def byte_generator():
+        async for chunk in upstream_response.aiter_bytes():
+            yield chunk
 
     return StreamingResponse(
-        event_gen(),
-        status_code=resp.status_code,
-        headers={k: v for k, v in resp.headers.items() if k.lower() != "transfer-encoding"},
-        media_type=resp.headers.get("content-type", "text/event-stream"),
+        byte_generator(),
+        status_code=upstream_response.status_code,
+        headers=headers,
+        media_type=headers.get("content-type", "application/json")
     )
 
 
-# ----------------------------------------------------------
-# 🚀 Main Forward Function
-# ----------------------------------------------------------
-async def forward_openai(
-    request: Request,
-    endpoint: str | None = None,
-    override_body: dict | None = None,
-    stream: bool | None = None
-):
+async def _buffered_openai_response(upstream_response: httpx.Response) -> Response:
     """
-    Forward any OpenAI-compatible request upstream.
-    - Always authenticates using relay’s OPENAI_API_KEY.
-    - Ignores any Authorization header sent by clients.
-    - Fully compatible with ChatGPT Actions using Bearer dummy tokens.
+    Reads response fully, enforces a size limit, and returns a JSONResponse.
+    Protects ChatGPT Actions from ResponseTooLargeError.
     """
-    headers = _build_headers()
-    endpoint = endpoint or request.url.path
-    url = f"{OPENAI_BASE_URL}{endpoint}"
+    content = await upstream_response.aread()
+    if len(content) > MAX_RELAY_RESPONSE_BYTES:
+        return JSONResponse(
+            status_code=502,
+            content={"error": "ResponseTooLargeError", "hint": "Try smaller output or set max_tokens."}
+        )
 
     try:
-        # Prepare request body
-        if override_body is not None:
-            if endpoint.startswith("/v1/responses"):
-                override_body = inject_tools(override_body)
-            body = json.dumps(override_body)
+        data = json.loads(content)
+        return JSONResponse(status_code=upstream_response.status_code, content=data)
+    except Exception:
+        # Non-JSON, return raw
+        return Response(
+            content=content,
+            status_code=upstream_response.status_code,
+            media_type=upstream_response.headers.get("content-type", "application/octet-stream")
+        )
+
+
+@router.api_route("/v1/{path:path}", methods=["GET", "POST", "DELETE", "PATCH"])
+async def forward_openai(request: Request, path: str):
+    """
+    Forwards any /v1/* request to OpenAI's API.
+    Automatically injects Authorization header and handles streaming.
+    """
+    method = request.method
+    url = f"{OPENAI_BASE_URL}/v1/{path}"
+    headers = dict(request.headers)
+    headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
+
+    # Remove hop-by-hop headers
+    for key in ["host", "content-length", "transfer-encoding"]:
+        headers.pop(key, None)
+
+    # Gather body
+    body_bytes = await request.body()
+    json_data = None
+    if body_bytes:
+        try:
+            json_data = json.loads(body_bytes.decode("utf-8"))
+        except Exception:
+            json_data = None
+
+    # Automatically add default max_tokens to prevent overloads
+    if method == "POST" and json_data and "max_tokens" not in json_data:
+        json_data["max_tokens"] = 256
+
+    try:
+        # Stream completions, buffer everything else
+        if path.startswith("chat/completions") and json_data.get("stream", False):
+            async with client.stream("POST", url, headers=headers, json=json_data) as r:
+                return await _stream_openai_response(r)
+        elif method == "POST":
+            r = await client.post(url, headers=headers, json=json_data)
+        elif method == "GET":
+            r = await client.get(url, headers=headers)
+        elif method == "DELETE":
+            r = await client.delete(url, headers=headers)
+        elif method == "PATCH":
+            r = await client.patch(url, headers=headers, json=json_data)
         else:
-            raw_body = await request.body()
-            body = raw_body if raw_body else None
+            return JSONResponse(status_code=405, content={"error": "method_not_allowed"})
 
-        # Determine streaming mode
-        if stream is None:
-            stream = ENABLE_STREAM
-        if override_body and "stream" in override_body:
-            stream = bool(override_body.get("stream"))
-
-        # Make upstream call (always with internal auth)
-        async with httpx.AsyncClient(timeout=TIMEOUT, http2=True, headers=headers) as client:
-            if stream:
-                async with client.stream(request.method, url, content=body) as resp:
-                    if resp.is_error:
-                        raw = await resp.aread()
-                        msg = raw.decode("utf-8", errors="replace")
-                        return error_response("upstream_error", msg, resp.status_code)
-                    return await _stream_response(resp)
-
-            # Non-streaming
-            resp = await client.request(request.method, url, content=body)
-            if resp.is_error:
-                msg = resp.text
-                if isinstance(msg, (bytes, bytearray)):
-                    msg = msg.decode("utf-8", errors="replace")
-                return error_response("upstream_error", msg, resp.status_code)
-
-            return Response(
-                resp.content,
-                status_code=resp.status_code,
-                media_type=resp.headers.get("content-type", "application/json"),
-                headers={k: v for k, v in resp.headers.items() if k.lower() != "transfer-encoding"},
-            )
+        # Handle large or JSON responses safely
+        return await _buffered_openai_response(r)
 
     except httpx.RequestError as e:
-        return error_response("network_error", str(e), 503)
+        return JSONResponse(status_code=502, content={"error": "upstream_unreachable", "detail": str(e)})
+    except asyncio.TimeoutError:
+        return JSONResponse(status_code=504, content={"error": "timeout", "detail": "OpenAI upstream timeout"})
     except Exception as e:
-        msg = str(e)
-        return error_response("forward_error", msg, 500)
+        return JSONResponse(status_code=500, content={"error": "relay_internal_error", "detail": str(e)})
+
+
+# Close httpx client when shutting down
+@router.on_event("shutdown")
+async def close_client():
+    await client.aclose()

@@ -6,8 +6,8 @@ info:
 
     This relay behaves like api.openai.com — it accepts any
     `Authorization: Bearer <token>` header, including a dummy
-    value when used inside ChatGPT Actions.  The relay forwards
-    requests upstream using its internal OPENAI_API_KEY.
+    value when used inside ChatGPT Actions.
+    The relay forwards requests upstream using its internal `OPENAI_API_KEY`.
   version: 2025-10
 
 servers:
@@ -18,6 +18,7 @@ security:
   - bearerAuth: []
 
 paths:
+
   /v1/core/ping:
     get:
       tags: [Core]
@@ -26,151 +27,263 @@ paths:
       operationId: ping_v1_core_ping_get
       responses:
         '200':
-          description: Successful Response
+          description: Pong response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
 
   /v1/chat/completions:
     post:
       tags: [Chat]
       summary: Chat Completions
       description: |
-        Core model inference endpoint.
+        Core model inference endpoint.  
         Mirrors POST /v1/chat/completions from the OpenAI API.
-        Handles GPT-family models (GPT-4, GPT-5, O-Series)
-        with streaming, tool use, and multimodal content.
+        Handles GPT-family models (GPT-4, GPT-5, O-Series) with
+        streaming, tool use, and multimodal content.
       operationId: chat_completions_v1_chat_completions_post
-      security:
-        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, messages]
+              properties:
+                model:
+                  type: string
+                  description: The model ID to use.
+                  example: gpt-4o-mini
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    required: [role, content]
+                    properties:
+                      role:
+                        type: string
+                        enum: [system, user, assistant, tool]
+                      content:
+                        type: string
+                stream:
+                  type: boolean
+                  default: false
+                tools:
+                  type: array
+                  items:
+                    type: object
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  object: { type: string, example: chat.completion }
+                  choices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index: { type: integer }
+                        message:
+                          type: object
+                          properties:
+                            role: { type: string }
+                            content: { type: string }
+                        finish_reason: { type: string }
 
   /v1/models:
     get:
       tags: [Models]
       summary: List Models
-      description: |
-        Mirrors GET /v1/models.
-        Returns all model IDs, owners, and categories
-        available through the relay.
+      description: Mirrors GET /v1/models.
       operationId: list_models_v1_models_get
-      security:
-        - bearerAuth: []
       responses:
         '200':
-          description: Successful Response
+          description: List of models
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        owned_by: { type: string }
+                        category: { type: string }
 
   /v1/files:
     get:
       tags: [Files]
       summary: List Files
-      description: List files available in the account or organization.
       operationId: list_files_v1_files_get
-      security:
-        - bearerAuth: []
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: List files in account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        filename: { type: string }
+                        bytes: { type: integer }
     post:
       tags: [Files]
       summary: Upload File
-      description: Upload a file (multipart/form-data supported).
       operationId: upload_file_v1_files_post
-      security:
-        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  filename: { type: string }
 
   /v1/files/{file_id}:
     get:
       tags: [Files]
-      summary: Retrieve File
-      description: Retrieve file metadata.
+      summary: Retrieve File metadata
       operationId: retrieve_file_v1_files__file_id__get
       parameters:
         - name: file_id
           in: path
           required: true
           schema: { type: string }
-      security:
-        - bearerAuth: []
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: File metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  filename: { type: string }
     delete:
       tags: [Files]
       summary: Delete File
-      description: Delete a file upstream.
       operationId: delete_file_v1_files__file_id__delete
       parameters:
         - name: file_id
           in: path
           required: true
           schema: { type: string }
-      security:
-        - bearerAuth: []
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: Deletion acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean }
 
   /v1/files/{file_id}/content:
     get:
       tags: [Files]
       summary: Retrieve File Content
-      description: Download the raw content of a file.
       operationId: retrieve_file_content_v1_files__file_id__content_get
       parameters:
         - name: file_id
           in: path
           required: true
           schema: { type: string }
-      security:
-        - bearerAuth: []
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: Binary file content
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
 
   /v1/vector_stores:
     get:
       tags: [Vector Stores]
-      summary: Vector Store Root
-      description: |
-        GET → list vector stores  
-        POST → create a new vector store  
-        Mirrors OpenAI /v1/vector_stores.
+      summary: List Vector Stores
       operationId: vector_store_root_v1_vector_stores_get
-      security:
-        - bearerAuth: []
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: Vector stores listed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
     post:
       tags: [Vector Stores]
       summary: Create Vector Store
       operationId: vector_store_root_v1_vector_stores_post
-      security:
-        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: my_vector_store
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: Vector store created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
 
   /v1/vector_stores/{store_id}:
     get:
       tags: [Vector Stores]
       summary: Retrieve Vector Store
-      description: Retrieve store details.
       operationId: manage_vector_store_v1_vector_stores__store_id__get
       parameters:
         - name: store_id
           in: path
           required: true
           schema: { type: string }
-      security:
-        - bearerAuth: []
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: Store details
     patch:
       tags: [Vector Stores]
       summary: Update Vector Store
@@ -180,10 +293,16 @@ paths:
           in: path
           required: true
           schema: { type: string }
-      security:
-        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
       responses:
-        '200': { description: Successful Response }
+        '200': { description: Store updated }
     delete:
       tags: [Vector Stores]
       summary: Delete Vector Store
@@ -193,104 +312,169 @@ paths:
           in: path
           required: true
           schema: { type: string }
-      security:
-        - bearerAuth: []
       responses:
-        '200': { description: Successful Response }
+        '200': { description: Store deleted }
 
   /v1/vector_stores/{store_id}/batches:
     post:
       tags: [Vector Stores]
-      summary: Handle Vector Batches
-      description: Handles large embedding imports or NDJSON-based batch uploads.
+      summary: Upload Vector Batch
       operationId: handle_vector_batches_v1_vector_stores__store_id__batches_post
       parameters:
         - name: store_id
           in: path
           required: true
           schema: { type: string }
-      security:
-        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
       responses:
-        '200': { description: Successful Response }
+        '200': { description: Batch processed }
 
   /v1/realtime/sessions:
     post:
       tags: [Realtime]
-      summary: Create Session
-      description: Creates a new realtime session (text, audio, or video).
+      summary: Create Realtime Session
       operationId: create_session_v1_realtime_sessions_post
-      security:
-        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model:
+                  type: string
+                  example: gpt-4o-realtime-preview
       responses:
-        '200': { description: Successful Response }
+        '200': { description: Realtime session created }
 
   /v1/realtime/sessions/{session_id}:
     delete:
       tags: [Realtime]
-      summary: Delete Session
-      description: Terminates a running realtime session.
+      summary: Delete Realtime Session
       operationId: delete_session_v1_realtime_sessions__session_id__delete
       parameters:
         - name: session_id
           in: path
           required: true
           schema: { type: string }
-      security:
-        - bearerAuth: []
       responses:
-        '200': { description: Successful Response }
+        '200': { description: Realtime session deleted }
 
   /v1/relay/status:
     get:
       tags: [Relay]
       summary: Relay Status
-      description: Return current system status and runtime metadata.
       operationId: relay_status_v1_relay_status_get
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: Relay status object
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uptime_seconds: { type: number }
+                  bifl_version: { type: string }
 
   /v1/responses:
     post:
       tags: [Responses]
       summary: Create Response
-      description: |
-        Main ChatGPT relay endpoint.  
-        Forwards user input to OpenAI /v1/responses, handles
-        local tool invocation, and supports both streaming and
-        non-streaming responses.
       operationId: create_response_v1_responses_post
-      security:
-        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, input]
+              properties:
+                model:
+                  type: string
+                  example: gpt-4o-mini
+                input:
+                  description: Input content for the response API.
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items:
+                        type: object
+                        properties:
+                          role: { type: string }
+                          content: { type: string }
+                tools:
+                  type: array
+                  items: { type: object }
+                stream:
+                  type: boolean
+                  default: false
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: Response created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  output_text: { type: string }
 
   /v1/responses/tools:
     get:
       tags: [Responses]
       summary: List Tools
-      description: List all available local tools known to the relay.
       operationId: list_tools_v1_responses_tools_get
-      security:
-        - bearerAuth: []
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: Available tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      type: string
 
   /v1/responses/tools/{tool_name}:
     post:
       tags: [Responses]
       summary: Call Tool
-      description: Manually call a registered tool via API.
       operationId: call_tool_v1_responses_tools__tool_name__post
       parameters:
         - name: tool_name
           in: path
           required: true
           schema: { type: string }
-      security:
-        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input:
+                  type: object
+                  description: Parameters for the tool call.
       responses:
-        '200': { description: Successful Response }
+        '200':
+          description: Tool execution result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: { type: object }
 
 components:
   securitySchemes:
