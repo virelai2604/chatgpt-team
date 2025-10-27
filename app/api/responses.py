@@ -1,5 +1,5 @@
 # ============================================================
-# app/api/responses.py — Relay v2025-10  (Fix #1 Safe Filtering)
+# app/api/responses.py — Relay v2025-10 (Fix #2 Ground Truth)
 # ============================================================
 
 import os
@@ -32,11 +32,7 @@ async def _stream_response(upstream):
         async for chunk in upstream.aiter_bytes():
             if chunk:
                 yield chunk
-
-    headers = {
-        k: v for k, v in upstream.headers.items()
-        if k.lower() not in ("transfer-encoding", "content-length")
-    }
+    headers = {k: v for k, v in upstream.headers.items() if k.lower() not in ("transfer-encoding", "content-length")}
     return StreamingResponse(_iter(), status_code=upstream.status_code, headers=headers)
 
 
@@ -56,27 +52,31 @@ async def create_response(request: Request):
     tools = body.get("tools", [])
 
     # ---------------------------------------------------------
-    # ✅ Safe filtering — Fix #1
+    # ✅ Ground-truth tool packaging
     # ---------------------------------------------------------
     local_tools = list_local_tools()
-    valid_tools = []
+    normalized_tools = []
     for t in local_tools:
         if not isinstance(t, dict):
             continue
         fn = t.get("function", {})
-        if (
-            t.get("type") == "function"
-            and isinstance(fn, dict)
-            and fn.get("name")
-            and isinstance(fn.get("parameters"), dict)
-        ):
-            valid_tools.append(t)
+        if not isinstance(fn, dict):
+            continue
+        name = fn.get("name")
+        params = fn.get("parameters")
+        if name and isinstance(params, dict):
+            normalized_tools.append({
+                "type": t.get("type", "function"),
+                "function": {
+                    "name": name,
+                    "description": fn.get("description", ""),
+                    "parameters": params
+                }
+            })
 
-    # Inject only valid tools if none explicitly provided
-    if not tools and valid_tools:
-        body["tools"] = valid_tools
+    if not tools and normalized_tools:
+        body["tools"] = normalized_tools
     else:
-        # Drop malformed or redundant tools
         body.pop("tools", None)
 
     # ---------------------------------------------------------
@@ -89,7 +89,6 @@ async def create_response(request: Request):
     }
 
     print(f"[Relay Auth Check] Key loaded: {'✅ yes' if OPENAI_API_KEY else '❌ missing'}")
-
     url = f"{OPENAI_BASE_URL}/v1/responses"
 
     # ---------------------------------------------------------
@@ -138,14 +137,12 @@ async def create_response(request: Request):
 # -------------------------------------------------------------
 @router.get("/responses/tools")
 async def list_tools():
-    """Return available local tools."""
     tools = list_local_tools()
     return JSONResponse({"object": "list", "data": tools})
 
 
 @router.post("/responses/tools/{tool_name}")
 async def call_tool(tool_name: str, request: Request):
-    """Manually execute a local tool."""
     payload = await request.json()
     result = await run_tool(tool_name, payload)
     return JSONResponse(result)
