@@ -1,5 +1,5 @@
 # ==========================================================
-# app/api/forward_openai.py — Relay v2025-10 Ground Truth Mirror
+# app/api/forward_openai.py — Relay v2025-10 ChatGPT Action Mode
 # ==========================================================
 # Universal async OpenAI proxy for all /v1 endpoints.
 # Handles streaming, realtime, binary content, and tool orchestration.
@@ -21,36 +21,25 @@ ENABLE_STREAM = os.getenv("ENABLE_STREAM", "false").lower() == "true"
 
 
 # ----------------------------------------------------------
-# HEADER BUILDER
+# HEADER BUILDER (ALWAYS USE INTERNAL OPENAI KEY)
 # ----------------------------------------------------------
-def _build_headers(request: Request) -> dict:
-    """Construct upstream OpenAI headers dynamically."""
-    auth_header = request.headers.get("Authorization")
+def _build_headers(_: Request) -> dict:
+    """Construct upstream OpenAI headers — always use relay's internal key."""
     headers = {
-        "Authorization": auth_header or f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
     }
-
-    # Accept header negotiation (SSE vs JSON)
-    if "stream" in str(request.url.path).lower():
-        headers["Accept"] = "text/event-stream"
-    else:
-        headers["Accept"] = "application/json"
 
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
 
-    # Auto Beta flags (OpenAI 2025 spec)
+    # Beta flags for OpenAI 2025 spec
     beta = []
-    path = request.url.path.lower()
-    if "gpt-5" in path:
+    if "gpt-5" in OPENAI_API_KEY:
         beta.append("gpt-5-pro=v1")
-    if "gpt-4o" in path:
+    if "gpt-4o" in OPENAI_API_KEY:
         beta.append("gpt-4o=v1")
-    if "sora" in path or "video" in path:
-        beta.append("sora-2-pro=v2")
-    if "realtime" in path or "o-series" in path:
-        beta.append("gpt-5-realtime=v1")
     if beta:
         headers["OpenAI-Beta"] = ", ".join(beta)
 
@@ -61,10 +50,7 @@ def _build_headers(request: Request) -> dict:
 # TOOL INJECTION (for /v1/responses)
 # ----------------------------------------------------------
 def inject_tools(payload: dict) -> dict:
-    """
-    Auto-inject registered tools if model supports them
-    (GPT-5, GPT-4o, or O-Series models).
-    """
+    """Auto-inject registered tools if model supports them."""
     model = payload.get("model", "")
     if not payload.get("tools") and any(k in model for k in ["gpt-5", "gpt-4o", "o-series"]):
         payload["tools"] = [
@@ -105,15 +91,15 @@ async def forward_openai(
 ):
     """
     Forward any OpenAI-compatible request upstream.
-    Supports standard & streaming modes, tool injection,
-    binary transfer, and automatic header management.
+    Always authenticates using the relay's internal OPENAI_API_KEY,
+    ignoring any Authorization header sent by clients.
     """
     headers = _build_headers(request)
     endpoint = endpoint or request.url.path
     url = f"{OPENAI_BASE_URL}{endpoint}"
 
     try:
-        # Serialize body (override or raw)
+        # Serialize request body
         if override_body is not None:
             if endpoint.startswith("/v1/responses"):
                 override_body = inject_tools(override_body)
@@ -136,11 +122,10 @@ async def forward_openai(
                         return error_response("upstream_error", msg, resp.status_code)
                     return await _stream_response(resp)
 
-            # Standard mode
+            # Non-streaming mode
             resp = await client.request(request.method, url, content=body)
             if resp.is_error:
                 msg = resp.text
-                # Defensive check in case resp.text fails
                 if isinstance(msg, (bytes, bytearray)):
                     msg = msg.decode("utf-8", errors="replace")
                 return error_response("upstream_error", msg, resp.status_code)
@@ -155,7 +140,6 @@ async def forward_openai(
     except httpx.RequestError as e:
         return error_response("network_error", str(e), 503)
     except Exception as e:
-        # If e is bytes or contains bytes, decode safely
         msg = str(e)
         if isinstance(e, (bytes, bytearray)):
             try:
