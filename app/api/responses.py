@@ -1,19 +1,20 @@
 # ==========================================================
 # app/api/responses.py — Relay v2025-10 Ground Truth Orchestrator
 # ==========================================================
-# This module defines the /v1/responses endpoint, which acts as the
-# ChatGPT “brain.” It coordinates requests to models, handles tool calls,
-# and manages streaming back to the client.
-# ==========================================================
-
+import os
 import json
 import asyncio
 import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse, JSONResponse
+from dotenv import load_dotenv
 from app.api.forward_openai import OPENAI_BASE_URL
 from app.api.tools_api import list_local_tools, run_tool
 from app.utils.db_logger import log_event
+
+# ✅ Ensure .env is loaded before fetching keys
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 router = APIRouter(prefix="/v1", tags=["Responses"])
 
@@ -27,7 +28,6 @@ async def _stream_response(upstream):
         async for chunk in upstream.aiter_bytes():
             if chunk:
                 yield chunk
-    # Filter headers to avoid FastAPI conflict
     headers = {
         k: v for k, v in upstream.headers.items()
         if k.lower() not in ("transfer-encoding", "content-length")
@@ -42,33 +42,29 @@ async def _stream_response(upstream):
 async def create_response(request: Request):
     """
     Main ChatGPT relay endpoint.
-    - Forwards user input to OpenAI /v1/responses
-    - Handles local tool invocation
-    - Supports both streaming and non-streaming responses
+    Forwards user input to OpenAI /v1/responses.
+    Supports streaming and tool orchestration.
     """
     body = await request.json()
 
-    # Default behavior
     stream = body.get("stream", False)
     model = body.get("model", "gpt-5")
     tools = body.get("tools", [])
     messages = body.get("messages", [])
 
-    # Auto-load available local tools
     local_tools = list_local_tools()
-
-    # Merge tool manifest with provided tools (if any)
     if not tools:
         body["tools"] = local_tools
 
-    # Inject headers for OpenAI-beta or GPT-5 if necessary
+    # ✅ Inject your real API key instead of "dummy"
     headers = {
-        "Authorization": request.headers.get("Authorization", ""),
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json",
         "X-Relay-Source": "chatgpt-team-relay",
     }
 
-    # Upstream OpenAI Responses endpoint
+    print(f"[Relay Auth Check] Key loaded: {'✅ yes' if OPENAI_API_KEY else '❌ missing'}")
+
     url = f"{OPENAI_BASE_URL}/v1/responses"
 
     async with httpx.AsyncClient(timeout=None) as client:
@@ -82,18 +78,13 @@ async def create_response(request: Request):
     # ------------------------------------------------------
     # 🧩 Tool Invocation (local tools)
     # ------------------------------------------------------
-    # The OpenAI /v1/responses API may return tool calls.
-    # If tools are declared locally, run them here.
     if isinstance(data, dict) and "tool_calls" in data:
         tool_outputs = []
         for tool_call in data["tool_calls"]:
             tool_name = tool_call.get("name")
             tool_input = tool_call.get("input", {})
             result = await run_tool(tool_name, tool_input)
-            tool_outputs.append({
-                "tool_name": tool_name,
-                "result": result
-            })
+            tool_outputs.append({"tool_name": tool_name, "result": result})
         data["tool_outputs"] = tool_outputs
 
     try:
@@ -119,10 +110,7 @@ async def list_tools():
 # ----------------------------------------------------------
 @router.post("/responses/tools/{tool_name}")
 async def call_tool(tool_name: str, request: Request):
-    """
-    Manually call a registered tool via API.
-    Used internally by /v1/responses orchestration.
-    """
+    """Manually call a registered tool via API."""
     payload = await request.json()
     result = await run_tool(tool_name, payload)
     return JSONResponse(result)
