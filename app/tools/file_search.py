@@ -1,9 +1,6 @@
-TOOL_ID = "file_search"
-TOOL_VERSION = "v2"
-TOOL_TYPE = "file_search"
 TOOL_SCHEMA = {
     "name": "file_search",
-    "description": "Perform semantic search within uploaded files or vector stores.",
+    "description": "Search uploaded files or vector stores for matching text.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -13,14 +10,20 @@ TOOL_SCHEMA = {
         },
         "required": ["query"]
     },
-    "returns": {"type": "array", "items": {"type": "object", "properties": {
-        "filename": {"type": "string"}, "score": {"type": "number"}, "excerpt": {"type": "string"}}}}
-}
-def run(payload):
-    """Simulates /v1/file_search call."""
-    query = payload.get("query", "")
-    return {
-        "object": "list",
-        "data": [{"filename": "mock.txt", "excerpt": f"Found match for '{query}'"}],
-        "has_more": False
+    "returns": {
+        "type": "object",
+        "properties": {
+            "matches": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {"type": "string"},
+                        "score": {"type": "number"},
+                        "excerpt": {"type": "string"}
+                    }
+                }
+            }
+        }
     }
+}
