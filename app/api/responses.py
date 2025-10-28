@@ -14,10 +14,10 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from dotenv import load_dotenv
 
-from app.api.tools_api import list_local_tools, run_tool
+# ✅ Updated imports
+from app.api.tools_api import load_manifest, run_tool
 from app.api.forward_openai import OPENAI_BASE_URL
-from app.utils.db_logger import log_event
-
+from app.utils.db_logger import log_event, logging
 
 # -------------------------------------------------------------
 # 🌍 Environment setup
@@ -26,7 +26,6 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 router = APIRouter(prefix="/v1", tags=["Responses"])
-
 
 # -------------------------------------------------------------
 # ⚙️ Streaming helper
@@ -43,7 +42,6 @@ async def _stream_response(upstream):
         if k.lower() not in ("transfer-encoding", "content-length")
     }
     return StreamingResponse(_iter(), status_code=upstream.status_code, headers=headers)
-
 
 # -------------------------------------------------------------
 # 🧠 Core endpoint: POST /v1/responses
@@ -66,7 +64,7 @@ async def create_response(request: Request):
     # ---------------------------------------------------------
     # ✅ Inject local tools if not provided
     # ---------------------------------------------------------
-    local_tools = list_local_tools()
+    local_tools = load_manifest() or []
     if not tools and local_tools:
         body["tools"] = local_tools
     else:
@@ -149,12 +147,11 @@ async def create_response(request: Request):
     # 🧾 Asynchronous logging
     # ---------------------------------------------------------
     try:
-        await log_event("/v1/responses", response.status_code, f"model={model}")
-    except Exception:
-        pass
+        await log_event("info", f"/v1/responses {response.status_code} model={model}")
+    except Exception as e:
+        logging.warning(f"Logging failure: {e}")
 
     return JSONResponse(status_code=response.status_code, content=data)
-
 
 # -------------------------------------------------------------
 # 🧰 /v1/responses/tools — list all available tools
@@ -162,9 +159,8 @@ async def create_response(request: Request):
 @router.get("/responses/tools")
 async def list_tools():
     """Return all dynamically discovered tools in OpenAI-compatible schema."""
-    tools = list_local_tools()
+    tools = load_manifest() or []
     return JSONResponse({"object": "list", "data": tools})
-
 
 # -------------------------------------------------------------
 # 🧩 /v1/responses/tools/{tool_name} — manual tool invocation

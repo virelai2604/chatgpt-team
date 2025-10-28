@@ -8,7 +8,7 @@
 
 from fastapi import APIRouter, Request
 from app.api.forward_openai import forward_openai
-from app.utils.db_logger import log_event
+from app.utils.db_logger import setup_logging, logging
 
 router = APIRouter(prefix="/v1/vector_stores", tags=["Vector Stores"])
 
