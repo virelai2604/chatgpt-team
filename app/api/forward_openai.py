@@ -36,7 +36,6 @@ client = httpx.AsyncClient(
     http2=True,
 )
 
-
 async def _stream_openai_response(upstream_response: httpx.Response) -> StreamingResponse:
     """Stream bytes from OpenAI to the relay client."""
     headers = dict(upstream_response.headers)
@@ -54,7 +53,6 @@ async def _stream_openai_response(upstream_response: httpx.Response) -> Streamin
         media_type=headers.get("content-type", "application/json"),
     )
 
-
 async def _buffered_openai_response(upstream_response: httpx.Response) -> Response:
     """Read full upstream response, enforce size limit, and return safe JSON."""
     content = await upstream_response.aread()
@@ -63,7 +61,7 @@ async def _buffered_openai_response(upstream_response: httpx.Response) -> Respon
             status_code=502,
             content={
                 "error": "ResponseTooLargeError",
-                "hint": "Try smaller output or set max_tokens.",
+                "hint": "Try smaller output or set max_output_tokens.",
             },
         )
 
@@ -76,7 +74,6 @@ async def _buffered_openai_response(upstream_response: httpx.Response) -> Respon
             status_code=upstream_response.status_code,
             media_type=upstream_response.headers.get("content-type", "application/octet-stream"),
         )
-
 
 @router.api_route("/v1/{path:path}", methods=["GET", "POST", "DELETE", "PATCH"])
 async def forward_openai(request: Request, path: str):
@@ -103,13 +100,21 @@ async def forward_openai(request: Request, path: str):
     print(">>> Headers:", {k.lower(): v for k, v in headers.items() if k.lower() in ["content-type", "authorization"]})
     print(f"[Relay Auth Check] Key loaded: {'✅ yes' if OPENAI_API_KEY else '❌ missing'}")
 
+    # ✅ Auto-fix legacy parameter
+    if "max_tokens" in json_data and "max_output_tokens" not in json_data:
+        json_data["max_output_tokens"] = json_data.pop("max_tokens")
+
+    # ✅ Default setup for chat completions
     if "chat/completions" in path:
         json_data.setdefault("model", "gpt-4o-mini")
         if not json_data.get("messages"):
             json_data["messages"] = [{"role": "user", "content": "Hello from relay"}]
 
-    if method == "POST" and json_data and "max_tokens" not in json_data:
-        json_data["max_tokens"] = 256
+    # ✅ Remove invalid params for Realtime API
+    if "realtime/" in path:
+        json_data.pop("max_output_tokens", None)
+        json_data.pop("temperature", None)
+        json_data.pop("top_p", None)
 
     try:
         if path.startswith("chat/completions") and json_data.get("stream", False):
@@ -139,7 +144,6 @@ async def forward_openai(request: Request, path: str):
         return JSONResponse(status_code=504, content={"error": "timeout", "detail": "OpenAI upstream timeout"})
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": "relay_internal_error", "detail": str(e)})
-
 
 @router.on_event("shutdown")
 async def close_client():

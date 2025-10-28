@@ -2,7 +2,7 @@
 # app/routes/register_routes.py — Relay Route Registration
 # ==========================================================
 # Imports and mounts all public API routes and orchestration endpoints.
-# This file defines the callable REST API surface of the relay.
+# Defines the callable REST API surface of the relay.
 # ==========================================================
 
 from app.routes import (
@@ -13,13 +13,14 @@ from app.routes import (
     vector_stores,
     realtime,
     relay_status,
-    openapi
+    openapi,
+    passthrough_proxy
 )
 from app.api import responses
 
 def register_routes(app):
     """
-    Mount all public and orchestration routes into the FastAPI application.
+    Mount all public and orchestration routes into the FastAPI app.
     """
     # ---- Public API routes ----
     app.include_router(core.router)            # /v1/core/ping
@@ -33,3 +34,6 @@ def register_routes(app):
 
     # ---- Core Orchestrator ----
     app.include_router(responses.router)       # /v1/responses
+
+    # ---- Universal Fallback ----
+    app.include_router(passthrough_proxy.router)  # must be last
