@@ -71,6 +71,14 @@ async def serve_plugin_manifest():
     """Serve the ChatGPT Plugin manifest."""
     return FileResponse("app/static/.well-known/ai-plugin.json", media_type="application/json")
 
+@app.get("/v1/openapi.yaml", include_in_schema=False)
+async def serve_static_openapi():
+    """
+    Serve the static ground-truth OpenAPI specification stored in /schemas/openapi.yaml.
+    This file represents the authoritative API contract, verified against the OpenAI API reference.
+    """
+    return FileResponse("schemas/openapi.yaml", media_type="application/x-yaml")
+
 # -----------------------------------------------------
 # Register All Routes
 # -----------------------------------------------------
