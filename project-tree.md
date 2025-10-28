@@ -106,3 +106,5 @@
     📄 client.py
     📄 sora.py
     📄 test_openai_relay_full.py
+    📄 test_relay_endpoints.py
+    📁 downloads

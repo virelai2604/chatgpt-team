@@ -1,41 +1,59 @@
 # ==========================================================
-# app/routes/register_routes.py — Relay Route Registration
+# app/routes/register_routes.py — Central Route Registrar
 # ==========================================================
-# Imports and mounts all REST API routes and orchestration layers.
-# Defines the unified REST API surface for OpenAI-compatible endpoints.
+# Collects and mounts all API route modules into the FastAPI
+# application instance. Ensures proper namespace and prefixes.
+# Mirrors the structure of OpenAI’s relay API.
 # ==========================================================
 
-from app.routes import (
-    core,
-    chat,
-    models,
-    files,
-    vector_stores,
-    realtime,
-    relay_status,
-    openapi,
-)
+from fastapi import FastAPI
+
+# ----------------------------------------------------------
+# Import route modules explicitly
+# ----------------------------------------------------------
+# app/api contains OpenAI-compatible endpoints
+# app/routes contains internal meta and relay-specific endpoints
+# ----------------------------------------------------------
 from app.api import responses, passthrough_proxy
+from app.routes.relay_status import router as relay_status_router
+from app.routes.openapi_yaml import router as openapi_yaml_router
 
 
-def register_routes(app):
+def register_routes(app: FastAPI):
     """
-    Mount all REST API routes into the FastAPI application.
-    Each mirrors an OpenAI API path or an internal control endpoint.
+    Mount all relay and OpenAI-compatible routes to the FastAPI app.
+    This is called from main.py during application initialization.
     """
 
-    # ---- OpenAI-equivalent routes ----
-    app.include_router(core.router)            # /v1/core/ping
-    app.include_router(chat.router)            # /v1/chat/completions
-    app.include_router(models.router)          # /v1/models
-    app.include_router(files.router)           # /v1/files*
-    app.include_router(vector_stores.router)   # /v1/vector_stores*
-    app.include_router(realtime.router)        # /v1/realtime/*
-    app.include_router(relay_status.router)    # /v1/relay/status
-    app.include_router(openapi.router)         # /v1/openapi.yaml
+    # ---------------------------------------------------------
+    # ⚙️ Meta & relay-specific endpoints FIRST
+    # ---------------------------------------------------------
+    # These must be mounted before the passthrough proxy to ensure
+    # /v1/relay/status and /v1/openapi.yaml are handled locally.
+    app.include_router(relay_status_router)  # /v1/relay/status
+    app.include_router(openapi_yaml_router)  # /v1/openapi.yaml
 
-    # ---- Core Relay Logic ----
-    app.include_router(responses.router)       # /v1/responses (ground-truth handler)
+    # ---------------------------------------------------------
+    # 🧩 Core OpenAI-compatible API mirrors
+    # ---------------------------------------------------------
+    # Mirrors endpoints such as /v1/responses, /v1/chat/completions, etc.
+    app.include_router(responses.router)           # /v1/responses & /v1/responses/tools
+    app.include_router(passthrough_proxy.router)   # /v1/chat/completions, /v1/models, etc.
 
-    # ---- Fallback Proxy (MUST be last) ----
-    app.include_router(passthrough_proxy.router)  # universal /v1/* forwarder
+    # ---------------------------------------------------------
+    # 🌐 Root diagnostic route
+    # ---------------------------------------------------------
+    @app.get("/")
+    async def root():
+        """
+        Root health and diagnostic endpoint.
+        Mirrors the OpenAI relay’s basic status message.
+        """
+        return {
+            "message": "ChatGPT Team Relay operational",
+            "version": "v2.3.4-fp",
+            "docs": "/docs",
+            "openapi": "/v1/openapi.yaml",
+        }
+
+    return app
