@@ -26,7 +26,7 @@
       📄 core.py
       📄 files.py
       📄 models.py
-      📄 openapi.py
+      📄 openapi_yaml.py
       📄 realtime.py
       📄 register_routes.py
       📄 relay_status.py
