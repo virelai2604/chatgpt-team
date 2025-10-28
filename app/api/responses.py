@@ -1,5 +1,5 @@
 # ============================================================
-# app/api/responses.py — ChatGPT Team Relay (v2025 Final Fix)
+# app/api/responses.py — ChatGPT Team Relay (v2025 Final Spec)
 # ============================================================
 # Implements /v1/responses with OpenAI-compatible structure.
 # Ensures GPT-5 tool schema compliance by enforcing both
@@ -59,16 +59,20 @@ async def create_response(request: Request):
 
     model = body.get("model", "gpt-5")
     stream = body.get("stream", False)
-    tools = body.get("tools", [])
 
     # ---------------------------------------------------------
-    # ✅ Inject local tools if not provided
+    # ✅ Inject tools if not provided by client
     # ---------------------------------------------------------
-    local_tools = load_manifest() or []
-    if not tools and local_tools:
-        body["tools"] = local_tools
-    else:
-        body.pop("tools", None)
+    if not body.get("tools"):
+        local_tools = load_manifest() or []
+        if local_tools:
+            body["tools"] = local_tools
+
+    # ---------------------------------------------------------
+    # 🪄 Normalize token parameter naming (GPT-5 compliance)
+    # ---------------------------------------------------------
+    if "max_tokens" in body and "max_output_tokens" not in body:
+        body["max_output_tokens"] = body.pop("max_tokens")
 
     # ---------------------------------------------------------
     # 🔧 Normalize tools to OpenAI schema
@@ -76,7 +80,6 @@ async def create_response(request: Request):
     if "tools" in body:
         fixed_tools = []
         for tool in body["tools"]:
-            # Ensure all have type='function' and top-level name
             if "function" not in tool and "name" in tool:
                 fn = {k: tool[k] for k in ("name", "description", "parameters") if k in tool}
                 fixed_tools.append({
@@ -89,13 +92,13 @@ async def create_response(request: Request):
                 if isinstance(fn, dict) and "name" in fn:
                     fixed_tools.append({
                         "type": "function",
-                        "name": fn["name"],   # ✅ Add top-level name
+                        "name": fn["name"],
                         "function": fn
                     })
         body["tools"] = fixed_tools
 
     # ---------------------------------------------------------
-    # 🧩 Diagnostic logging (optional)
+    # 🧩 Diagnostic logging
     # ---------------------------------------------------------
     print("\n=== [Relay → OpenAI] Final request body ===")
     print(json.dumps(body, indent=2))
@@ -137,6 +140,7 @@ async def create_response(request: Request):
             tool_name = call.get("name")
             tool_input = call.get("input", {})
             try:
+                logging.info(f"[Tool Call] {tool_name} input={json.dumps(tool_input)[:200]}")
                 result = await run_tool(tool_name, tool_input)
                 tool_outputs.append({"tool_name": tool_name, "result": result})
             except Exception as e:
@@ -151,7 +155,14 @@ async def create_response(request: Request):
     except Exception as e:
         logging.warning(f"Logging failure: {e}")
 
-    return JSONResponse(status_code=response.status_code, content=data)
+    # ---------------------------------------------------------
+    # 📦 Return response (preserve upstream content-type)
+    # ---------------------------------------------------------
+    return JSONResponse(
+        status_code=response.status_code,
+        content=data,
+        media_type=response.headers.get("content-type", "application/json")
+    )
 
 # -------------------------------------------------------------
 # 🧰 /v1/responses/tools — list all available tools

@@ -8,12 +8,12 @@
 
 from fastapi import APIRouter, Request
 from app.api.forward_openai import forward_openai
-from app.utils.db_logger import setup_logging, logging
+from app.utils.db_logger import log_event, logging
 
 router = APIRouter(prefix="/v1/realtime", tags=["Realtime"])
 
 # ----------------------------------------------------------
-# 🎧  Create Realtime Session
+# 🎧 Create Realtime Session
 # ----------------------------------------------------------
 @router.post("/sessions")
 async def create_session(request: Request):
@@ -24,14 +24,13 @@ async def create_session(request: Request):
     endpoint = "/v1/realtime/sessions"
     response = await forward_openai(request, endpoint)
     try:
-        await log_event(endpoint, response.status_code, "create realtime session")
-    except Exception:
-        pass
+        await log_event("info", f"create realtime session {response.status_code}")
+    except Exception as e:
+        logging.warning(f"Failed to log realtime session creation: {e}")
     return response
 
-
 # ----------------------------------------------------------
-# 🔄  Send Events into Active Session
+# 🔄 Send Events into Active Session
 # ----------------------------------------------------------
 @router.post("/events")
 async def send_event(request: Request):
@@ -43,14 +42,13 @@ async def send_event(request: Request):
     endpoint = "/v1/realtime/events"
     response = await forward_openai(request, endpoint)
     try:
-        await log_event(endpoint, response.status_code, "post realtime event")
-    except Exception:
-        pass
+        await log_event("info", f"post realtime event {response.status_code}")
+    except Exception as e:
+        logging.warning(f"Failed to log realtime event: {e}")
     return response
 
-
 # ----------------------------------------------------------
-# ❌  Terminate Realtime Session
+# ❌ Terminate Realtime Session
 # ----------------------------------------------------------
 @router.delete("/sessions/{session_id}")
 async def delete_session(request: Request, session_id: str):
@@ -61,7 +59,7 @@ async def delete_session(request: Request, session_id: str):
     endpoint = f"/v1/realtime/sessions/{session_id}"
     response = await forward_openai(request, endpoint)
     try:
-        await log_event(endpoint, response.status_code, f"delete session {session_id}")
-    except Exception:
-        pass
+        await log_event("info", f"delete realtime session {session_id} {response.status_code}")
+    except Exception as e:
+        logging.warning(f"Failed to log realtime deletion: {e}")
     return response
