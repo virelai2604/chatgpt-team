@@ -6,9 +6,16 @@ import platform
 import sqlite3
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.responses import router as responses_router
-from app.api.tools_api import router as tools_router, load_manifest
-from app.api.forward_openai import router as forward_router   # ✅ Added for OpenAI proxy forwarding
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# Route registrator
+from app.routes.register_routes import register_routes
+
+# Middleware
+from app.middleware.validation import ResponseValidationMiddleware
+
+# Logging
 from app.utils.db_logger import setup_logging
 
 # -----------------------------------------------------
@@ -18,13 +25,13 @@ RELAY_VERSION = "v2.3.4-fp"
 APP_MODE = os.getenv("APP_MODE", "production")
 
 # -----------------------------------------------------
-# Database Path (Render-compatible + Local fallback)
+# Database Path (Cross-platform)
 # -----------------------------------------------------
 if platform.system() == "Windows":
     DB_PATH = os.getenv("LOCAL_DB_PATH", r"D:\ChatgptDATAB\DB Chatgpt\chatgpt_archive.sqlite")
 else:
     default_linux_db = "/data/chatgpt_archive.sqlite"
-    if not os.access("/data", os.W_OK):  # fallback if /data is not writable
+    if not os.access("/data", os.W_OK):
         default_linux_db = "/tmp/chatgpt_archive.sqlite"
     DB_PATH = os.getenv("BIFL_DB_PATH", default_linux_db)
 
@@ -44,8 +51,9 @@ app = FastAPI(
 )
 
 # -----------------------------------------------------
-# Middleware (CORS)
+# Middleware
 # -----------------------------------------------------
+app.add_middleware(ResponseValidationMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.getenv("CORS_ALLOW_ORIGINS", "*")],
@@ -54,11 +62,19 @@ app.add_middleware(
 )
 
 # -----------------------------------------------------
-# Routers
+# Static Files + Plugin Discovery
 # -----------------------------------------------------
-app.include_router(responses_router, prefix="/v1")
-app.include_router(tools_router)
-app.include_router(forward_router)  # ✅ now handles all /v1/* routes (including /v1/responses)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+@app.get("/.well-known/ai-plugin.json")
+async def serve_plugin_manifest():
+    """Serve the ChatGPT Plugin manifest."""
+    return FileResponse("app/static/.well-known/ai-plugin.json", media_type="application/json")
+
+# -----------------------------------------------------
+# Register All Routes
+# -----------------------------------------------------
+register_routes(app)
 
 # -----------------------------------------------------
 # Startup Event
@@ -68,7 +84,6 @@ async def on_startup():
     logger.info(f"[Relay] Starting ChatGPT Team Relay ({RELAY_VERSION}) in {APP_MODE} mode...")
     logger.info(f"[DBLogger] Using database at: {DB_PATH}")
 
-    # Ensure database exists and schema is valid
     try:
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         conn = sqlite3.connect(DB_PATH)
@@ -85,18 +100,6 @@ async def on_startup():
         logger.info("[Relay] Verified database schema.")
     except Exception as e:
         logger.error(f"[Relay] Failed to verify or create database: {e}")
-
-    # Load tool manifest definitions
-    try:
-        tool_manifest = load_manifest()
-        if tool_manifest:
-            logger.info(f"[Relay] Loaded tools: {len(tool_manifest)} registered from manifest.")
-            for tool in tool_manifest:
-                logger.info(f"  └── {tool['id']} ({tool.get('description', '')})")
-        else:
-            logger.warning("[Relay] No tools found in manifest.")
-    except Exception as e:
-        logger.error(f"[Relay] Failed to load tools manifest: {e}")
 
     logger.info("Application startup complete.")
 
