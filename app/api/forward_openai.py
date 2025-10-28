@@ -30,19 +30,31 @@ client = httpx.AsyncClient(
 )
 
 # -------------------------------------------------------------
-# 🧩 Streaming helper — Ground Truth SSE format
+# 🧩 Streaming helper — Ground Truth SSE format (Fixed)
 # -------------------------------------------------------------
 async def _stream_response(upstream: httpx.Response) -> StreamingResponse:
-    """Relay OpenAI SSE stream in real time, removing hop-by-hop headers."""
+    """
+    Relay OpenAI SSE stream in real time, following ground-truth format:
+    - Each event prefixed with 'data:'
+    - Stream terminates with '[DONE]'
+    - Gracefully handles closed streams (no ASGI tracebacks)
+    """
     headers = dict(upstream.headers)
     headers.pop("content-length", None)
     headers.pop("transfer-encoding", None)
 
     async def gen():
-        async for line in upstream.aiter_lines():
-            if line.strip():
-                yield f"data: {line}\n\n"
-        yield "data: [DONE]\n\n"
+        try:
+            async for line in upstream.aiter_lines():
+                if line.strip():
+                    yield f"data: {line}\n\n"
+            # Emit sentinel end marker
+            yield "data: [DONE]\n\n"
+        except httpx.StreamClosed:
+            # Expected when the upstream stream ends cleanly
+            return
+        except Exception as e:
+            print(f"[Relay Stream Error] {type(e).__name__}: {e}")
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers=headers)
 
@@ -53,9 +65,9 @@ async def _stream_response(upstream: httpx.Response) -> StreamingResponse:
 async def handle_local_responses(request: Request):
     """
     Ground-truth aligned handler for /v1/responses.
-    - Normalizes tool schema.
-    - Streams output if requested.
-    - Forwards to OpenAI if not handled locally.
+    - Normalizes tool schema
+    - Streams output if requested
+    - Forwards to OpenAI if not handled locally
     """
     try:
         payload = await request.json()
@@ -73,7 +85,7 @@ async def handle_local_responses(request: Request):
     if "max_tokens" in payload and "max_output_tokens" not in payload:
         payload["max_output_tokens"] = payload.pop("max_tokens")
 
-    # --- Enforce proper tool schema
+    # --- Enforce proper tool schema (per OpenAI spec)
     if "tools" in payload:
         fixed_tools = []
         for tool in payload["tools"]:
@@ -87,7 +99,7 @@ async def handle_local_responses(request: Request):
             })
         payload["tools"] = fixed_tools
 
-    # --- Stream setting
+    # --- Stream or buffer setup
     stream = payload.get("stream", False)
     url = f"{OPENAI_BASE_URL}/v1/responses"
     headers = {
@@ -122,7 +134,7 @@ async def handle_local_responses(request: Request):
 # -------------------------------------------------------------
 @router.api_route("/v1/{path:path}", methods=["GET", "POST", "DELETE", "PATCH"])
 async def forward_openai(request: Request, path: str):
-    """Catch-all proxy for OpenAI API routes."""
+    """Catch-all proxy for OpenAI API routes (ground-truth aligned)."""
     method = request.method
     url = f"{OPENAI_BASE_URL.rstrip('/')}/{path.lstrip('/')}"
     headers = dict(request.headers)

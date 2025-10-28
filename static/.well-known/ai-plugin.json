@@ -3,6 +3,7 @@
   "name_for_human": "ChatGPT Team Relay",
   "name_for_model": "chatgpt_team_relay",
   "description_for_model": "Provides code execution, file operations, web search, vector retrieval, and multimodal tools through a secure relay.",
+  "description_for_human": "Unified OpenAI-compatible API relay supporting /v1/responses, /v1/tools, /v1/realtime, and plugin discovery endpoints.",
   "auth": {
     "type": "none"
   },
