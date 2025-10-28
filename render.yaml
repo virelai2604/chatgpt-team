@@ -1,20 +1,33 @@
 services:
   - type: web
     name: chatgpt-team-relay
-    runtime: python
-    plan: free
+    env: python
+    plan: starter
+    region: singapore
+
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+
     envVars:
-      - key: BIFL_DB_PATH
-        value: /data/chatgpt_archive.sqlite
-      - key: OPENAI_API_KEY
-        sync: false
       - key: APP_MODE
         value: production
-    buildCommand: |
-      pip install -r requirements.txt
-    startCommand: |
-      uvicorn main:app --host 0.0.0.0 --port 8000
+      - key: RELAY_NAME
+        value: "ChatGPT Team Relay"
+      - key: BIFL_DB_PATH
+        value: /data/chatgpt_archive.sqlite
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com
+      - key: DEFAULT_MODEL
+        value: gpt-4o
+      - key: DEBUG
+        value: false
+      - key: CORS_ALLOW_ORIGINS
+        value: "*"
+
+    # Optional persistent storage (for logs / DB)
     disk:
       name: data
       mountPath: /data
       sizeGB: 1
+
+    healthCheckPath: /health
