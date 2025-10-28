@@ -1,151 +1,131 @@
-# ============================================================
-# app/api/tools_api.py — Live Dynamic Tool Executor (Final Fixed)
-# ============================================================
-# Dynamically loads tools from tools_manifest.json or app/tools/.
-# Supports GPT-5 /v1/responses tool calls with real execution.
-# Handles manifest-relative and absolute paths gracefully.
-# ============================================================
+# ===============================================================
+# app/api/tools_api.py — ChatGPT Team Relay (v2025 Final Edition)
+# ===============================================================
+# Handles tool registration, dynamic importing, and execution.
+# Compatible with OpenAI Responses API + ChatGPT Actions.
+# Supports both {"tools": [...]} and [...] manifest formats.
+# ===============================================================
 
-import os
+import importlib
 import json
 import logging
-import asyncio
-import importlib.util
-from pathlib import Path
-from fastapi import APIRouter, HTTPException
-from typing import Any, Dict, List
+import os
+from fastapi import APIRouter, Request, HTTPException
 
-logger = logging.getLogger("Relay.ToolsAPI")
-router = APIRouter(prefix="/v1/tools", tags=["Tools"])
+router = APIRouter(tags=["Tools"])
+logger = logging.getLogger(__name__)
 
-# -------------------------------------------------------------
-# 📁 Paths
-# -------------------------------------------------------------
-APP_ROOT = Path(__file__).resolve().parents[1]
-MANIFEST_PATH = os.getenv("TOOLS_MANIFEST", str(APP_ROOT / "manifests" / "tools_manifest.json"))
+# ---------------------------------------------------------------
+# Manifest path (default location)
+# ---------------------------------------------------------------
+TOOLS_MANIFEST_PATH = os.getenv("TOOLS_MANIFEST", "app/manifests/tools_manifest.json")
 
-# Lazy cache — only populated when a tool is executed
-TOOL_REGISTRY: Dict[str, Any] = {}
 
-# -------------------------------------------------------------
-# 🧩 Manifest loader
-# -------------------------------------------------------------
-def load_manifest() -> List[Dict[str, Any]]:
-    """Read tool metadata from the manifest file."""
+# ---------------------------------------------------------------
+# Load manifest (resilient to both formats)
+# ---------------------------------------------------------------
+def load_manifest():
+    """
+    Load the tools manifest JSON file.
+    Supports both:
+        {
+          "tools": [ { "id": "...", "description": "...", "entry": "..." }, ... ]
+        }
+    and a flat list:
+        [ { "id": "...", "description": "...", "entry": "..." }, ... ]
+    """
+    if not os.path.exists(TOOLS_MANIFEST_PATH):
+        logger.warning(f"[ToolsAPI] Manifest not found at {TOOLS_MANIFEST_PATH}")
+        return []
+
     try:
-        with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+        with open(TOOLS_MANIFEST_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
+
+        # Handle {"tools": [...]} or plain list
         if isinstance(data, dict) and "tools" in data:
-            return data["tools"]
+            tools = data["tools"]
         elif isinstance(data, list):
-            return data
-    except Exception as e:
-        logger.warning(f"[ToolsAPI] Failed to load manifest: {e}")
-    return []
-
-TOOL_MANIFEST = load_manifest()
-
-# -------------------------------------------------------------
-# 🧠 Helper: dynamically import a tool
-# -------------------------------------------------------------
-def _import_tool(tool_name: str, entry_path: Path):
-    """Import a tool module dynamically from its Python file."""
-    if not entry_path.exists():
-        raise FileNotFoundError(f"Tool file not found: {entry_path}")
-
-    spec = importlib.util.spec_from_file_location(tool_name, str(entry_path))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    TOOL_REGISTRY[tool_name] = module
-    logger.info(f"[ToolsAPI] Loaded tool '{tool_name}' from {entry_path}")
-    return module
-
-# -------------------------------------------------------------
-# 📜 API endpoints
-# -------------------------------------------------------------
-@router.get("")
-def list_tools() -> Dict[str, Any]:
-    """Return all available tools from manifest."""
-    ids = [t["id"] for t in TOOL_MANIFEST]
-    return {"object": "list", "tools": ids, "count": len(ids)}
-
-@router.get("/{tool_id}")
-def get_tool_info(tool_id: str) -> Dict[str, Any]:
-    """Return metadata for a specific tool."""
-    tool = next((t for t in TOOL_MANIFEST if t.get("id") == tool_id), None)
-    if not tool:
-        raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found")
-    return tool
-
-# -------------------------------------------------------------
-# 🧰 OpenAI-compatible schema builder
-# -------------------------------------------------------------
-def list_local_tools() -> list:
-    """Expose tools for /v1/responses injection."""
-    tools = []
-    for t in TOOL_MANIFEST:
-        tools.append({
-            "type": "function",
-            "function": {
-                "name": t["id"],
-                "description": t.get("description", ""),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "input": {
-                            "type": "string",
-                            "description": "Input payload"
-                        }
-                    },
-                    "required": ["input"]
-                }
-            }
-        })
-    return tools
-
-# -------------------------------------------------------------
-# ⚙️ Core: real dynamic tool executor
-# -------------------------------------------------------------
-async def run_tool(tool_name: str, payload: dict) -> dict:
-    """
-    Execute a tool dynamically from manifest.
-    Loads the module if not cached, calls its run() function,
-    and returns the result. Handles flexible entry paths.
-    """
-    # 1️⃣ Resolve manifest entry
-    entry = next((t.get("entry") for t in TOOL_MANIFEST if t.get("id") == tool_name), None)
-    if not entry:
-        raise ValueError(f"Tool '{tool_name}' not found in manifest")
-
-    # 2️⃣ Normalize path (handles both app/tools/... and tools/...)
-    entry_path = (Path.cwd() / entry).resolve()
-    if not entry_path.exists():
-        # Fallback 1: relative to /app directory
-        alt_path = (APP_ROOT / Path(entry).name).resolve()
-        # Fallback 2: directly inside /app/tools
-        alt_path2 = (APP_ROOT / "tools" / Path(entry).name).resolve()
-
-        if alt_path.exists():
-            entry_path = alt_path
-        elif alt_path2.exists():
-            entry_path = alt_path2
+            tools = data
         else:
-            raise FileNotFoundError(f"Tool file not found: {entry_path}")
+            logger.warning("[ToolsAPI] Unexpected manifest structure — returning empty list.")
+            return []
 
-    # 3️⃣ Import if not loaded
-    module = TOOL_REGISTRY.get(tool_name)
-    if not module:
-        module = _import_tool(tool_name, entry_path)
+        # Validate basic structure
+        valid_tools = []
+        for tool in tools:
+            if isinstance(tool, dict) and "id" in tool:
+                valid_tools.append(tool)
+            else:
+                logger.warning(f"[ToolsAPI] Skipping invalid tool entry: {tool}")
 
-    # 4️⃣ Execute tool’s run() function
+        return valid_tools
+
+    except json.JSONDecodeError as e:
+        logger.error(f"[ToolsAPI] Failed to parse manifest JSON: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"[ToolsAPI] Unexpected error loading manifest: {e}")
+        return []
+
+
+# ---------------------------------------------------------------
+# Dynamic import and tool execution
+# ---------------------------------------------------------------
+async def run_tool(tool_name: str, payload: dict):
+    """
+    Dynamically import and execute a tool's `run(payload)` coroutine.
+    Each tool must define:
+        async def run(payload: dict) -> dict
+    """
+    try:
+        module = importlib.import_module(f"app.tools.{tool_name}")
+    except ModuleNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
+    except Exception as e:
+        logger.exception(f"[ToolsAPI] Error importing '{tool_name}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
     if not hasattr(module, "run"):
-        raise AttributeError(f"Tool '{tool_name}' missing run() function")
+        raise HTTPException(status_code=500, detail=f"Tool '{tool_name}' missing run() function")
+
+    run_func = getattr(module, "run")
+    if not callable(run_func):
+        raise HTTPException(status_code=500, detail=f"Tool '{tool_name}' run() is not callable")
 
     try:
-        result = module.run(payload)
-        if asyncio.iscoroutine(result):
-            result = await result
+        logger.info(f"[ToolsAPI] Executing tool: {tool_name}")
+        result = await run_func(payload)
         return result
     except Exception as e:
-        logger.error(f"[ToolsAPI] Error executing {tool_name}: {e}")
+        logger.exception(f"[ToolsAPI] Error during '{tool_name}' execution: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------
+# API endpoint: list available tools
+# ---------------------------------------------------------------
+@router.get("/v1/responses/tools")
+async def list_tools():
+    """Return all registered tools (OpenAI-compatible schema)."""
+    tools = load_manifest()
+    return {"object": "list", "data": tools, "count": len(tools)}
+
+
+# ---------------------------------------------------------------
+# API endpoint: run a tool manually
+# ---------------------------------------------------------------
+@router.post("/v1/responses/tools/{tool_name}")
+async def call_tool(tool_name: str, request: Request):
+    """Invoke a tool directly without model mediation."""
+    payload = await request.json()
+    result = await run_tool(tool_name, payload)
+    return result
+
+
+# ---------------------------------------------------------------
+# Legacy alias (optional) — backward compatibility
+# ---------------------------------------------------------------
+def list_local_tools():
+    """Legacy alias for backward compatibility (used in old responses.py)."""
+    return load_manifest()

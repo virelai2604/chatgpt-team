@@ -1,142 +1,140 @@
-# ==========================================================
-# main.py — ChatGPT Team Relay (Render Deployment Edition)
-# ==========================================================
-# Production entrypoint for ChatGPT Relay deployed on Render.
-# Mirrors OpenAI’s v1 API surface, including /v1/responses,
-# chat completions, realtime, and file/vector endpoints.
-# ==========================================================
-
-import os
-import sys
 import asyncio
+import json
 import logging
-from fastapi import FastAPI, Response
+import os
+import platform
+import sqlite3
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from dotenv import load_dotenv
+from app.api.responses import router as responses_router
+from app.api.tools_api import router as tools_router, load_manifest
+from app.utils.db_logger import setup_logging
 
-# ----------------------------------------------------------
-# 🌍 Load Environment Variables
-# ----------------------------------------------------------
-load_dotenv()
+# -----------------------------------------------------
+# Relay Metadata
+# -----------------------------------------------------
+RELAY_VERSION = "v2.3.4-fp"
+APP_MODE = os.getenv("APP_MODE", "production")
 
-# ----------------------------------------------------------
-# 🧱 Core Imports
-# ----------------------------------------------------------
-from app.utils.db_logger import init_db
-from app.routes.register_routes import register_routes
-from app.api.tools_api import TOOL_REGISTRY
-from app.utils.error_handler import register_error_handlers
+# -----------------------------------------------------
+# Database Path (Environment Aware)
+# -----------------------------------------------------
+if platform.system() == "Windows":
+    DB_PATH = os.getenv("LOCAL_DB_PATH", r"D:\ChatgptDATAB\DB Chatgpt\chatgpt_archive.sqlite")
+else:
+    DB_PATH = os.getenv("BIFL_DB_PATH", "/data/chatgpt_archive.sqlite")
 
-# ----------------------------------------------------------
-# 🧾 Metadata
-# ----------------------------------------------------------
-APP_NAME = "ChatGPT Team Relay"
-BIFL_VERSION = "2.3.4-fp"
-RELAY_ENV = os.getenv("RELAY_ENV", "production")
+# -----------------------------------------------------
+# Logging Setup
+# -----------------------------------------------------
+setup_logging()
+logger = logging.getLogger("relay")
 
-# ----------------------------------------------------------
-# 🧠 Logging Configuration
-# ----------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+# -----------------------------------------------------
+# FastAPI Initialization
+# -----------------------------------------------------
+app = FastAPI(
+    title="ChatGPT Team Relay",
+    description="Unified OpenAI-compatible relay for ChatGPT Actions and API extensions.",
+    version=RELAY_VERSION,
 )
-logger = logging.getLogger("ChatGPTRelay")
 
-# ----------------------------------------------------------
-# 🌐 Lifespan Context
-# ----------------------------------------------------------
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Startup and shutdown lifecycle:
-    - Initialize DB logger
-    - Log environment and tools
-    - Graceful teardown
-    """
-    logger.info(f"[Relay] Starting {APP_NAME} (v{BIFL_VERSION}) in {RELAY_ENV} mode...")
+# -----------------------------------------------------
+# Middleware (CORS)
+# -----------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[os.getenv("CORS_ALLOW_ORIGINS", "*")],
+    allow_methods=os.getenv("CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS").split(","),
+    allow_headers=[os.getenv("CORS_ALLOW_HEADERS", "*")],
+)
+
+# -----------------------------------------------------
+# Routers
+# -----------------------------------------------------
+app.include_router(responses_router, prefix="/v1")
+app.include_router(tools_router)
+
+# -----------------------------------------------------
+# Startup Event
+# -----------------------------------------------------
+@app.on_event("startup")
+async def on_startup():
+    logger.info(f"[Relay] Starting ChatGPT Team Relay ({RELAY_VERSION}) in {APP_MODE} mode...")
+    logger.info(f"[DBLogger] Using database at: {DB_PATH}")
+
+    # Ensure database exists
     try:
-        if os.getenv("ENABLE_DB_LOGGING", "true").lower() == "true":
-            await init_db()
-            logger.info("[Relay] Database layer initialized successfully.")
-        else:
-            logger.info("[Relay] Database logging disabled by environment.")
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT DEFAULT (datetime('now')),
+                level TEXT,
+                message TEXT
+            );
+        """)
+        conn.commit()
+        conn.close()
+        logger.info("[Relay] Verified database schema.")
     except Exception as e:
-        logger.error(f"[Relay] Failed to initialize database: {e}")
+        logger.error(f"[Relay] Failed to verify or create database: {e}")
 
-    # Tool discovery
-    logger.info(f"[Relay] Loaded tools: {len(TOOL_REGISTRY)} registered.")
-    for tool_id in TOOL_REGISTRY:
-        logger.info(f"  └── {tool_id}")
+    # Load tools manifest
+    try:
+        tool_manifest = load_manifest()
+        if tool_manifest:
+            logger.info(f"[Relay] Loaded tools: {len(tool_manifest)} registered from manifest.")
+            for tool in tool_manifest:
+                logger.info(f"  └── {tool['id']} ({tool.get('description', '')})")
+        else:
+            logger.warning("[Relay] No tools found in manifest.")
+    except Exception as e:
+        logger.error(f"[Relay] Failed to load tools manifest: {e}")
 
-    yield  # ---- Application runs ----
+    logger.info("Application startup complete.")
 
+# -----------------------------------------------------
+# Shutdown Event
+# -----------------------------------------------------
+@app.on_event("shutdown")
+async def on_shutdown():
     logger.info("[Relay] Shutting down gracefully...")
     await asyncio.sleep(0.2)
     logger.info("[Relay] Shutdown complete.")
 
-# ----------------------------------------------------------
-# 🚀 FastAPI App Initialization
-# ----------------------------------------------------------
-app = FastAPI(
-    title=APP_NAME,
-    version=BIFL_VERSION,
-    description="OpenAI-compatible relay for ChatGPT Actions and Team Orchestration.",
-    lifespan=lifespan,
-)
-
-# ----------------------------------------------------------
-# 🔒 CORS Middleware (Dynamic from Environment)
-# ----------------------------------------------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),
-    allow_methods=os.getenv("CORS_ALLOW_METHODS", "*").split(","),
-    allow_headers=os.getenv("CORS_ALLOW_HEADERS", "*").split(","),
-)
-
-# ----------------------------------------------------------
-# 🧩 Route Registration & Error Handlers
-# ----------------------------------------------------------
-register_routes(app)
-register_error_handlers(app)
-
-# ----------------------------------------------------------
-# 💡 Core Health Endpoints
-# ----------------------------------------------------------
-@app.get("/")
-async def root():
-    """Landing endpoint for relay root."""
-    return {
-        "object": "relay.root",
-        "status": "ok",
-        "version": BIFL_VERSION,
-        "environment": RELAY_ENV,
-        "service_url": "https://chatgpt-team-relay.onrender.com"
-    }
-
-@app.get("/v1/healthz")
+# -----------------------------------------------------
+# Health Check
+# -----------------------------------------------------
+@app.get("/health")
 async def health_check():
-    """Render health check endpoint."""
-    return Response(status_code=200, content="ok")
-
-@app.get("/v1/version")
-async def version_check():
-    """Version endpoint for diagnostics."""
+    exists = os.path.exists(DB_PATH)
+    size = os.path.getsize(DB_PATH) if exists else 0
     return {
-        "object": "relay.version",
-        "version": BIFL_VERSION,
-        "env": RELAY_ENV
+        "status": "ok",
+        "version": RELAY_VERSION,
+        "mode": APP_MODE,
+        "db_exists": exists,
+        "db_path": DB_PATH,
+        "db_size_bytes": size
     }
 
-# ----------------------------------------------------------
-# 🧭 Entry Point (Render Startup)
-# ----------------------------------------------------------
+# -----------------------------------------------------
+# Inspect Logs
+# -----------------------------------------------------
+@app.get("/logs/recent")
+async def get_recent_logs(limit: int = 10):
+    if not os.path.exists(DB_PATH):
+        return {"error": "Database not found", "path": DB_PATH}
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute("SELECT id, timestamp, level, message FROM logs ORDER BY id DESC LIMIT ?;", (limit,)).fetchall()
+    conn.close()
+    return {"recent_logs": rows, "count": len(rows)}
+
+# -----------------------------------------------------
+# Entry Point
+# -----------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-    host = os.getenv("RELAY_HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", os.getenv("RELAY_PORT", "8000")))
-    logger.info(f"[Relay] Listening on {host}:{port}")
-    uvicorn.run("main:app", host=host, port=port, reload=False)
+    uvicorn.run("main:app", host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 8000)), reload=True)

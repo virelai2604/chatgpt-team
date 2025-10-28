@@ -3,6 +3,7 @@
   📄 __init__.py
   📄 generate_tree.py
   📄 main.py
+  📄 project-tree.md
   📄 requirements.txt
   📁 app
     📄 __init__.py
