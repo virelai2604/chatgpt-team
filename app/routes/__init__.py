@@ -1,28 +1,9 @@
 # ==========================================================
-# app/routes/__init__.py — Package Export Definitions
+# app/routes/__init__.py — Route Package Initialization
 # ==========================================================
-# Ensures that all route modules can be imported cleanly
-# by register_routes.py or elsewhere in the relay.
+# Avoids circular imports between register_routes.py and
+# other route modules by keeping this file minimal.
 # ==========================================================
 
-from . import (
-    core,
-    chat,
-    models,
-    files,
-    vector_stores,
-    realtime,
-    relay_status,
-    openapi,
-)
-
-__all__ = [
-    "core",
-    "chat",
-    "models",
-    "files",
-    "vector_stores",
-    "realtime",
-    "relay_status",
-    "openapi",
-]
+# Leave intentionally empty or only set __all__.
+__all__ = []
