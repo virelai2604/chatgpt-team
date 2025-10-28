@@ -4,6 +4,7 @@
   📄 generate_tree.py
   📄 main.py
   📄 project-tree.md
+  📄 render.yaml
   📄 requirements.txt
   📁 app
     📄 __init__.py
@@ -16,6 +17,9 @@
     📁 manifests
       📄 __init__.py
       📄 tools_manifest.json
+    📁 middleware
+      📄 __init__.py
+      📄 validation.py
     📁 routes
       📄 __init__.py
       📄 chat.py

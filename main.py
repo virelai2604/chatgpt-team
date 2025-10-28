@@ -64,12 +64,14 @@ app.add_middleware(
 # -----------------------------------------------------
 # Static Files + Plugin Discovery
 # -----------------------------------------------------
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# Your project-tree shows /static/.well-known/ai-plugin.json at the root,
+# not under app/static, so adjust directory accordingly:
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/.well-known/ai-plugin.json")
 async def serve_plugin_manifest():
     """Serve the ChatGPT Plugin manifest."""
-    return FileResponse("app/static/.well-known/ai-plugin.json", media_type="application/json")
+    return FileResponse("static/.well-known/ai-plugin.json", media_type="application/json")
 
 @app.get("/v1/openapi.yaml", include_in_schema=False)
 async def serve_static_openapi():

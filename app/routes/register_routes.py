@@ -14,15 +14,16 @@ from app.routes import (
     realtime,
     relay_status,
     openapi,
-    passthrough_proxy,
 )
-from app.api import responses
+from app.api import responses, passthrough_proxy
+
 
 def register_routes(app):
     """
     Mount all REST API routes into the FastAPI application.
     Each mirrors an OpenAI API path or an internal control endpoint.
     """
+
     # ---- OpenAI-equivalent routes ----
     app.include_router(core.router)            # /v1/core/ping
     app.include_router(chat.router)            # /v1/chat/completions
@@ -36,5 +37,5 @@ def register_routes(app):
     # ---- Core Relay Logic ----
     app.include_router(responses.router)       # /v1/responses (ground-truth handler)
 
-    # ---- Fallback Proxy ----
+    # ---- Fallback Proxy (MUST be last) ----
     app.include_router(passthrough_proxy.router)  # universal /v1/* forwarder

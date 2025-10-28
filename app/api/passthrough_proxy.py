@@ -1,8 +1,8 @@
 # ==========================================================
-# app/routes/passthrough_proxy.py — Universal Fallback Proxy
+# app/api/passthrough_proxy.py — Universal Fallback Proxy
 # ==========================================================
 # Forwards any unmatched /v1/* request to the official OpenAI API.
-# Always register LAST to avoid intercepting local endpoints.
+# Always registered LAST to avoid intercepting local endpoints.
 # ==========================================================
 
 from fastapi import APIRouter, Request
