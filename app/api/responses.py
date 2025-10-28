@@ -1,10 +1,15 @@
 # ============================================================
 # app/api/responses.py — ChatGPT Team Relay (v2025 Final Spec)
 # ============================================================
-# Implements /v1/responses with OpenAI-compatible structure.
-# Ensures GPT-5 tool schema compliance by enforcing both
-# `tools[n].name` and `tools[n].function.name` fields.
-# Supports streaming, dynamic tool discovery, and function calls.
+# Implements /v1/responses in perfect alignment with OpenAI API reference.
+# Enforces proper schema normalization: each tool must define both
+# `tools[n].name` and `tools[n].function.name`.
+# Supports:
+#   - Streaming (Server-Sent Events, SSE)
+#   - Dynamic tool injection from local manifest
+#   - Function calling (tools)
+#   - Full logging and async forwarding
+# ============================================================
 
 import os
 import json
@@ -14,13 +19,13 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from dotenv import load_dotenv
 
-# ✅ Updated imports
+# Internal imports
 from app.api.tools_api import load_manifest, run_tool
 from app.api.forward_openai import OPENAI_BASE_URL
 from app.utils.db_logger import log_event, logging
 
 # -------------------------------------------------------------
-# 🌍 Environment setup
+# 🌍 Environment Setup
 # -------------------------------------------------------------
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -28,9 +33,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 router = APIRouter(prefix="/v1", tags=["Responses"])
 
 # -------------------------------------------------------------
-# ⚙️ Streaming helper
+# ⚙️ Streaming Helper — OpenAI Ground Truth
 # -------------------------------------------------------------
-async def _stream_response(upstream):
+async def _stream_response(upstream: httpx.Response):
     """Stream OpenAI's chunked SSE output directly to the client."""
     async def _iter():
         async for chunk in upstream.aiter_bytes():
@@ -44,24 +49,24 @@ async def _stream_response(upstream):
     return StreamingResponse(_iter(), status_code=upstream.status_code, headers=headers)
 
 # -------------------------------------------------------------
-# 🧠 Core endpoint: POST /v1/responses
+# 🧠 Core Endpoint: POST /v1/responses
 # -------------------------------------------------------------
 @router.post("/responses")
 async def create_response(request: Request):
     """
-    Main relay handler for OpenAI /v1/responses endpoint.
-    Supports streaming, dynamic tool injection, and function calling.
+    OpenAI-compatible relay handler for /v1/responses.
+    Supports streaming, dynamic tool discovery, and local tool execution.
     """
     try:
         body = await request.json()
     except Exception:
         body = {}
 
-    model = body.get("model", "gpt-5")
+    model = body.get("model", "gpt-4o")
     stream = body.get("stream", False)
 
     # ---------------------------------------------------------
-    # ✅ Inject tools if not provided by client
+    # ✅ Inject local tools if none provided
     # ---------------------------------------------------------
     if not body.get("tools"):
         local_tools = load_manifest() or []
@@ -69,55 +74,56 @@ async def create_response(request: Request):
             body["tools"] = local_tools
 
     # ---------------------------------------------------------
-    # 🪄 Normalize token parameter naming (GPT-5 compliance)
+    # 🧩 Normalize token parameter naming (OpenAI spec)
     # ---------------------------------------------------------
     if "max_tokens" in body and "max_output_tokens" not in body:
         body["max_output_tokens"] = body.pop("max_tokens")
 
     # ---------------------------------------------------------
-    # 🔧 Normalize tools to OpenAI schema
+    # 🔧 Normalize tool schema (guarantee both .name & .function.name)
     # ---------------------------------------------------------
     if "tools" in body:
         fixed_tools = []
         for tool in body["tools"]:
+            fn = tool.get("function", {})
+            # Case 1: top-level name only
             if "function" not in tool and "name" in tool:
                 fn = {k: tool[k] for k in ("name", "description", "parameters") if k in tool}
                 fixed_tools.append({
                     "type": "function",
-                    "name": fn["name"],       # ✅ Top-level name required by OpenAI schema
+                    "name": fn["name"],
                     "function": fn
                 })
-            else:
-                fn = tool.get("function")
-                if isinstance(fn, dict) and "name" in fn:
-                    fixed_tools.append({
-                        "type": "function",
-                        "name": fn["name"],
-                        "function": fn
-                    })
+            # Case 2: has function but missing top-level name
+            elif isinstance(fn, dict) and "name" in fn:
+                fixed_tools.append({
+                    "type": "function",
+                    "name": fn["name"],
+                    "function": fn
+                })
         body["tools"] = fixed_tools
 
     # ---------------------------------------------------------
-    # 🧩 Diagnostic logging
+    # 🧾 Log final OpenAI-aligned request body
     # ---------------------------------------------------------
-    print("\n=== [Relay → OpenAI] Final request body ===")
+    print("\n=== [Relay → OpenAI] Final Request Body ===")
     print(json.dumps(body, indent=2))
     print("===========================================\n")
 
     # ---------------------------------------------------------
-    # 🔑 Auth headers
+    # 🔑 Authorization Headers
     # ---------------------------------------------------------
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json",
         "X-Relay-Source": "chatgpt-team-relay",
     }
-
-    print(f"[Relay Auth Check] Key loaded: {'✅ yes' if OPENAI_API_KEY else '❌ missing'}")
     url = f"{OPENAI_BASE_URL}/v1/responses"
 
+    print(f"[Relay Auth Check] Key loaded: {'✅ yes' if OPENAI_API_KEY else '❌ missing'}")
+
     # ---------------------------------------------------------
-    # 🚀 Forward request to OpenAI
+    # 🚀 Forward Request to OpenAI
     # ---------------------------------------------------------
     async with httpx.AsyncClient(timeout=None) as client:
         if stream:
@@ -127,7 +133,7 @@ async def create_response(request: Request):
             response = await client.post(url, headers=headers, json=body)
 
     # ---------------------------------------------------------
-    # 🔄 Handle function calls (tool invocations)
+    # 🔄 Handle Function Calls (Tool Invocations)
     # ---------------------------------------------------------
     try:
         data = response.json()
@@ -148,7 +154,7 @@ async def create_response(request: Request):
         data["tool_outputs"] = tool_outputs
 
     # ---------------------------------------------------------
-    # 🧾 Asynchronous logging
+    # 🪵 Async Logging
     # ---------------------------------------------------------
     try:
         await log_event("info", f"/v1/responses {response.status_code} model={model}")
@@ -156,29 +162,29 @@ async def create_response(request: Request):
         logging.warning(f"Logging failure: {e}")
 
     # ---------------------------------------------------------
-    # 📦 Return response (preserve upstream content-type)
+    # 📦 Return Upstream Response
     # ---------------------------------------------------------
     return JSONResponse(
         status_code=response.status_code,
         content=data,
-        media_type=response.headers.get("content-type", "application/json")
+        media_type=response.headers.get("content-type", "application/json"),
     )
 
 # -------------------------------------------------------------
-# 🧰 /v1/responses/tools — list all available tools
+# 🧰 /v1/responses/tools — List Tools (OpenAI Schema)
 # -------------------------------------------------------------
 @router.get("/responses/tools")
 async def list_tools():
-    """Return all dynamically discovered tools in OpenAI-compatible schema."""
+    """Return all available tools, formatted per OpenAI’s schema."""
     tools = load_manifest() or []
     return JSONResponse({"object": "list", "data": tools})
 
 # -------------------------------------------------------------
-# 🧩 /v1/responses/tools/{tool_name} — manual tool invocation
+# 🧩 /v1/responses/tools/{tool_name} — Manual Tool Invocation
 # -------------------------------------------------------------
 @router.post("/responses/tools/{tool_name}")
 async def call_tool(tool_name: str, request: Request):
-    """Invoke a registered tool directly (without model mediation)."""
+    """Invoke a specific registered tool directly (bypasses model)."""
     payload = await request.json()
     result = await run_tool(tool_name, payload)
     return JSONResponse(result)
