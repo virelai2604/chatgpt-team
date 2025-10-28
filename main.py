@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.responses import router as responses_router
 from app.api.tools_api import router as tools_router, load_manifest
+from app.api.forward_openai import router as forward_router   # ✅ Added for OpenAI proxy forwarding
 from app.utils.db_logger import setup_logging
 
 # -----------------------------------------------------
@@ -17,7 +18,7 @@ RELAY_VERSION = "v2.3.4-fp"
 APP_MODE = os.getenv("APP_MODE", "production")
 
 # -----------------------------------------------------
-# Database Path (Render-compatible)
+# Database Path (Render-compatible + Local fallback)
 # -----------------------------------------------------
 if platform.system() == "Windows":
     DB_PATH = os.getenv("LOCAL_DB_PATH", r"D:\ChatgptDATAB\DB Chatgpt\chatgpt_archive.sqlite")
@@ -38,7 +39,7 @@ logger = logging.getLogger("relay")
 # -----------------------------------------------------
 app = FastAPI(
     title="ChatGPT Team Relay",
-    description="OpenAI-grounded relay that mirrors the official OpenAI API (v1) for ChatGPT and Actions.",
+    description="Unified OpenAI-compatible relay for ChatGPT Actions and API extensions. Fully aligned to OpenAI API ground truth.",
     version=RELAY_VERSION,
 )
 
@@ -57,6 +58,7 @@ app.add_middleware(
 # -----------------------------------------------------
 app.include_router(responses_router, prefix="/v1")
 app.include_router(tools_router)
+app.include_router(forward_router)  # ✅ now handles all /v1/* routes (including /v1/responses)
 
 # -----------------------------------------------------
 # Startup Event
@@ -66,6 +68,7 @@ async def on_startup():
     logger.info(f"[Relay] Starting ChatGPT Team Relay ({RELAY_VERSION}) in {APP_MODE} mode...")
     logger.info(f"[DBLogger] Using database at: {DB_PATH}")
 
+    # Ensure database exists and schema is valid
     try:
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         conn = sqlite3.connect(DB_PATH)
@@ -83,6 +86,7 @@ async def on_startup():
     except Exception as e:
         logger.error(f"[Relay] Failed to verify or create database: {e}")
 
+    # Load tool manifest definitions
     try:
         tool_manifest = load_manifest()
         if tool_manifest:
@@ -140,4 +144,4 @@ async def get_recent_logs(limit: int = 10):
 # -----------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 8000)))
+    uvicorn.run("main:app", host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 8080)))
