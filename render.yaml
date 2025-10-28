@@ -1,3 +1,10 @@
+# ==========================================================
+# ChatGPT Team Relay — Render Deployment Configuration
+# ==========================================================
+# FastAPI-based OpenAI-compatible relay that handles chat,
+# responses, files, vectors, and tools for team environments.
+# ==========================================================
+
 services:
   - type: web
     name: chatgpt-team-relay
@@ -5,29 +12,77 @@ services:
     plan: starter
     region: singapore
 
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    # --------------------------------------------
+    # ⚙️ Build and Start Commands
+    # --------------------------------------------
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
 
+    startCommand: |
+      uvicorn main:app --host 0.0.0.0 --port $PORT
+
+    # --------------------------------------------
+    # 🌐 Environment Variables
+    # --------------------------------------------
     envVars:
       - key: APP_MODE
         value: production
-      - key: RELAY_NAME
-        value: "ChatGPT Team Relay"
-      - key: BIFL_DB_PATH
-        value: /data/chatgpt_archive.sqlite
+
+      - key: OPENAI_API_KEY
+        sync: false  # Keep secret, managed manually in dashboard
+
       - key: OPENAI_BASE_URL
         value: https://api.openai.com
+
+      - key: OPENAI_ORG_ID
+        value: org-XXXXXXXXXXXXXX
+
       - key: DEFAULT_MODEL
         value: gpt-4o
-      - key: DEBUG
-        value: false
+
+      # Persistent database location
+      - key: BIFL_DB_PATH
+        value: /data/chatgpt_archive.sqlite
+
+      # Streaming + logging configuration
+      - key: ENABLE_STREAM
+        value: true
+
+      - key: ENABLE_DB_LOGGING
+        value: true
+
+      # CORS (Cross-Origin Resource Sharing)
       - key: CORS_ALLOW_ORIGINS
         value: "*"
+      - key: CORS_ALLOW_METHODS
+        value: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+      - key: CORS_ALLOW_HEADERS
+        value: "*"
 
-    # Optional persistent storage (for logs / DB)
+      # Operational settings
+      - key: LOG_RETENTION_DAYS
+        value: 120
+      - key: DEBUG
+        value: false
+      - key: RELAY_ENV
+        value: production
+      - key: RELAY_NAME
+        value: "ChatGPT Team Relay"
+      - key: RENDER
+        value: true
+
+    # --------------------------------------------
+    # 💾 Persistent Disk (for DB + logs)
+    # --------------------------------------------
     disk:
       name: data
       mountPath: /data
       sizeGB: 1
 
+    # --------------------------------------------
+    # 🩺 Health Check
+    # --------------------------------------------
     healthCheckPath: /health
+    healthCheckTimeout: 15
+    autoDeploy: true

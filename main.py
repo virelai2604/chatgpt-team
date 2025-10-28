@@ -1,167 +1,153 @@
-import asyncio
-import json
-import logging
+"""
+main.py — ChatGPT Team Relay (Production Edition)
+-------------------------------------------------
+FastAPI app exposing OpenAI-compatible endpoints
+for Chat Completions, Responses, Realtime, Files,
+Vector Stores, and Tools. Fully Relay-compatible.
+
+This version supports:
+  ✅ SQLite logging with persistence (/data mount)
+  ✅ OpenAPI 3.1 auto-spec in YAML
+  ✅ Validation middleware for /v1/responses
+  ✅ Streaming (SSE) and passthrough proxying
+  ✅ CORS + environment-safe configuration
+  ✅ Plugin discovery via /.well-known/ai-plugin.json
+-------------------------------------------------
+"""
+
 import os
 import platform
-import sqlite3
-from pathlib import Path
+import logging
+from datetime import datetime
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 
-# Import route registrar
+# ---------------------------------------------------------
+# ✅ App imports
+# ---------------------------------------------------------
 from app.routes.register_routes import register_routes
-
-# Middleware
+from app.utils.db_logger import setup_logging, ensure_schema
 from app.middleware.validation import ResponseValidationMiddleware
 
-# Logger setup
-from app.utils.db_logger import setup_logging
+# ---------------------------------------------------------
+# 🧭 Basic App Configuration
+# ---------------------------------------------------------
+APP_NAME = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
+APP_MODE = os.getenv("APP_MODE", "development")
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o")
+ENABLE_STREAM = os.getenv("ENABLE_STREAM", "true").lower() == "true"
 
-
-# ==========================================================
-# Configuration
-# ==========================================================
-RELAY_VERSION = "v2.3.4-fp"
-APP_MODE = os.getenv("APP_MODE", "production")
-
-BASE_DIR = Path(__file__).resolve().parent
-STATIC_DIR = BASE_DIR / "static"
-SCHEMAS_DIR = BASE_DIR / "schemas"
-
-if not STATIC_DIR.exists():
-    STATIC_DIR.mkdir(parents=True, exist_ok=True)
-
-# Database path setup
+# ---------------------------------------------------------
+# 🗄 Database Path Resolution (cross-platform safe)
+# ---------------------------------------------------------
 if platform.system() == "Windows":
     DB_PATH = os.getenv("LOCAL_DB_PATH", r"D:\ChatgptDATAB\DB Chatgpt\chatgpt_archive.sqlite")
 else:
     default_linux_db = "/data/chatgpt_archive.sqlite"
+    # Fallback to /tmp if no write permission (Render build sandbox)
     if not os.access("/data", os.W_OK):
         default_linux_db = "/tmp/chatgpt_archive.sqlite"
     DB_PATH = os.getenv("BIFL_DB_PATH", default_linux_db)
 
-# Initialize logging
-setup_logging()
-logger = logging.getLogger("relay")
+# ---------------------------------------------------------
+# 🧱 Logging + DB Setup
+# ---------------------------------------------------------
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+setup_logging(DB_PATH)
+ensure_schema(DB_PATH)
 
+logging.info(f"[Relay] Starting {APP_NAME} ({APP_MODE}) mode...")
+logging.info(f"[DBLogger] Using database at: {DB_PATH}")
 
-# ==========================================================
-# FastAPI Initialization
-# ==========================================================
+# ---------------------------------------------------------
+# 🚀 FastAPI Application
+# ---------------------------------------------------------
 app = FastAPI(
-    title="ChatGPT Team Relay",
-    description="OpenAI-compatible relay for ChatGPT Actions, API calls, and Team integration.",
-    version=RELAY_VERSION,
+    title=APP_NAME,
+    version="2025-10",
+    description="Relay-compatible OpenAI API surface (ChatGPT Team architecture).",
+    contact={"name": "ChatGPT Team Relay", "url": "https://chat.openai.com"},
+    license_info={"name": "MIT"},
 )
 
-
-# ==========================================================
-# Middleware Configuration
-# ==========================================================
-app.add_middleware(ResponseValidationMiddleware)
+# ---------------------------------------------------------
+# 🧩 Middleware
+# ---------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("CORS_ALLOW_ORIGINS", "*")],
+    allow_origins=os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),
+    allow_credentials=True,
     allow_methods=os.getenv("CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS").split(","),
-    allow_headers=[os.getenv("CORS_ALLOW_HEADERS", "*")],
+    allow_headers=os.getenv("CORS_ALLOW_HEADERS", "*").split(","),
 )
 
+# Schema validation middleware for /v1/responses
+app.add_middleware(ResponseValidationMiddleware)
 
-# ==========================================================
-# Static Files and Plugin Discovery
-# ==========================================================
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# ---------------------------------------------------------
+# 🗺 Static + Routes
+# ---------------------------------------------------------
+# Static files (for /static assets)
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+# ✅ Serve /.well-known/ai-plugin.json from within static/.well-known
+well_known_dir = os.path.join(static_dir, ".well-known")
+if os.path.isdir(well_known_dir):
+    app.mount("/.well-known", StaticFiles(directory=well_known_dir), name="well-known")
 
-@app.get("/.well-known/ai-plugin.json")
-async def serve_plugin_manifest():
-    """Serve the ChatGPT Plugin manifest file."""
-    return FileResponse(STATIC_DIR / ".well-known" / "ai-plugin.json", media_type="application/json")
-
-
-@app.get("/v1/openapi.yaml", include_in_schema=False)
-async def serve_static_openapi():
-    """Serve the ground-truth OpenAPI specification."""
-    return FileResponse(SCHEMAS_DIR / "openapi.yaml", media_type="application/x-yaml")
-
-
-# ==========================================================
-# Route Registration
-# ==========================================================
+# Register API route modules
 register_routes(app)
 
-
-# ==========================================================
-# Application Lifecycle
-# ==========================================================
-@app.on_event("startup")
-async def on_startup():
-    logger.info(f"[Relay] Starting ChatGPT Team Relay ({RELAY_VERSION}) in {APP_MODE} mode...")
-    logger.info(f"[DBLogger] Using database at: {DB_PATH}")
-
-    try:
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT DEFAULT (datetime('now')),
-                level TEXT,
-                message TEXT
-            );
-        """)
-        conn.commit()
-        conn.close()
-        logger.info("[Relay] Verified database schema.")
-    except Exception as e:
-        logger.error(f"[Relay] Failed to verify or create database: {e}")
-
-    logger.info("Application startup complete.")
-
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    logger.info("[Relay] Shutting down gracefully...")
-    await asyncio.sleep(0.25)
-    logger.info("[Relay] Shutdown complete.")
-
-
-# ==========================================================
-# Health + Diagnostics Endpoints
-# ==========================================================
+# ---------------------------------------------------------
+# 🩺 Health Check
+# ---------------------------------------------------------
 @app.get("/health")
 async def health_check():
-    """Simple uptime and DB health status."""
-    exists = os.path.exists(DB_PATH)
-    size = os.path.getsize(DB_PATH) if exists else 0
+    db_exists = os.path.exists(DB_PATH)
+    return JSONResponse(
+        {
+            "status": "ok",
+            "version": "v2.3.4-fp",
+            "mode": APP_MODE,
+            "default_model": DEFAULT_MODEL,
+            "db_exists": db_exists,
+            "db_path": DB_PATH,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+    )
+
+# ---------------------------------------------------------
+# 🌍 Root route (metadata)
+# ---------------------------------------------------------
+@app.get("/")
+async def root():
     return {
-        "status": "ok",
-        "version": RELAY_VERSION,
+        "object": "relay.root",
+        "name": APP_NAME,
         "mode": APP_MODE,
-        "db_exists": exists,
-        "db_path": DB_PATH,
-        "db_size_bytes": size,
+        "streaming_enabled": ENABLE_STREAM,
+        "default_model": DEFAULT_MODEL,
+        "routes": len(app.routes),
+        "docs": "/docs",
+        "openapi_yaml": "/v1/openapi.yaml",
+        "health": "/health",
     }
 
-
-@app.get("/logs/recent")
-async def get_recent_logs(limit: int = 10):
-    """Fetch recent application logs."""
-    if not os.path.exists(DB_PATH):
-        return {"error": "Database not found", "path": DB_PATH}
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute(
-        "SELECT id, timestamp, level, message FROM logs ORDER BY id DESC LIMIT ?;", (limit,)
-    ).fetchall()
-    conn.close()
-    return {"recent_logs": rows, "count": len(rows)}
-
-
-# ==========================================================
-# Entry Point
-# ==========================================================
+# ---------------------------------------------------------
+# 🧪 Local Dev Entry Point
+# ---------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 8000)), reload=True)
+
+    uvicorn.run(
+        "main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+        log_level="info",
+    )
