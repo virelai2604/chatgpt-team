@@ -17,12 +17,15 @@ RELAY_VERSION = "v2.3.4-fp"
 APP_MODE = os.getenv("APP_MODE", "production")
 
 # -----------------------------------------------------
-# Database Path (Environment Aware)
+# Database Path (Render-compatible)
 # -----------------------------------------------------
 if platform.system() == "Windows":
     DB_PATH = os.getenv("LOCAL_DB_PATH", r"D:\ChatgptDATAB\DB Chatgpt\chatgpt_archive.sqlite")
 else:
-    DB_PATH = os.getenv("BIFL_DB_PATH", "/data/chatgpt_archive.sqlite")
+    default_linux_db = "/data/chatgpt_archive.sqlite"
+    if not os.access("/data", os.W_OK):  # fallback if /data is not writable
+        default_linux_db = "/tmp/chatgpt_archive.sqlite"
+    DB_PATH = os.getenv("BIFL_DB_PATH", default_linux_db)
 
 # -----------------------------------------------------
 # Logging Setup
@@ -35,7 +38,7 @@ logger = logging.getLogger("relay")
 # -----------------------------------------------------
 app = FastAPI(
     title="ChatGPT Team Relay",
-    description="Unified OpenAI-compatible relay for ChatGPT Actions and API extensions.",
+    description="OpenAI-grounded relay that mirrors the official OpenAI API (v1) for ChatGPT and Actions.",
     version=RELAY_VERSION,
 )
 
@@ -63,7 +66,6 @@ async def on_startup():
     logger.info(f"[Relay] Starting ChatGPT Team Relay ({RELAY_VERSION}) in {APP_MODE} mode...")
     logger.info(f"[DBLogger] Using database at: {DB_PATH}")
 
-    # Ensure database exists
     try:
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         conn = sqlite3.connect(DB_PATH)
@@ -81,7 +83,6 @@ async def on_startup():
     except Exception as e:
         logger.error(f"[Relay] Failed to verify or create database: {e}")
 
-    # Load tools manifest
     try:
         tool_manifest = load_manifest()
         if tool_manifest:
@@ -121,14 +122,16 @@ async def health_check():
     }
 
 # -----------------------------------------------------
-# Inspect Logs
+# Logs Viewer
 # -----------------------------------------------------
 @app.get("/logs/recent")
 async def get_recent_logs(limit: int = 10):
     if not os.path.exists(DB_PATH):
         return {"error": "Database not found", "path": DB_PATH}
     conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute("SELECT id, timestamp, level, message FROM logs ORDER BY id DESC LIMIT ?;", (limit,)).fetchall()
+    rows = conn.execute(
+        "SELECT id, timestamp, level, message FROM logs ORDER BY id DESC LIMIT ?;", (limit,)
+    ).fetchall()
     conn.close()
     return {"recent_logs": rows, "count": len(rows)}
 
@@ -137,4 +140,4 @@ async def get_recent_logs(limit: int = 10):
 # -----------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 8000)), reload=True)
+    uvicorn.run("main:app", host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 8000)))
