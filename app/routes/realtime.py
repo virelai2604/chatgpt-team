@@ -1,69 +1,33 @@
 # ==========================================================
-# app/routes/realtime.py — Relay v2025-10 Ground-Truth Mirror
+# app/routes/realtime.py — Ground Truth OpenAI-Compatible Mirror
 # ==========================================================
-# Implements /v1/realtime/* routes to match OpenAI’s Realtime API.
-# Supports creation, event streaming, and termination of sessions.
-# Used by GPT-4o-Realtime, GPT-5-Pro-Realtime, and multimodal models.
-# ==========================================================
-
-from fastapi import APIRouter, Request
-from app.api.forward_openai import forward_openai
-import logging
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse
+from app.api.forward_openai import forward_openai_request
+import httpx
 
 router = APIRouter(prefix="/v1/realtime", tags=["Realtime"])
 
-# ----------------------------------------------------------
-# 🎧 POST /v1/realtime/sessions — Create Realtime Session
-# ----------------------------------------------------------
 @router.post("/sessions")
-async def create_session(request: Request):
+async def create_realtime_session(request: Request):
     """
-    Mirrors POST /v1/realtime/sessions.
-    Creates a new realtime session (text, audio, or video).
+    Mirrors OpenAI POST /v1/realtime/sessions
+    Creates a new realtime session token or configuration object.
     """
-    endpoint = "realtime/sessions"
-    response = await forward_openai(request, endpoint)
     try:
-        await log_event("info", f"create realtime session {response.status_code}")
+        body = await request.json()
     except Exception as e:
-        logging.warning(f"[Realtime] Failed to log session creation: {e}")
-    return response
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
 
-# ----------------------------------------------------------
-# 🔄 POST /v1/realtime/events — Send Events to Session
-# ----------------------------------------------------------
-@router.post("/events")
-async def send_event(request: Request):
-    """
-    Mirrors POST /v1/realtime/events.
-    Sends user or system events (messages, audio frames, control signals)
-    into an active realtime session.
-    """
-    endpoint = "realtime/events"
-    response = await forward_openai(request, endpoint)
     try:
-        await log_event("info", f"post realtime event {response.status_code}")
+        result = await forward_openai_request(
+            "v1/realtime/sessions",
+            method="POST",
+            json_data=body,
+        )
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except Exception as e:
-        logging.warning(f"[Realtime] Failed to log realtime event: {e}")
-    return response
+        raise HTTPException(status_code=500, detail=f"Upstream relay error: {e}")
 
-# ----------------------------------------------------------
-# ❌ DELETE /v1/realtime/sessions/{session_id} — Terminate
-# ----------------------------------------------------------
-@router.delete("/sessions/{session_id}")
-async def delete_session(request: Request, session_id: str):
-    """
-    Mirrors DELETE /v1/realtime/sessions/{session_id}.
-    Terminates a running realtime session gracefully.
-    """
-    endpoint = f"realtime/sessions/{session_id}"
-    response = await forward_openai(request, endpoint)
-    try:
-        await log_event("info", f"delete realtime session {session_id} {response.status_code}")
-    except Exception as e:
-        logging.warning(f"[Realtime] Failed to log session termination: {e}")
-    return response
-
-# Dummy async logger (optional)
-async def log_event(level: str, message: str):
-    logging.log(getattr(logging, level.upper(), logging.INFO), f"[Realtime] {message}")
+    return JSONResponse(result)

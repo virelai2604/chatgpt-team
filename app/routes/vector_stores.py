@@ -1,68 +1,44 @@
 # ==========================================================
-# app/routes/vector_stores.py — Relay v2025-10 Ground Truth Mirror
+# app/routes/vector_stores.py — Ground Truth OpenAI-Compatible Mirror
 # ==========================================================
-# Fully OpenAI-compatible /v1/vector_stores endpoint.
-# Supports creation, retrieval, updates, deletion,
-# and batch embedding imports.
-# ==========================================================
-
 from fastapi import APIRouter, Request
-from app.api.forward_openai import forward_openai
-
+from fastapi.responses import JSONResponse
+from app.api.forward_openai import forward_openai_request
 
 router = APIRouter(prefix="/v1/vector_stores", tags=["Vector Stores"])
 
-# ----------------------------------------------------------
-# 📦  Create / List Vector Stores
-# ----------------------------------------------------------
 @router.api_route("", methods=["GET", "POST"])
 async def vector_store_root(request: Request):
     """
-    GET → list vector stores
-    POST → create a new vector store
+    GET  → List vector stores
+    POST → Create a new vector store
     Mirrors OpenAI /v1/vector_stores
     """
-    response = await forward_openai(request, "/v1/vector_stores")
-    try:
-        await log_event("/v1/vector_stores", response.status_code, "root request")
-    except Exception:
-        pass
-    return response
+    body = await request.json() if request.method == "POST" else None
+    result = await forward_openai_request("v1/vector_stores", method=request.method, json_data=body)
+    return JSONResponse(result)
 
-
-# ----------------------------------------------------------
-# 🔍  Retrieve / Update / Delete Specific Store
-# ----------------------------------------------------------
 @router.api_route("/{store_id}", methods=["GET", "PATCH", "DELETE"])
 async def manage_vector_store(request: Request, store_id: str):
     """
-    GET → retrieve store details
-    PATCH → update metadata
-    DELETE → remove store
+    GET    → Retrieve vector store metadata
+    PATCH  → Update vector store attributes
+    DELETE → Remove vector store
     Mirrors OpenAI /v1/vector_stores/{store_id}
     """
-    endpoint = f"/v1/vector_stores/{store_id}"
-    response = await forward_openai(request, endpoint)
-    try:
-        await log_event(endpoint, response.status_code, f"store {store_id}")
-    except Exception:
-        pass
-    return response
+    body = await request.json() if request.method == "PATCH" else None
+    endpoint = f"v1/vector_stores/{store_id}"
+    result = await forward_openai_request(endpoint, method=request.method, json_data=body)
+    return JSONResponse(result)
 
-
-# ----------------------------------------------------------
-# 📤  Batch Import or Attachments
-# ----------------------------------------------------------
 @router.api_route("/{store_id}/batches", methods=["GET", "POST"])
 async def handle_vector_batches(request: Request, store_id: str):
     """
-    Handles large embedding imports or NDJSON-based
-    batch uploads. Mirrors OpenAI /v1/vector_stores/{id}/batches
+    GET  → List embedding import batches
+    POST → Create/import new batch of vectors
+    Mirrors OpenAI /v1/vector_stores/{store_id}/batches
     """
-    endpoint = f"/v1/vector_stores/{store_id}/batches"
-    response = await forward_openai(request, endpoint)
-    try:
-        await log_event(endpoint, response.status_code, "batch request")
-    except Exception:
-        pass
-    return response
+    body = await request.json() if request.method == "POST" else None
+    endpoint = f"v1/vector_stores/{store_id}/batches"
+    result = await forward_openai_request(endpoint, method=request.method, json_data=body)
+    return JSONResponse(result)
