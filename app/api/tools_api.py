@@ -1,126 +1,87 @@
-# ==========================================================
-# app/api/tools_api.py — Relay Tool Registry & Compatibility Layer
-# ==========================================================
-# Defines and manages the relay’s available tool registry.
-# This module provides a central manifest used by:
-#  - /v1/relay/status   → system health + tool manifest
-#  - /v1/responses/tools → list of available tool names
-#  - /v1/responses/tools/{tool_name} → invoke individual tools
-# Also provides backward-compatible shims for older modules
-# expecting `load_manifest()` and `run_tool()`.
-# ==========================================================
-
+# app/api/tools_api.py
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
+import importlib
+import logging
 
-router = APIRouter(prefix="/v1/responses/tools", tags=["Responses"])
+logger = logging.getLogger("relay.tools_api")
+router = APIRouter(prefix="/v1/responses", tags=["tools"])
 
-# =========================================================
-# 🧰 TOOL REGISTRY — canonical list of available relay tools
-# =========================================================
+# --------------------------------------------------------
+# Tool Registry (Ground Truth)
+# --------------------------------------------------------
 TOOL_REGISTRY = {
-    "code_interpreter": {
-        "description": "Execute Python code safely in a sandboxed runtime.",
-        "type": "function",
-    },
-    "file_search": {
-        "description": "Search uploaded files or vector stores using embeddings.",
-        "type": "function",
-    },
-    "file_upload": {
-        "description": "Upload files from within tool calls.",
-        "type": "function",
-    },
-    "file_download": {
-        "description": "Retrieve stored file contents.",
-        "type": "function",
-    },
-    "vector_store_retrieval": {
-        "description": "Retrieve contextual embeddings or documents from vector stores.",
-        "type": "function",
-    },
-    "image_generation": {
-        "description": "Generate or edit AI images using multimodal models.",
-        "type": "function",
-    },
-    "video_generation": {
-        "description": "Create or remix videos using Sora-family models.",
-        "type": "function",
-    },
-    "web_search_preview": {
-        "description": "Perform web searches to fetch recent or external data.",
-        "type": "function",
-    },
-    "computer_use_preview": {
-        "description": "Simulate system-level or GUI automation actions.",
-        "type": "function",
-    },
+    "code_interpreter": {"path": "app.tools.code_interpreter"},
+    "file_search": {"path": "app.tools.file_search"},
+    "file_upload": {"path": "app.tools.file_upload"},
+    "file_download": {"path": "app.tools.file_download"},
+    "vector_store_retrieval": {"path": "app.tools.vector_store_retrieval"},
+    "image_generation": {"path": "app.tools.image_generation"},
+    "video_generation": {"path": "app.tools.video_generation"},
+    "web_search": {"path": "app.tools.web_search"},
+    "computer_use": {"path": "app.tools.computer_use"},
 }
 
-# =========================================================
-# 🔍 TOOL ENDPOINTS (aligned with openapi.yaml)
-# =========================================================
+# Optional backward-compatible aliases for older clients
+ALIASES = {
+    "web_search_preview": "web_search",
+    "computer_use_preview": "computer_use",
+}
 
-@router.get("", summary="List available relay tools")
+
+def get_tool_metadata(name: str) -> dict:
+    """
+    Dynamically imports a tool module and retrieves metadata.
+    Falls back gracefully if module or attributes are missing.
+    """
+    tool_name = ALIASES.get(name, name)
+
+    if tool_name not in TOOL_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"Tool '{name}' not found")
+
+    try:
+        module_path = TOOL_REGISTRY[tool_name]["path"]
+        module = importlib.import_module(module_path)
+        metadata = getattr(module, "METADATA", None)
+        if not metadata:
+            metadata = {"name": tool_name, "description": "No metadata available."}
+        return metadata
+    except Exception as e:
+        logger.error(f"Error loading tool {tool_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load tool '{name}'")
+
+
+@router.get("/tools", response_class=JSONResponse)
 async def list_tools():
     """
-    Returns a list of available tools registered in the relay.
-    Mirrors OpenAI's /v1/responses/tools behavior.
+    Returns the full list of registered relay tools.
+    Mirrors OpenAI-style response for easier client compatibility.
     """
-    return JSONResponse(content={"tools": list(TOOL_REGISTRY.keys())})
-
-
-@router.post("/{tool_name}", summary="Call a relay tool")
-async def call_tool(tool_name: str, body: dict = None):
-    """
-    Dummy tool invocation endpoint.
-    Accepts a tool name and returns a placeholder result.
-    In production, each tool would dispatch to its own executor.
-    """
-    if tool_name not in TOOL_REGISTRY:
-        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
-
-    tool_info = TOOL_REGISTRY[tool_name]
-    return JSONResponse(
-        content={
-            "tool": tool_name,
-            "type": tool_info["type"],
-            "description": tool_info["description"],
-            "result": {
-                "status": "ok",
-                "echo_input": body or {},
-                "note": "This is a simulated response for testing purposes."
+    try:
+        tool_list = list(TOOL_REGISTRY.keys())
+        return JSONResponse(
+            {
+                "object": "list",
+                "tools": tool_list,
+                "count": len(tool_list),
+                "registry_version": "1.0",
             }
-        }
-    )
-
-# =========================================================
-# 🧩 COMPATIBILITY SHIMS (for legacy imports)
-# =========================================================
-
-def load_manifest():
-    """
-    Legacy function for modules expecting `load_manifest()`.
-    Returns the tool registry manifest.
-    """
-    return {"tools": list(TOOL_REGISTRY.keys())}
+        )
+    except Exception as e:
+        logger.error(f"Failed to list tools: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-def run_tool(tool_name: str, input_data: dict = None):
+@router.get("/tools/{tool_name}", response_class=JSONResponse)
+async def get_tool(tool_name: str):
     """
-    Legacy function for modules expecting `run_tool()`.
-    Provides a mock dispatcher for backward compatibility.
+    Retrieve metadata for a specific tool.
+    Useful for debugging and manifest validation.
     """
-    if tool_name not in TOOL_REGISTRY:
-        raise ValueError(f"Unknown tool: {tool_name}")
-    tool = TOOL_REGISTRY[tool_name]
-    return {
-        "tool": tool_name,
-        "type": tool["type"],
-        "description": tool["description"],
-        "result": {
-            "status": "ok",
-            "echo_input": input_data or {},
-            "note": "Simulated execution via legacy `run_tool`."
-        }
-    }
+    metadata = get_tool_metadata(tool_name)
+    return JSONResponse(metadata)
+
+
+# --------------------------------------------------------
+# End of tools_api.py
+# --------------------------------------------------------
