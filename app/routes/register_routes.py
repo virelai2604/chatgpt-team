@@ -9,20 +9,21 @@
 from fastapi import FastAPI
 
 # ----------------------------------------------------------
-# Import route modules explicitly
+# Import API and route modules explicitly
 # ----------------------------------------------------------
-# app/api contains OpenAI-compatible endpoints
-# app/routes contains internal meta and relay-specific endpoints
+# app/api → OpenAI-compatible endpoints (/v1/responses, etc.)
+# app/routes → internal meta endpoints (/v1/relay/status, /v1/openapi.yaml)
 # ----------------------------------------------------------
-from app.api import responses, passthrough_proxy
+from app.api import responses
+from app.api import forward_openai as passthrough_proxy  # ✅ canonical import
 from app.routes.relay_status import router as relay_status_router
 from app.routes.openapi_yaml import router as openapi_yaml_router
 
 
-def register_routes(app: FastAPI):
+def register_routes(app: FastAPI) -> FastAPI:
     """
     Mount all relay and OpenAI-compatible routes to the FastAPI app.
-    This is called from main.py during application initialization.
+    This is invoked from main.py during application initialization.
     """
 
     # ---------------------------------------------------------
@@ -30,28 +31,30 @@ def register_routes(app: FastAPI):
     # ---------------------------------------------------------
     # These must be mounted before the passthrough proxy to ensure
     # /v1/relay/status and /v1/openapi.yaml are handled locally.
-    app.include_router(relay_status_router)  # /v1/relay/status
-    app.include_router(openapi_yaml_router)  # /v1/openapi.yaml
+    app.include_router(relay_status_router, prefix="/v1/relay")
+    app.include_router(openapi_yaml_router)  # serves /v1/openapi.yaml
 
     # ---------------------------------------------------------
     # 🧩 Core OpenAI-compatible API mirrors
     # ---------------------------------------------------------
-    # Mirrors endpoints such as /v1/responses, /v1/chat/completions, etc.
-    app.include_router(responses.router)           # /v1/responses & /v1/responses/tools
-    app.include_router(passthrough_proxy.router)   # /v1/chat/completions, /v1/models, etc.
+    # These endpoints mirror OpenAI’s schema to allow seamless
+    # plugin registration and API compatibility.
+    app.include_router(responses.router)          # /v1/responses & /v1/responses/tools
+    app.include_router(passthrough_proxy.router)  # /v1/chat/completions, /v1/models, etc.
 
     # ---------------------------------------------------------
     # 🌐 Root diagnostic route
     # ---------------------------------------------------------
-    @app.get("/")
+    @app.get("/", tags=["meta"])
     async def root():
         """
         Root health and diagnostic endpoint.
         Mirrors the OpenAI relay’s basic status message.
         """
         return {
-            "message": "ChatGPT Team Relay operational",
+            "message": "ChatGPT Team Relay operational ✅",
             "version": "v2.3.4-fp",
+            "health": "/health",
             "docs": "/docs",
             "openapi": "/v1/openapi.yaml",
         }

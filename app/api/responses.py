@@ -1,184 +1,119 @@
 # ==========================================================
-# 🚀 ChatGPT Team Relay — /v1/responses API (Ground Truth)
-# ----------------------------------------------------------
-# Full alignment with OpenAI 2025 schema for /v1/responses.
-# Automatically normalizes incoming payloads from tests or
-# external clients for full compatibility.
+# responses.py — Ground-Truth /v1/responses relay endpoint
+# Fully aligned with OpenAI Relay schema (as of Oct 2025)
 # ==========================================================
-
-import os
-import json
-import httpx
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
+from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional
+import httpx, os, json
 
-router = APIRouter(prefix="/v1/responses", tags=["Responses"])
+router = APIRouter()
 
-# ==========================================================
-# 🌍 Environment Configuration
-# ==========================================================
+# ----------------------------------------------------------
+# Environment
+# ----------------------------------------------------------
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY")
+DEFAULT_MODEL   = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
 
-OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-API_KEY = os.getenv("OPENAI_API_KEY", "sk-missing")
+# ----------------------------------------------------------
+# Request Models (mirror OpenAI spec)
+# ----------------------------------------------------------
+class ResponseContent(BaseModel):
+    type: str
+    text: str
 
-# ==========================================================
-# 🧩 Helpers
-# ==========================================================
+class ResponseMessage(BaseModel):
+    role: str
+    content: List[ResponseContent]
 
-def normalize_tools(tools):
-    """
-    Normalize tool structures to match OpenAI's expected schema.
-    Accepts either list of names or detailed dicts.
-    """
-    normalized = []
-    for tool in tools:
-        if isinstance(tool, str):
-            normalized.append({
-                "type": "function",
-                "function": {
-                    "name": tool,
-                    "description": f"Invoke {tool} tool."
-                }
-            })
-        elif isinstance(tool, dict):
-            fn = tool.get("function", {})
-            if "name" not in fn and "name" in tool:
-                fn["name"] = tool["name"]
-            normalized.append({
-                "type": tool.get("type", "function"),
-                "function": fn
-            })
-    return normalized
+class ResponseRequest(BaseModel):
+    model: str = Field(default=DEFAULT_MODEL)
+    input: List[ResponseMessage]
+    response: Optional[Dict[str, Any]] = None
+    stream: Optional[bool] = False
+    tools: Optional[List[Dict[str, Any]]] = None
 
+# ----------------------------------------------------------
+# Input normalization — ensures schema fidelity
+# ----------------------------------------------------------
+def normalize_request(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize older/legacy formats to ground-truth /v1/responses."""
+    # 1. Legacy `type: text` → `input_text`
+    for msg in body.get("input", []):
+        for item in msg.get("content", []):
+            if item.get("type") == "text":
+                item["type"] = "input_text"
 
-def normalize_payload(body: dict) -> dict:
-    """
-    Adjust test and legacy relay payloads into the current
-    OpenAI /v1/responses contract.
-    """
-    # Convert test field "response_format" → "response.format"
+    # 2. Legacy `response_format` → `response.format`
     if "response_format" in body:
         fmt = body.pop("response_format")
         body["response"] = {"format": fmt}
 
-    # Ensure content types use "input_text"
-    if "input" in body and isinstance(body["input"], list):
-        for msg in body["input"]:
-            if "content" in msg:
-                for item in msg["content"]:
-                    if item.get("type") == "text":
-                        item["type"] = "input_text"
-
-    # Default response format
-    if "response" not in body:
-        body["response"] = {"format": "text"}
-
-    # Default model if missing
-    if "model" not in body:
-        body["model"] = "gpt-4o-mini"
-
+    # 3. Normalize tool schema
+    if "tools" in body and isinstance(body["tools"], list):
+        normalized = []
+        for t in body["tools"]:
+            if isinstance(t, dict) and "name" in t:
+                normalized.append({"type": "function",
+                                   "function": {"name": t["name"]}})
+        body["tools"] = normalized
     return body
 
-
-# ==========================================================
-# 🧠 /v1/responses — Core Relay Endpoint
-# ==========================================================
-
-@router.post("")
-async def forward_response(request: Request):
-    """
-    Forwards compliant requests to OpenAI’s /v1/responses endpoint.
-    Supports both streaming and non-stream modes.
-    """
+# ----------------------------------------------------------
+# POST /v1/responses — JSON + SSE streaming
+# ----------------------------------------------------------
+@router.post("/v1/responses")
+async def create_response(request: Request):
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    # Normalize schema
-    body = normalize_payload(body)
+    body = normalize_request(body)
+    if "model" not in body or "input" not in body:
+        raise HTTPException(status_code=400,
+                            detail="Missing 'model' or 'input'")
 
-    # Normalize tool list if present
-    if "tools" in body:
-        body["tools"] = normalize_tools(body["tools"])
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    url = f"{OPENAI_BASE_URL}/v1/responses"
+    stream = body.get("stream", False)
 
-    headers = {"Authorization": f"Bearer {API_KEY}"}
-
-    # ======================================================
-    # 🌊 Streaming Mode (SSE)
-    # ======================================================
-    if body.get("stream", False):
-        async def sse_stream():
-            async with httpx.AsyncClient(timeout=None) as client:
-                async with client.stream(
-                    "POST", f"{OPENAI_BASE}/responses", headers=headers, json=body
-                ) as upstream:
-                    async for line in upstream.aiter_lines():
+    async with httpx.AsyncClient(timeout=None) as client:
+        if stream:
+            async def sse_events():
+                async with client.stream("POST", url, headers=headers, json=body) as resp:
+                    async for line in resp.aiter_lines():
                         if line.strip():
                             yield f"data: {line}\n\n"
-        return StreamingResponse(sse_stream(), media_type="text/event-stream")
+            return StreamingResponse(sse_events(), media_type="text/event-stream")
 
-    # ======================================================
-    # 🧩 Non-Streaming Mode
-    # ======================================================
-    async with httpx.AsyncClient(timeout=None) as client:
-        resp = await client.post(f"{OPENAI_BASE}/responses", headers=headers, json=body)
+        resp = await client.post(url, headers=headers, json=body)
+        return JSONResponse(content=resp.json() if resp.content else {"error": "Empty response"},
+                            status_code=resp.status_code)
 
-    if resp.status_code >= 400:
-        return JSONResponse(
-            {"error": {"status": resp.status_code, "message": resp.text}},
-            status_code=resp.status_code
-        )
+# ----------------------------------------------------------
+# GET /v1/responses/tools — bridge to tool registry
+# ----------------------------------------------------------
+@router.get("/v1/responses/tools")
+async def get_tools():
+    from app.api.tools_api import list_tools
+    return {"tools": list_tools()}
 
+# ----------------------------------------------------------
+# Health and model passthrough
+# ----------------------------------------------------------
+@router.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@router.get("/v1/models")
+async def list_models():
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(f"{OPENAI_BASE_URL}/v1/models", headers=headers)
     return JSONResponse(content=resp.json(), status_code=resp.status_code)
-
-
-# ==========================================================
-# 🧰 Tool Registry Endpoint
-# ==========================================================
-
-@router.get("/tools")
-async def list_tools():
-    """
-    Lists all registered tools available to the relay.
-    Schema mirrors OpenAI’s tool discovery pattern.
-    """
-    tools = [
-        "code_interpreter",
-        "file_search",
-        "file_upload",
-        "file_download",
-        "vector_store_retrieval",
-        "image_generation",
-        "video_generation",
-        "web_search",
-        "computer_use",
-    ]
-    return {
-        "object": "list",
-        "tools": tools,
-        "count": len(tools),
-        "registry_version": "1.0"
-    }
-
-
-# ==========================================================
-# 🔧 Tool Invocation Stub
-# ==========================================================
-
-@router.post("/tools/{tool_name}")
-async def invoke_tool(tool_name: str, request: Request):
-    """
-    Echo endpoint for verifying tool invocation schema.
-    """
-    data = await request.json()
-    return {
-        "tool_invoked": tool_name,
-        "received": data,
-        "status": "accepted"
-    }
-
-
-# ==========================================================
-# ✅ End of responses.py
-# ==========================================================

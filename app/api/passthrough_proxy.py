@@ -12,9 +12,6 @@ router = APIRouter(prefix="/v1", tags=["Passthrough"])
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def passthrough(request: Request, path: str):
-    """
-    Universal fallback proxy that forwards any unmatched /v1/* route
-    to the official OpenAI API endpoint.
-    """
+    """Universal fallback proxy that forwards any unmatched /v1/* route."""
     endpoint = f"/v1/{path}"
     return await forward_openai(request, endpoint)
