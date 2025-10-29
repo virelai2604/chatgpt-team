@@ -1,58 +1,20 @@
 {
-  "tools": [
-    {
-      "id": "code_interpreter",
-      "version": "v1",
-      "description": "Execute Python code safely in a sandboxed runtime.",
-      "entry": "app/tools/code_interpreter.py"
-    },
-    {
-      "id": "file_search",
-      "version": "v1",
-      "description": "Search uploaded files or vector stores using embeddings.",
-      "entry": "app/tools/file_search.py"
-    },
-    {
-      "id": "file_upload",
-      "version": "v1",
-      "description": "Upload files from within tool calls.",
-      "entry": "app/tools/file_upload.py"
-    },
-    {
-      "id": "file_download",
-      "version": "v1",
-      "description": "Retrieve stored file contents.",
-      "entry": "app/tools/file_download.py"
-    },
-    {
-      "id": "vector_store_retrieval",
-      "version": "v1",
-      "description": "Retrieve contextual embeddings or documents from vector stores.",
-      "entry": "app/tools/vector_store_retrieval.py"
-    },
-    {
-      "id": "image_generation",
-      "version": "v1",
-      "description": "Generate or edit AI images using multimodal models.",
-      "entry": "app/tools/image_generation.py"
-    },
-    {
-      "id": "video_generation",
-      "version": "v1",
-      "description": "Create or remix videos using Sora-family models.",
-      "entry": "app/tools/video_generation.py"
-    },
-    {
-      "id": "web_search_preview",
-      "version": "v1",
-      "description": "Perform web searches to fetch recent or external data.",
-      "entry": "app/tools/web_search_preview.py"
-    },
-    {
-      "id": "computer_use_preview",
-      "version": "v1",
-      "description": "Simulate system-level or GUI automation actions.",
-      "entry": "app/tools/computer_use_preview.py"
-    }
-  ]
+  "version": "1.0",
+  "registry": [
+    "code_interpreter",
+    "file_search",
+    "file_upload",
+    "file_download",
+    "vector_store_retrieval",
+    "image_generation",
+    "video_generation",
+    "web_search",
+    "computer_use"
+  ],
+  "metadata": {
+    "description": "Official ChatGPT Team Relay tool manifest for OpenAI-compatible endpoints.",
+    "last_updated": "2025-10-29T00:00:00Z",
+    "maintainer": "ChatGPT Team Relay",
+    "schema_alignment": "OpenAI Relay v2.3"
+  }
 }

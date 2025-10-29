@@ -1,118 +1,147 @@
 # ==========================================================
-# app/api/responses.py — Forward OpenAI /v1/responses
-# ==========================================================
-# Mirrors OpenAI’s “responses” endpoint to support both
-# streaming (SSE) and non-streaming completions via relay.
-# Normalizes tools to match OpenAI’s schema.
+# 🚀 ChatGPT Team Relay — /v1/responses API (Ground Truth)
+# ----------------------------------------------------------
+# Full alignment with OpenAI 2025 schema for /v1/responses.
+# Automatically normalizes incoming payloads from tests or
+# external clients for full compatibility.
 # ==========================================================
 
 import os
 import json
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
 router = APIRouter(prefix="/v1/responses", tags=["Responses"])
 
-# Upstream OpenAI endpoint
+# ==========================================================
+# 🌍 Environment Configuration
+# ==========================================================
+
 OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 API_KEY = os.getenv("OPENAI_API_KEY", "sk-missing")
 
 # ==========================================================
-# 🔧 Helper: Normalize tool schemas
+# 🧩 Helpers
 # ==========================================================
+
 def normalize_tools(tools):
     """
-    Normalize tool definitions to OpenAI-compatible function objects.
-    Accepts either list of strings or list of dicts.
+    Normalize tool structures to match OpenAI's expected schema.
+    Accepts either list of names or detailed dicts.
     """
-    fixed_tools = []
+    normalized = []
     for tool in tools:
-        # Handle simple string form
         if isinstance(tool, str):
-            fixed_tools.append({
+            normalized.append({
                 "type": "function",
                 "function": {
                     "name": tool,
                     "description": f"Invoke {tool} tool."
                 }
             })
-        # Handle dict-based tool definitions
         elif isinstance(tool, dict):
             fn = tool.get("function", {})
             if "name" not in fn and "name" in tool:
                 fn["name"] = tool["name"]
-            fixed_tools.append({
+            normalized.append({
                 "type": tool.get("type", "function"),
                 "function": fn
             })
-    return fixed_tools
+    return normalized
 
 
-# ==========================================================
-# 🧠 Forward /v1/responses
-# ==========================================================
-@router.post("")
-async def forward_response(request: Request):
+def normalize_payload(body: dict) -> dict:
     """
-    Mirrors OpenAI /v1/responses — supports both
-    streaming and non-streaming relay modes.
+    Adjust test and legacy relay payloads into the current
+    OpenAI /v1/responses contract.
     """
-    body = await request.json()
+    # Convert test field "response_format" → "response.format"
+    if "response_format" in body:
+        fmt = body.pop("response_format")
+        body["response"] = {"format": fmt}
 
-    # Normalize tools if provided
-    if "tools" in body:
-        body["tools"] = normalize_tools(body["tools"])
+    # Ensure content types use "input_text"
+    if "input" in body and isinstance(body["input"], list):
+        for msg in body["input"]:
+            if "content" in msg:
+                for item in msg["content"]:
+                    if item.get("type") == "text":
+                        item["type"] = "input_text"
 
-    # Default model if none provided
+    # Default response format
+    if "response" not in body:
+        body["response"] = {"format": "text"}
+
+    # Default model if missing
     if "model" not in body:
         body["model"] = "gpt-4o-mini"
 
-    # Force relay metadata for internal tracing
-    body["parallel_tool_calls"] = True
-    body["store"] = True
+    return body
 
-    print(f"{json.dumps({'received_body': body}, indent=2)}")
+
+# ==========================================================
+# 🧠 /v1/responses — Core Relay Endpoint
+# ==========================================================
+
+@router.post("")
+async def forward_response(request: Request):
+    """
+    Forwards compliant requests to OpenAI’s /v1/responses endpoint.
+    Supports both streaming and non-stream modes.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    # Normalize schema
+    body = normalize_payload(body)
+
+    # Normalize tool list if present
+    if "tools" in body:
+        body["tools"] = normalize_tools(body["tools"])
 
     headers = {"Authorization": f"Bearer {API_KEY}"}
 
-    # ==========================================================
-    # 🌊 Streaming (SSE) Response
-    # ==========================================================
+    # ======================================================
+    # 🌊 Streaming Mode (SSE)
+    # ======================================================
     if body.get("stream", False):
-        async def event_stream():
+        async def sse_stream():
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream(
-                    "POST",
-                    f"{OPENAI_BASE}/responses",
-                    headers=headers,
-                    json=body
+                    "POST", f"{OPENAI_BASE}/responses", headers=headers, json=body
                 ) as upstream:
                     async for line in upstream.aiter_lines():
                         if line.strip():
                             yield f"data: {line}\n\n"
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
+        return StreamingResponse(sse_stream(), media_type="text/event-stream")
 
-    # ==========================================================
-    # 🧩 Non-streaming Response
-    # ==========================================================
+    # ======================================================
+    # 🧩 Non-Streaming Mode
+    # ======================================================
     async with httpx.AsyncClient(timeout=None) as client:
-        r = await client.post(f"{OPENAI_BASE}/responses", headers=headers, json=body)
-        data = r.json()
-        return JSONResponse(content=data, status_code=r.status_code)
+        resp = await client.post(f"{OPENAI_BASE}/responses", headers=headers, json=body)
+
+    if resp.status_code >= 400:
+        return JSONResponse(
+            {"error": {"status": resp.status_code, "message": resp.text}},
+            status_code=resp.status_code
+        )
+
+    return JSONResponse(content=resp.json(), status_code=resp.status_code)
 
 
 # ==========================================================
-# 🧰 Tool Registry Endpoint — Mirrors OpenAI tool listing
+# 🧰 Tool Registry Endpoint
 # ==========================================================
+
 @router.get("/tools")
 async def list_tools():
     """
-    Return a simplified list of registered tools.
-    Ground truth expects:
-    {
-        "tools": ["code_interpreter", "file_search", "image_generation", ...]
-    }
+    Lists all registered tools available to the relay.
+    Schema mirrors OpenAI’s tool discovery pattern.
     """
     tools = [
         "code_interpreter",
@@ -122,26 +151,34 @@ async def list_tools():
         "vector_store_retrieval",
         "image_generation",
         "video_generation",
-        "web_search_preview",
-        "computer_use_preview",
+        "web_search",
+        "computer_use",
     ]
-    return {"tools": tools}
-
-
-# ==========================================================
-# 🧩 Tool Invocation Endpoint — Mirrors OpenAI behavior
-# ==========================================================
-@router.post("/tools/{tool_name}")
-async def call_tool(tool_name: str, request: Request):
-    """
-    Dummy passthrough for tool invocation — placeholder for
-    internal relay plugin integration.
-    """
-    payload = await request.json()
     return {
-        "result": {
-            "tool": tool_name,
-            "input": payload.get("input", {}),
-            "status": "executed"
-        }
+        "object": "list",
+        "tools": tools,
+        "count": len(tools),
+        "registry_version": "1.0"
     }
+
+
+# ==========================================================
+# 🔧 Tool Invocation Stub
+# ==========================================================
+
+@router.post("/tools/{tool_name}")
+async def invoke_tool(tool_name: str, request: Request):
+    """
+    Echo endpoint for verifying tool invocation schema.
+    """
+    data = await request.json()
+    return {
+        "tool_invoked": tool_name,
+        "received": data,
+        "status": "accepted"
+    }
+
+
+# ==========================================================
+# ✅ End of responses.py
+# ==========================================================

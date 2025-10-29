@@ -8,7 +8,7 @@
 
 from fastapi import APIRouter, Request
 from app.api.forward_openai import forward_openai
-from app.utils.db_logger import log_event, logging
+
 
 router = APIRouter(prefix="/v1/realtime", tags=["Realtime"])
 
