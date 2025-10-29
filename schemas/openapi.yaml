@@ -1,82 +1,169 @@
 openapi: 3.1.0
 info:
   title: ChatGPT Team Relay API
-  description: |
-    Relay-compatible OpenAI API surface (ChatGPT Team architecture).
-
-    This relay behaves like api.openai.com — it accepts any
-    `Authorization: Bearer <token>` header, including a dummy
-    value when used inside ChatGPT Actions.
-    The relay forwards requests upstream using its internal `OPENAI_API_KEY`.
-  version: 2025-10
-
+  description: >
+    Clean Ground Truth edition of the ChatGPT Team Relay API.
+    Mirrors OpenAI's 2025.10 specification with realtime, multimodal,
+    file, and vector store support.
+  version: "2025.10"
 servers:
   - url: https://chatgpt-team-relay.onrender.com
-    description: Production Relay Server
-
-security:
-  - bearerAuth: []
+    description: Production Relay Endpoint
 
 paths:
 
-  /v1/core/ping:
+  /v1/models:
     get:
-      tags: [Core]
-      summary: Ping
-      description: Health check for relay uptime.
-      operationId: ping_v1_core_ping_get
+      summary: List available models
+      description: Returns all supported models, including realtime-capable ones.
+      tags: [Models]
+      operationId: listModels
       responses:
         '200':
-          description: Pong response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
+          description: Successful Response
 
-  /v1/chat/completions:
+  /v1/files:
+    get:
+      summary: List uploaded files
+      description: Lists all files uploaded under the current API key.
+      tags: [Files]
+      operationId: listFiles
+      responses:
+        '200':
+          description: Successful Response
     post:
-      tags: [Chat]
-      summary: Chat Completions
-      description: |
-        Core model inference endpoint.  
-        Mirrors POST /v1/chat/completions from the OpenAI API.
-        Handles GPT-family models (GPT-4, GPT-5, O-Series) with
-        streaming, tool use, and multimodal content.
-      operationId: chat_completions_v1_chat_completions_post
+      summary: Upload a new file
+      description: Uploads a file for later use by models or tools.
+      tags: [Files]
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Successful Response
+
+  /v1/files/{file_id}:
+    get:
+      summary: Retrieve file metadata
+      description: Returns metadata for a specific uploaded file.
+      tags: [Files]
+      operationId: getFile
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string }
+    delete:
+      summary: Delete a file
+      description: Permanently removes a file from the system.
+      tags: [Files]
+      operationId: deleteFile
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema: { type: string }
+
+  /v1/vector_stores:
+    get:
+      summary: List vector stores
+      description: Returns a list of vector stores.
+      tags: [Vector Stores]
+      operationId: listVectorStores
+    post:
+      summary: Create vector store
+      description: Creates a new vector store for embeddings or RAG.
+      tags: [Vector Stores]
+      operationId: createVectorStore
+
+  /v1/vector_stores/{store_id}:
+    get:
+      summary: Retrieve vector store metadata
+      description: Returns details for a specific vector store.
+      tags: [Vector Stores]
+      operationId: getVectorStore
+      parameters:
+        - name: store_id
+          in: path
+          required: true
+          schema: { type: string }
+    patch:
+      summary: Update vector store
+      description: Updates the attributes of a vector store.
+      tags: [Vector Stores]
+      operationId: updateVectorStore
+    delete:
+      summary: Delete vector store
+      description: Permanently deletes a vector store.
+      tags: [Vector Stores]
+      operationId: deleteVectorStore
+      parameters:
+        - name: store_id
+          in: path
+          required: true
+          schema: { type: string }
+
+  /v1/responses:
+    post:
+      summary: Create model response
+      description: >
+        Generates a model output using GPT or other models.
+        Replaces legacy /chat/completions and /completions endpoints.
+      tags: [Responses]
+      operationId: createResponse
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [model, messages]
               properties:
                 model:
                   type: string
-                  description: The model ID to use.
-                  example: gpt-4o-mini
-                messages:
-                  type: array
-                  items:
-                    type: object
-                    required: [role, content]
-                    properties:
-                      role:
-                        type: string
-                        enum: [system, user, assistant, tool]
-                      content:
-                        type: string
+                  description: Model ID to use for generation.
+                input:
+                  description: >
+                    The input to send to the model — either a simple string prompt
+                    or an array of input content blocks (text, images, etc.).
+                  oneOf:
+                    - type: string
+                      example: "Write a haiku about electrons."
+                    - type: array
+                      items:
+                        type: object
+                        description: Input content block
+                        properties:
+                          role:
+                            type: string
+                            example: "user"
+                          content:
+                            type: array
+                            items:
+                              type: object
+                              description: A content item (text, image, etc.)
+                              properties:
+                                type:
+                                  type: string
+                                  enum: [text, image]
+                                text:
+                                  type: string
+                                  example: "Describe the photo."
+                                image_url:
+                                  type: string
+                                  example: "data:image/png;base64,iVBOR..."
                 stream:
                   type: boolean
-                  default: false
-                tools:
-                  type: array
-                  items:
-                    type: object
+                  description: >
+                    If true, the response is streamed back via SSE.
+                  example: false
       responses:
         '200':
           description: Successful Response
@@ -85,372 +172,20 @@ paths:
               schema:
                 type: object
                 properties:
-                  id: { type: string }
-                  object: { type: string, example: chat.completion }
-                  choices:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        index: { type: integer }
-                        message:
-                          type: object
-                          properties:
-                            role: { type: string }
-                            content: { type: string }
-                        finish_reason: { type: string }
-
-  /v1/models:
-    get:
-      tags: [Models]
-      summary: List Models
-      description: Mirrors GET /v1/models.
-      operationId: list_models_v1_models_get
-      responses:
-        '200':
-          description: List of models
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        id: { type: string }
-                        owned_by: { type: string }
-                        category: { type: string }
-
-  /v1/files:
-    get:
-      tags: [Files]
-      summary: List Files
-      operationId: list_files_v1_files_get
-      responses:
-        '200':
-          description: List files in account
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        id: { type: string }
-                        filename: { type: string }
-                        bytes: { type: integer }
-    post:
-      tags: [Files]
-      summary: Upload File
-      operationId: upload_file_v1_files_post
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file]
-              properties:
-                file:
-                  type: string
-                  format: binary
-      responses:
-        '200':
-          description: File uploaded
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id: { type: string }
-                  filename: { type: string }
-
-  /v1/files/{file_id}:
-    get:
-      tags: [Files]
-      summary: Retrieve File metadata
-      operationId: retrieve_file_v1_files__file_id__get
-      parameters:
-        - name: file_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: File metadata
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id: { type: string }
-                  filename: { type: string }
-    delete:
-      tags: [Files]
-      summary: Delete File
-      operationId: delete_file_v1_files__file_id__delete
-      parameters:
-        - name: file_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Deletion acknowledged
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  deleted: { type: boolean }
-
-  /v1/files/{file_id}/content:
-    get:
-      tags: [Files]
-      summary: Retrieve File Content
-      operationId: retrieve_file_content_v1_files__file_id__content_get
-      parameters:
-        - name: file_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Binary file content
-          content:
-            application/octet-stream:
-              schema: { type: string, format: binary }
-
-  /v1/vector_stores:
-    get:
-      tags: [Vector Stores]
-      summary: List Vector Stores
-      operationId: vector_store_root_v1_vector_stores_get
-      responses:
-        '200':
-          description: Vector stores listed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        id: { type: string }
-                        name: { type: string }
-    post:
-      tags: [Vector Stores]
-      summary: Create Vector Store
-      operationId: vector_store_root_v1_vector_stores_post
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name:
-                  type: string
-                  example: my_vector_store
-      responses:
-        '200':
-          description: Vector store created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id: { type: string }
-
-  /v1/vector_stores/{store_id}:
-    get:
-      tags: [Vector Stores]
-      summary: Retrieve Vector Store
-      operationId: manage_vector_store_v1_vector_stores__store_id__get
-      parameters:
-        - name: store_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Store details
-    patch:
-      tags: [Vector Stores]
-      summary: Update Vector Store
-      operationId: manage_vector_store_v1_vector_stores__store_id__patch
-      parameters:
-        - name: store_id
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name: { type: string }
-      responses:
-        '200': { description: Store updated }
-    delete:
-      tags: [Vector Stores]
-      summary: Delete Vector Store
-      operationId: manage_vector_store_v1_vector_stores__store_id__delete
-      parameters:
-        - name: store_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: Store deleted }
-
-  /v1/vector_stores/{store_id}/batches:
-    post:
-      tags: [Vector Stores]
-      summary: Upload Vector Batch
-      operationId: handle_vector_batches_v1_vector_stores__store_id__batches_post
-      parameters:
-        - name: store_id
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-      responses:
-        '200': { description: Batch processed }
-
-  /v1/realtime/sessions:
-    post:
-      tags: [Realtime]
-      summary: Create Realtime Session
-      operationId: create_session_v1_realtime_sessions_post
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                model:
-                  type: string
-                  example: gpt-4o-realtime-preview
-      responses:
-        '200': { description: Realtime session created }
-
-  /v1/realtime/sessions/{session_id}:
-    delete:
-      tags: [Realtime]
-      summary: Delete Realtime Session
-      operationId: delete_session_v1_realtime_sessions__session_id__delete
-      parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: Realtime session deleted }
-
-  /v1/relay/status:
-    get:
-      tags: [Relay]
-      summary: Relay Status
-      operationId: relay_status_v1_relay_status_get
-      responses:
-        '200':
-          description: Relay status object
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  uptime_seconds: { type: number }
-                  bifl_version: { type: string }
-
-  /v1/responses:
-    post:
-      tags: [Responses]
-      summary: Create Response
-      operationId: create_response_v1_responses_post
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [model, input]
-              properties:
-                model:
-                  type: string
-                  example: gpt-4o-mini
-                input:
-                  description: Input content for the response API.
-                  oneOf:
-                    - type: string
-                    - type: array
-                      items:
-                        type: object
-                        properties:
-                          role: { type: string }
-                          content: { type: string }
-                tools:
-                  type: array
-                  items: { type: object }
-                stream:
-                  type: boolean
-                  default: false
-      responses:
-        '200':
-          description: Response created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id: { type: string }
-                  output_text: { type: string }
-
-  /v1/responses/tools:
-    get:
-      tags: [Responses]
-      summary: List Tools
-      operationId: list_tools_v1_responses_tools_get
-      responses:
-        '200':
-          description: Available tools
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  tools:
-                    type: array
-                    items:
-                      type: string
+                  id:
+                    type: string
+                  object:
+                    type: string
+                  output:
+                    type: string
+                    description: Generated text or structured output.
 
   /v1/responses/tools/{tool_name}:
     post:
+      summary: Invoke a registered tool
+      description: Executes a relay tool (function calling).
       tags: [Responses]
-      summary: Call Tool
-      operationId: call_tool_v1_responses_tools__tool_name__post
+      operationId: invokeTool
       parameters:
         - name: tool_name
           in: path
@@ -463,44 +198,99 @@ paths:
             schema:
               type: object
               properties:
-                input:
+                arguments:
                   type: object
-                  description: Parameters for the tool call.
       responses:
         '200':
-          description: Tool execution result
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  result: { type: object }
+          description: Tool executed successfully
 
-components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-  schemas:
-    HTTPValidationError:
-      type: object
-      properties:
-        detail:
-          type: array
-          items:
-            $ref: '#/components/schemas/ValidationError'
-    ValidationError:
-      type: object
-      required: [loc, msg, type]
-      properties:
-        loc:
-          type: array
-          items:
-            anyOf:
-              - type: string
-              - type: integer
-        msg:
-          type: string
-        type:
-          type: string
+  /v1/realtime/sessions:
+    post:
+      summary: Create realtime session
+      description: >
+        Creates a new realtime session configuration for GPT-4o models.
+        Returns session ID, secret, and WebSocket URL.
+      tags: [Realtime]
+      operationId: createRealtimeSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model: { type: string, example: gpt-4o-realtime-preview }
+                voice: { type: string, example: verse }
+                modalities:
+                  type: array
+                  items: { type: string }
+                expires_in: { type: integer, example: 3600 }
+
+  /v1/realtime/models:
+    get:
+      summary: List realtime models
+      description: Returns all realtime-capable models supported by the relay.
+      tags: [Realtime]
+      operationId: listRealtimeModels
+      responses:
+        '200':
+          description: Successful Response
+
+  /v1/realtime/events:
+    post:
+      summary: Send realtime event
+      description: >
+        Sends a realtime event (text, audio, or image) to an active session.
+      tags: [Realtime]
+      operationId: sendRealtimeEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                session_id: { type: string }
+                type:
+                  type: string
+                  enum:
+                    - input_audio_buffer.append
+                    - input_image.append
+                    - response.create
+                data: { type: string }
+    get:
+      summary: Stream realtime events (SSE)
+      description: >
+        Streams realtime model output and session events using Server-Sent Events.
+      tags: [Realtime]
+      operationId: streamRealtimeEvents
+      responses:
+        '200':
+          description: Successful SSE stream
+
+  /v1/{path}:
+    get:
+      summary: Passthrough proxy (GET)
+      description: Fallback route that forwards GET requests to OpenAI upstream.
+      tags: [Passthrough]
+      operationId: passthroughGet
+    post:
+      summary: Passthrough proxy (POST)
+      description: Fallback route that forwards POST requests to OpenAI upstream.
+      tags: [Passthrough]
+      operationId: passthroughPost
+    put:
+      summary: Passthrough proxy (PUT)
+      description: Fallback route that forwards PUT requests to OpenAI upstream.
+      tags: [Passthrough]
+      operationId: passthroughPut
+    patch:
+      summary: Passthrough proxy (PATCH)
+      description: Fallback route that forwards PATCH requests to OpenAI upstream.
+      tags: [Passthrough]
+      operationId: passthroughPatch
+    delete:
+      summary: Passthrough proxy (DELETE)
+      description: Fallback route that forwards DELETE requests to OpenAI upstream.
+      tags: [Passthrough]
+      operationId: passthroughDelete
