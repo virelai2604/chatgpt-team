@@ -4,7 +4,15 @@ services:
     env: python
     plan: starter
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "uvicorn main:app --host 0.0.0.0 --port 8080"
+    startCommand: "python main.py"
     envVars:
+      - key: APP_MODE
+        value: production
+      - key: RELAY_VERSION
+        value: "Ground Truth Edition v2025.10"
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com
       - key: OPENAI_API_KEY
         sync: false
+      - key: VALIDATION_SCHEMA_PATH
+        value: ChatGPT-API_reference_ground_truth-2025-10-29.json   # ✅ Add this line
