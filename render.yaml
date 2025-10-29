@@ -1,88 +1,70 @@
 # ==========================================================
-# ChatGPT Team Relay — Render Deployment Configuration
-# ==========================================================
-# FastAPI-based OpenAI-compatible relay that handles chat,
-# responses, files, vectors, and tools for team environments.
+# 🚀 ChatGPT Team Relay — Render Deployment Configuration
+# ----------------------------------------------------------
+# This file defines the Render service that hosts your
+# FastAPI-based OpenAI relay. It’s designed to work
+# without any database logger or persistent disk.
 # ==========================================================
 
 services:
   - type: web
     name: chatgpt-team-relay
     env: python
-    plan: starter
-    region: singapore
 
-    # --------------------------------------------
-    # ⚙️ Build and Start Commands
-    # --------------------------------------------
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -r requirements.txt
+    # ------------------------------------------------------
+    # 🧱 BUILD COMMAND
+    # ------------------------------------------------------
+    # Upgrades pip and installs all project dependencies.
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
 
-    startCommand: |
-      uvicorn main:app --host 0.0.0.0 --port $PORT
+    # ------------------------------------------------------
+    # 🚀 START COMMAND
+    # ------------------------------------------------------
+    # Uvicorn serves FastAPI app. Render automatically
+    # injects $PORT at runtime — never hardcode a number.
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
 
-    # --------------------------------------------
-    # 🌐 Environment Variables
-    # --------------------------------------------
+    # ------------------------------------------------------
+    # 🌐 ENVIRONMENT VARIABLES
+    # ------------------------------------------------------
     envVars:
+      # Runtime mode
       - key: APP_MODE
         value: production
 
-      - key: OPENAI_API_KEY
-        sync: false  # Keep secret, managed manually in dashboard
-
-      - key: OPENAI_BASE_URL
-        value: https://api.openai.com
-
-      - key: OPENAI_ORG_ID
-        value: org-XXXXXXXXXXXXXX
-
+      # Relay metadata
+      - key: RELAY_NAME
+        value: ChatGPT Team Relay
       - key: DEFAULT_MODEL
         value: gpt-4o
 
-      # Persistent database location
-      - key: BIFL_DB_PATH
-        value: /data/chatgpt_archive.sqlite
+      # API base URL
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com
 
-      # Streaming + logging configuration
-      - key: ENABLE_STREAM
-        value: true
-
+      # Disable DB logging for Render-safe operation
       - key: ENABLE_DB_LOGGING
-        value: true
+        value: false
 
-      # CORS (Cross-Origin Resource Sharing)
-      - key: CORS_ALLOW_ORIGINS
-        value: "*"
-      - key: CORS_ALLOW_METHODS
-        value: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-      - key: CORS_ALLOW_HEADERS
-        value: "*"
-
-      # Operational settings
-      - key: LOG_RETENTION_DAYS
-        value: 120
+      # Optional: turn off debug logging for cleaner logs
       - key: DEBUG
         value: false
-      - key: RELAY_ENV
-        value: production
-      - key: RELAY_NAME
-        value: "ChatGPT Team Relay"
-      - key: RENDER
-        value: true
 
-    # --------------------------------------------
-    # 💾 Persistent Disk (for DB + logs)
-    # --------------------------------------------
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
+      # Ensures all imports like `from app.routes...` resolve
+      - key: PYTHONPATH
+        value: .
 
-    # --------------------------------------------
-    # 🩺 Health Check
-    # --------------------------------------------
+    # ------------------------------------------------------
+    # ❤️ HEALTH CHECK
+    # ------------------------------------------------------
+    # Render pings this path to verify your service is alive.
     healthCheckPath: /health
-    healthCheckTimeout: 15
+
+    # ------------------------------------------------------
+    # 🔁 DEPLOYMENT BEHAVIOR
+    # ------------------------------------------------------
+    # Automatically deploy when you push to the linked branch.
     autoDeploy: true
+
+    # Optional — keep warm (avoid hibernation delay)
+    # plan: starter    # uncomment if you upgrade from free tier
