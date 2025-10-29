@@ -2,8 +2,8 @@
   "schema_version": "v1",
   "name_for_human": "ChatGPT Team Relay",
   "name_for_model": "chatgpt_team_relay",
-  "description_for_human": "Relay service for OpenAI-compatible API requests, providing tools like code execution, file operations, vector search, and image generation.",
-  "description_for_model": "A FastAPI-based relay compatible with OpenAI's /v1/responses and /v1/tools schema. Supports streaming completions and tool invocation.",
+  "description_for_human": "A relay service that forwards ChatGPT API requests, supports tool invocation, and streams responses.",
+  "description_for_model": "Relay endpoint for model responses, supporting synchronous and streaming completions, plus tool discovery and invocation.",
   "auth": {
     "type": "none"
   },
@@ -11,23 +11,15 @@
     "type": "openapi",
     "url": "https://chatgpt-team-relay.onrender.com/v1/openapi.yaml"
   },
-  "contact_email": "support@chatgpt-team-relay.dev",
-  "legal_info_url": "https://chatgpt-team-relay.onrender.com/legal",
   "logo_url": "https://chatgpt-team-relay.onrender.com/static/logo.png",
+  "contact_email": "support@example.com",
+  "legal_info_url": "https://chatgpt-team-relay.onrender.com/legal",
   "endpoints": {
-    "health": "https://chatgpt-team-relay.onrender.com/health",
-    "responses": "https://chatgpt-team-relay.onrender.com/v1/responses",
-    "tools": "https://chatgpt-team-relay.onrender.com/v1/responses/tools"
+    "responses": "/v1/responses",
+    "responses_stream": "/v1/responses (stream=True)",
+    "tools_list": "/v1/responses/tools",
+    "tool_info": "/v1/responses/tools/{tool_name}"
   },
-  "tools": [
-    "code_interpreter",
-    "file_search",
-    "file_upload",
-    "file_download",
-    "vector_store_retrieval",
-    "image_generation",
-    "video_generation",
-    "web_search",
-    "computer_use"
-  ]
+  "supported_models": ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-3.5-turbo"],
+  "tags": ["relay", "fastapi", "ai-plugin", "openai", "tools"]
 }

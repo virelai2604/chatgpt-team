@@ -5,36 +5,33 @@
 # Mirrors OpenAI relay schema used in ChatGPT Team relays.
 # ==========================================================
 
-import sys
-import time
-import platform
-import os
+import os, time, platform
+from datetime import datetime
 from fastapi import APIRouter
 from app.api.tools_api import TOOL_REGISTRY
 
 router = APIRouter(prefix="/v1/relay", tags=["Relay"])
 
-# Record the relay’s boot time for uptime tracking
 START_TIME = time.time()
 
 @router.get("/status")
 async def relay_status():
     """
     Returns a status object describing the relay’s runtime state.
-    Expected fields:
-      - bifl_version (str)
-      - uptime_seconds (float)
-      - available_tools (list)
-    Also includes diagnostic metadata for introspection.
+    OpenAI-style structure for diagnostic introspection.
     """
     uptime = round(time.time() - START_TIME, 2)
-
     return {
         "object": "relay.status",
         "environment": os.getenv("ENVIRONMENT", "production"),
-        "python_version": platform.python_version(),
         "platform": platform.system(),
+        "python_version": platform.python_version(),
         "uptime_seconds": uptime,
-        "bifl_version": "v2.3.4-fp",
-        "available_tools": list(TOOL_REGISTRY.keys()),
+        "version": os.getenv("BIFL_VERSION", "v2.3.4-fp"),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "tools_count": len(TOOL_REGISTRY),
+        "tools": [t["id"] for t in TOOL_REGISTRY],
+        "default_model": os.getenv("DEFAULT_MODEL", "gpt-4o-mini"),
+        "mode": os.getenv("APP_MODE", "production"),
+        "status": "ok"
     }

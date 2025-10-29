@@ -1,14 +1,14 @@
 # ==========================================================
-# app/routes/realtime.py — Relay v2025-10 Ground Truth Mirror
+# app/routes/realtime.py — Relay v2025-10 Ground-Truth Mirror
 # ==========================================================
-# Implements /v1/realtime/* routes to match OpenAI’s live Realtime API.
-# Supports creation, event streaming, and termination of Realtime sessions.
-# Used by GPT-4o-Realtime, GPT-5-Pro-Realtime, and future multimodal models.
+# Implements /v1/realtime/* routes to match OpenAI’s Realtime API.
+# Supports creation, event streaming, and termination of sessions.
+# Used by GPT-4o-Realtime, GPT-5-Pro-Realtime, and multimodal models.
 # ==========================================================
 
 from fastapi import APIRouter, Request
 from app.api.forward_openai import forward_openai
-
+import logging
 
 router = APIRouter(prefix="/v1/realtime", tags=["Realtime"])
 
@@ -36,7 +36,7 @@ async def create_session(request: Request):
 async def send_event(request: Request):
     """
     Mirrors POST /v1/realtime/events.
-    Sends user or system events (messages, audio frames, or control signals)
+    Sends user or system events (messages, audio frames, control signals)
     into an active realtime session.
     """
     endpoint = "realtime/events"
@@ -63,3 +63,7 @@ async def delete_session(request: Request, session_id: str):
     except Exception as e:
         logging.warning(f"[Realtime] Failed to log session termination: {e}")
     return response
+
+# Dummy async logger (optional)
+async def log_event(level: str, message: str):
+    logging.log(getattr(logging, level.upper(), logging.INFO), f"[Realtime] {message}")

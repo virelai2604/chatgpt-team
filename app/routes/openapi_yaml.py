@@ -1,27 +1,28 @@
 # ==========================================================
-# app/routes/openapi_yaml.py — OpenAPI Specification Route
+# app/routes/openapi_yaml.py — Dynamic OpenAPI Specification
 # ==========================================================
-# Exposes the FastAPI-generated OpenAPI 3.1 schema in YAML.
-# Mirrors the OpenAI relay's discovery behavior.
+# Generates a live YAML schema at /v1/openapi.yaml.
+# This endpoint allows plugin validation and keeps in sync
+# with FastAPI’s registered routes and metadata.
 # ==========================================================
 
-import yaml
 from fastapi import APIRouter, Request, Response
 from fastapi.openapi.utils import get_openapi
+import yaml
 
-router = APIRouter(prefix="/v1", tags=["OpenAPI"])
+router = APIRouter()
 
-@router.get("/openapi.yaml", include_in_schema=False)
+@router.get("/v1/openapi.yaml", include_in_schema=False)
 async def get_openapi_yaml(request: Request):
     """
-    Generate and return the OpenAPI schema for this relay in YAML format.
-    Mirrors OpenAI API structure for discovery and introspection.
+    Returns a live-generated OpenAPI YAML spec for the ChatGPT relay.
+    This endpoint must remain dynamic — not a static file.
     """
-    schema = get_openapi(
+    openapi_schema = get_openapi(
         title="ChatGPT Team Relay API",
-        version="2025-10",
-        description="Relay-compatible OpenAI API surface (ChatGPT Team architecture).",
+        version="2.3.4-fp",
+        description="A relay-compatible OpenAI API interface for ChatGPT Plugins.",
         routes=request.app.routes,
     )
-    yaml_schema = yaml.safe_dump(schema, sort_keys=False, allow_unicode=True)
+    yaml_schema = yaml.safe_dump(openapi_schema, sort_keys=False)
     return Response(content=yaml_schema, media_type="application/x-yaml")

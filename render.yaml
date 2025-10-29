@@ -1,70 +1,24 @@
-# ==========================================================
-# 🚀 ChatGPT Team Relay — Render Deployment Configuration
-# ----------------------------------------------------------
-# This file defines the Render service that hosts your
-# FastAPI-based OpenAI relay. It’s designed to work
-# without any database logger or persistent disk.
-# ==========================================================
-
 services:
   - type: web
     name: chatgpt-team-relay
     env: python
-
-    # ------------------------------------------------------
-    # 🧱 BUILD COMMAND
-    # ------------------------------------------------------
-    # Upgrades pip and installs all project dependencies.
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-
-    # ------------------------------------------------------
-    # 🚀 START COMMAND
-    # ------------------------------------------------------
-    # Uvicorn serves FastAPI app. Render automatically
-    # injects $PORT at runtime — never hardcode a number.
+    plan: free  # or standard
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-
-    # ------------------------------------------------------
-    # 🌐 ENVIRONMENT VARIABLES
-    # ------------------------------------------------------
     envVars:
-      # Runtime mode
-      - key: APP_MODE
-        value: production
-
-      # Relay metadata
-      - key: RELAY_NAME
-        value: ChatGPT Team Relay
-      - key: DEFAULT_MODEL
-        value: gpt-4o
-
-      # API base URL
+      - key: OPENAI_API_KEY
+        sync: false
       - key: OPENAI_BASE_URL
         value: https://api.openai.com
-
-      # Disable DB logging for Render-safe operation
-      - key: ENABLE_DB_LOGGING
-        value: false
-
-      # Optional: turn off debug logging for cleaner logs
-      - key: DEBUG
-        value: false
-
-      # Ensures all imports like `from app.routes...` resolve
-      - key: PYTHONPATH
-        value: .
-
-    # ------------------------------------------------------
-    # ❤️ HEALTH CHECK
-    # ------------------------------------------------------
-    # Render pings this path to verify your service is alive.
-    healthCheckPath: /health
-
-    # ------------------------------------------------------
-    # 🔁 DEPLOYMENT BEHAVIOR
-    # ------------------------------------------------------
-    # Automatically deploy when you push to the linked branch.
-    autoDeploy: true
-
-    # Optional — keep warm (avoid hibernation delay)
-    # plan: starter    # uncomment if you upgrade from free tier
+      - key: APP_MODE
+        value: production
+      - key: DEFAULT_MODEL
+        value: gpt-4o-mini
+      - key: ENABLE_STREAM
+        value: "true"
+      - key: BIFL_VERSION
+        value: v2.3.4-fp
+      - key: CORS_ALLOW_ORIGINS
+        value: "*"
+      - key: ENVIRONMENT
+        value: production
