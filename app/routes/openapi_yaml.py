@@ -14,7 +14,7 @@ async def get_openapi_yaml(request: Request):
     """
     openapi_schema = get_openapi(
         title="ChatGPT Team Relay API",
-        version="2.3.4-fp",
+        version="2025.10",
         description="An OpenAI-compatible relay for ChatGPT Plugins and SDK clients.",
         routes=request.app.routes,
     )
