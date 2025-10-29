@@ -2,23 +2,9 @@ services:
   - type: web
     name: chatgpt-team-relay
     env: python
-    plan: free  # or standard
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: starter
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port 8080"
     envVars:
       - key: OPENAI_API_KEY
         sync: false
-      - key: OPENAI_BASE_URL
-        value: https://api.openai.com
-      - key: APP_MODE
-        value: production
-      - key: DEFAULT_MODEL
-        value: gpt-4o-mini
-      - key: ENABLE_STREAM
-        value: "true"
-      - key: BIFL_VERSION
-        value: v2.3.4-fp
-      - key: CORS_ALLOW_ORIGINS
-        value: "*"
-      - key: ENVIRONMENT
-        value: production

@@ -20,6 +20,7 @@
       📄 tools_manifest.json
     📁 middleware
       📄 __init__.py
+      📄 p4_orchestrator.py
       📄 validation.py
     📁 routes
       📄 __init__.py

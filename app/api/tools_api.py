@@ -1,46 +1,37 @@
 # ==========================================================
-# app/api/tools_api.py — Tool Registry and Metadata
+# app/api/tools_api.py — Relay Tool Registry and Invocation Layer
 # ==========================================================
-# Defines all available relay tools and their metadata.
-# Used by /v1/responses/tools and /v1/relay/status endpoints.
-# ==========================================================
+from fastapi import HTTPException
+from fastapi.responses import JSONResponse
+from typing import List, Dict, Any
 
-from fastapi import APIRouter
-
-router = APIRouter(prefix="/v1/responses", tags=["tools"])
-
-# ✅  TOOL REGISTRY — the single source of truth
-TOOL_REGISTRY = [
-    {"id": "code_interpreter",
-     "name": "Code Interpreter",
-     "description": "Run Python code safely in a sandboxed environment."},
-    {"id": "file_search",
-     "name": "File Search",
-     "description": "Search inside uploaded documents or files."},
-    {"id": "file_upload",
-     "name": "File Upload",
-     "description": "Upload a file to the relay for later use."},
-    {"id": "file_download",
-     "name": "File Download",
-     "description": "Download a stored or generated file by ID."},
-    {"id": "vector_store_retrieval",
-     "name": "Vector Store Retrieval",
-     "description": "Retrieve embeddings or semantic search from the vector store."},
-    {"id": "image_generation",
-     "name": "Image Generation",
-     "description": "Generate an image from a prompt or modify an existing one."},
-    {"id": "web_search",
-     "name": "Web Search",
-     "description": "Perform a live web search using trusted sources."},
-    {"id": "video_generation",
-     "name": "Video Generation",
-     "description": "Generate or edit short video clips from text prompts."},
-    {"id": "computer_use",
-     "name": "Computer Use",
-     "description": "Control a simulated desktop environment for automation tasks."}
+# Registry of available tools
+TOOLS_REGISTRY: List[Dict[str, Any]] = [
+    {"id": "code_interpreter", "name": "code_interpreter", "description": "Executes Python code and returns stdout or errors.", "type": "function"},
+    {"id": "file_search", "name": "file_search", "description": "Searches uploaded or vector-stored files for relevant content.", "type": "function"},
+    {"id": "file_upload", "name": "file_upload", "description": "Uploads a file into the relay’s store.", "type": "function"},
+    {"id": "file_download", "name": "file_download", "description": "Downloads a file by ID.", "type": "function"},
+    {"id": "vector_store_retrieval", "name": "vector_store_retrieval", "description": "Retrieves semantically relevant chunks from vector stores.", "type": "function"},
+    {"id": "image_generation", "name": "image_generation", "description": "Generates images using DALL·E or compatible models.", "type": "function"},
+    {"id": "web_search", "name": "web_search", "description": "Performs live web searches for fresh information.", "type": "function"},
+    {"id": "video_generation", "name": "video_generation", "description": "Creates short video clips or animations.", "type": "function"},
+    {"id": "computer_use", "name": "computer_use", "description": "Simulates desktop control for automation (placeholder).", "type": "function"}
 ]
 
-@router.get("/tools")
-async def list_tools():
-    """Return the available tool registry in OpenAI-style schema."""
-    return {"object": "list", "tools": [t["id"] for t in TOOL_REGISTRY]}
+async def list_tools() -> List[Dict[str, Any]]:
+    """Return a list of available tools."""
+    return TOOLS_REGISTRY
+
+async def call_tool(tool_name: str, body: Dict[str, Any]) -> JSONResponse:
+    """Mock tool invocation — echoes the input for now."""
+    tool = next((t for t in TOOLS_REGISTRY if t["name"] == tool_name), None)
+    if not tool:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
+
+    result = {
+        "tool": tool_name,
+        "input": body,
+        "status": "executed",
+        "output": f"Mock result from tool '{tool_name}'"
+    }
+    return JSONResponse(result)

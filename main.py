@@ -1,148 +1,234 @@
-"""
-main.py — ChatGPT Team Relay (Render Production, DB-Free)
----------------------------------------------------------
-OpenAI-compatible relay server exposing endpoints:
-  • /v1/responses
-  • /v1/chat/completions
-  • /v1/models
-  • /v1/files
-  • /v1/vector_stores
-  • /v1/realtime/*
-  • /.well-known/ai-plugin.json
-Environment variables in `.env` control models, timeouts, and metadata.
-"""
+# ==========================================================
+# main.py — ChatGPT Team Relay (Ground Truth Edition)
+# ==========================================================
 
 import os
-import platform
 import logging
-from datetime import datetime
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse
+from dotenv import load_dotenv
 
-# ---------------------------------------------------------
-# ✅  Imports from the application package
-# ---------------------------------------------------------
-from app.routes.register_routes import register_routes
-from app.middleware.validation import ResponseValidationMiddleware
-from app.middleware.p4_orchestrator import P4OrchestratorMiddleware   # <-- added reasoning layer
+# --- Load environment variables (.env for local, Render env vars in prod) ---
+load_dotenv()
 
-# ---------------------------------------------------------
-# 🧭  Configuration
-# ---------------------------------------------------------
-APP_NAME        = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
-APP_MODE        = os.getenv("APP_MODE", "development")
-DEFAULT_MODEL   = os.getenv("DEFAULT_MODEL", "gpt-4o")
-ENABLE_STREAM   = os.getenv("ENABLE_STREAM", "true").lower() == "true"
+# ==========================================================
+# Basic App Configuration
+# ==========================================================
+APP_MODE = os.getenv("APP_MODE", "development")
+RELAY_NAME = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
+RELAY_VERSION = os.getenv("RELAY_VERSION", "v2.3.4-fp")
+PORT = int(os.getenv("PORT", 8080))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 
-# ---------------------------------------------------------
-# 🗄️  Database placeholder (for metadata only)
-# ---------------------------------------------------------
-if platform.system() == "Windows":
-    DB_PATH = os.getenv("LOCAL_DB_PATH", r"D:\ChatgptDATAB\DB Chatgpt\chatgpt_archive.sqlite")
-else:
-    # Render-safe default path avoids permission errors
-    default_linux_db = "/tmp/chatgpt_archive.sqlite"
-    DB_PATH = os.getenv("BIFL_DB_PATH", default_linux_db)
+logging.basicConfig(level=LOG_LEVEL)
+logger = logging.getLogger("relay")
 
-# ---------------------------------------------------------
-# 🧱  Logging setup
-# ---------------------------------------------------------
-logging.basicConfig(level=logging.INFO)
-logging.info(f"[Relay] Starting {APP_NAME} ({APP_MODE}) mode...")
+logger.info(f"[Relay] Starting {RELAY_NAME} ({APP_MODE}) mode — version {RELAY_VERSION}")
 
-# ---------------------------------------------------------
-# 🚀  FastAPI application instance
-# ---------------------------------------------------------
 app = FastAPI(
-    title       = APP_NAME,
-    version     = os.getenv("BIFL_VERSION", "v2.3.4-fp"),
-    description = "OpenAI-compatible relay API for Responses, Tools, and Realtime endpoints.",
-    contact     = {"name": "ChatGPT Team Relay", "url": "https://chat.openai.com"},
-    license_info= {"name": "MIT"},
+    title=RELAY_NAME,
+    version=RELAY_VERSION,
+    description="A fully OpenAI-compatible relay with Ground Truth routing and plugin integration.",
 )
 
-# ---------------------------------------------------------
-# 🧩  Middleware registration (order matters!)
-# ---------------------------------------------------------
-# 1. CORS — allow cross-origin browser/plugin access
+# ==========================================================
+# Static File Mount (for /.well-known/ai-plugin.json & assets)
+# ==========================================================
+if not os.path.exists("static"):
+    os.makedirs("static/.well-known", exist_ok=True)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/.well-known/ai-plugin.json", include_in_schema=False)
+async def serve_plugin_manifest():
+    """Serve ChatGPT plugin manifest."""
+    manifest_path = os.path.join("static", ".well-known", "ai-plugin.json")
+    if not os.path.exists(manifest_path):
+        return {"error": "Plugin manifest not found"}
+    return FileResponse(manifest_path, media_type="application/json")
+
+@app.get("/static/logo.png", include_in_schema=False)
+async def serve_logo():
+    """Serve plugin logo (optional)."""
+    logo_path = os.path.join("static", "logo.png")
+    if not os.path.exists(logo_path):
+        return {"error": "Logo not found"}
+    return FileResponse(logo_path, media_type="image/png")
+
+# ==========================================================
+# Middleware Configuration
+# ==========================================================
+from app.middleware.validation import ResponseValidationMiddleware
+from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
+
+# --- CORS ---
+allowed_origins = os.getenv("CORS_ALLOW_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins   = os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods    = os.getenv("CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS").split(","),
-    allow_headers    = os.getenv("CORS_ALLOW_HEADERS", "*").split(","),
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# 2. Validation — enforce OpenAI schema on /v1/responses
+# --- Core middleware stack ---
 app.add_middleware(ResponseValidationMiddleware)
-
-# 3. P4 Orchestrator — interpret /v1/p4 reasoning calls
 app.add_middleware(P4OrchestratorMiddleware)
 
-# ---------------------------------------------------------
-# 🗺️  Static file and route registration
-# ---------------------------------------------------------
-# Serve optional /static assets (logos, manifests)
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-if os.path.isdir(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+# ==========================================================
+# Register All Routes
+# ==========================================================
+from app.routes.register_routes import register_routes
+app = register_routes(app)
 
-# Serve /.well-known/ai-plugin.json for plugin discovery
-well_known_dir = os.path.join(static_dir, ".well-known")
-if os.path.isdir(well_known_dir):
-    app.mount("/.well-known", StaticFiles(directory=well_known_dir), name="well-known")
-
-# Mount all functional routers
-register_routes(app)
-
-# ---------------------------------------------------------
-# 🩺  Health endpoint
-# ---------------------------------------------------------
-@app.get("/health")
-async def health_check():
-    """Simple runtime heartbeat used by Render and monitoring tools."""
-    return JSONResponse(
-        {
-            "status"        : "ok",
-            "version"       : os.getenv("BIFL_VERSION", "v2.3.4-fp"),
-            "mode"          : APP_MODE,
-            "default_model" : DEFAULT_MODEL,
-            "build_date"    : os.getenv("BUILD_DATE"),
-            "channel"       : os.getenv("BUILD_CHANNEL"),
-            "timestamp"     : datetime.utcnow().isoformat() + "Z",
-        }
-    )
-
-# ---------------------------------------------------------
-# 🌍  Root metadata endpoint
-# ---------------------------------------------------------
-@app.get("/")
+# ==========================================================
+# Root Endpoint
+# ==========================================================
+@app.get("/", tags=["Meta"])
 async def root():
-    """Landing metadata for diagnostics."""
+    """Public metadata and diagnostics."""
     return {
-        "object"           : "relay.root",
-        "name"             : APP_NAME,
-        "mode"             : APP_MODE,
-        "streaming_enabled": ENABLE_STREAM,
-        "default_model"    : DEFAULT_MODEL,
-        "routes"           : len(app.routes),
-        "docs"             : "/docs",
-        "openapi_yaml"     : "/v1/openapi.yaml",
-        "health"           : "/health",
+        "service": RELAY_NAME,
+        "status": "running",
+        "mode": APP_MODE,
+        "version": RELAY_VERSION,
+        "docs": "/docs",
+        "openapi_spec": "/v1/openapi.yaml",
+        "plugin_manifest": "/.well-known/ai-plugin.json",
+        "health": "/health",
+        "upstream": os.getenv("OPENAI_BASE_URL", "https://api.openai.com"),
     }
 
-# ---------------------------------------------------------
-# 🧪  Local development entrypoint
-# ---------------------------------------------------------
+# ==========================================================
+# Application Entrypoint
+# ==========================================================
 if __name__ == "__main__":
     import uvicorn
+
+    logger.info(f"[Relay] Launching on 0.0.0.0:{PORT}")
     uvicorn.run(
         "main:app",
-        host        = "0.0.0.0",
-        port        = int(os.getenv("PORT", "8080")),
-        reload      = True,
-        log_level   = "info",
+        host="0.0.0.0",
+        port=PORT,
+        reload=(APP_MODE == "development"),
+        log_level=LOG_LEVEL.lower(),
+    )
+# ==========================================================
+# main.py — ChatGPT Team Relay (Ground Truth Edition)
+# ==========================================================
+
+import os
+import logging
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from dotenv import load_dotenv
+
+# --- Load environment variables (.env for local, Render env vars in prod) ---
+load_dotenv()
+
+# ==========================================================
+# Basic App Configuration
+# ==========================================================
+APP_MODE = os.getenv("APP_MODE", "development")
+RELAY_NAME = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
+RELAY_VERSION = os.getenv("RELAY_VERSION", "v2.3.4-fp")
+PORT = int(os.getenv("PORT", 8080))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
+
+logging.basicConfig(level=LOG_LEVEL)
+logger = logging.getLogger("relay")
+
+logger.info(f"[Relay] Starting {RELAY_NAME} ({APP_MODE}) mode — version {RELAY_VERSION}")
+
+app = FastAPI(
+    title=RELAY_NAME,
+    version=RELAY_VERSION,
+    description="A fully OpenAI-compatible relay with Ground Truth routing and plugin integration.",
+)
+
+# ==========================================================
+# Static File Mount (for /.well-known/ai-plugin.json & assets)
+# ==========================================================
+if not os.path.exists("static"):
+    os.makedirs("static/.well-known", exist_ok=True)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/.well-known/ai-plugin.json", include_in_schema=False)
+async def serve_plugin_manifest():
+    """Serve ChatGPT plugin manifest."""
+    manifest_path = os.path.join("static", ".well-known", "ai-plugin.json")
+    if not os.path.exists(manifest_path):
+        return {"error": "Plugin manifest not found"}
+    return FileResponse(manifest_path, media_type="application/json")
+
+@app.get("/static/logo.png", include_in_schema=False)
+async def serve_logo():
+    """Serve plugin logo (optional)."""
+    logo_path = os.path.join("static", "logo.png")
+    if not os.path.exists(logo_path):
+        return {"error": "Logo not found"}
+    return FileResponse(logo_path, media_type="image/png")
+
+# ==========================================================
+# Middleware Configuration
+# ==========================================================
+from app.middleware.validation import ResponseValidationMiddleware
+from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
+
+# --- CORS ---
+allowed_origins = os.getenv("CORS_ALLOW_ORIGINS", "*").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Core middleware stack ---
+app.add_middleware(ResponseValidationMiddleware)
+app.add_middleware(P4OrchestratorMiddleware)
+
+# ==========================================================
+# Register All Routes
+# ==========================================================
+from app.routes.register_routes import register_routes
+app = register_routes(app)
+
+# ==========================================================
+# Root Endpoint
+# ==========================================================
+@app.get("/", tags=["Meta"])
+async def root():
+    """Public metadata and diagnostics."""
+    return {
+        "service": RELAY_NAME,
+        "status": "running",
+        "mode": APP_MODE,
+        "version": RELAY_VERSION,
+        "docs": "/docs",
+        "openapi_spec": "/v1/openapi.yaml",
+        "plugin_manifest": "/.well-known/ai-plugin.json",
+        "health": "/health",
+        "upstream": os.getenv("OPENAI_BASE_URL", "https://api.openai.com"),
+    }
+
+# ==========================================================
+# Application Entrypoint
+# ==========================================================
+if __name__ == "__main__":
+    import uvicorn
+
+    logger.info(f"[Relay] Launching on 0.0.0.0:{PORT}")
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=PORT,
+        reload=(APP_MODE == "development"),
+        log_level=LOG_LEVEL.lower(),
     )

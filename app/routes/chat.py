@@ -1,45 +1,22 @@
 # ==========================================================
-# app/routes/chat.py — Relay v2025-10 Ground Truth Mirror
+# app/routes/chat.py — Ground Truth OpenAI-Compatible Mirror
 # ==========================================================
-# OpenAI-compatible /v1/chat/completions endpoint.
-# Core inference route for GPT-4, GPT-5, Codex, and O-Series models.
-# Supports streaming, multimodal content, and DB-logged events.
-# ==========================================================
-
 from fastapi import APIRouter, Request
-from app.api.forward_openai import forward_openai
+from app.api.forward_openai import forward_openai_request
 
+router = APIRouter(prefix="/v1/chat", tags=["Chat"])
 
-router = APIRouter(prefix="/v1", tags=["Chat"])
-
-# ----------------------------------------------------------
-# 💬  Chat Completions
-# ----------------------------------------------------------
-@router.post("/chat/completions")
+@router.post("/completions")
 async def chat_completions(request: Request):
     """
-    Core model inference endpoint.
-
-    Mirrors POST /v1/chat/completions from the OpenAI API.
-    Handles all GPT-family models (GPT-4, GPT-5, Codex, O-Series),
-    and supports streaming responses, tools, and multimodal content.
-
-    Example:
-        POST /v1/chat/completions
-        {
-            "model": "gpt-5",
-            "messages": [
-                {"role": "user", "content": "Write a haiku about memory."}
-            ],
-            "stream": true
-        }
+    Mirrors OpenAI POST /v1/chat/completions
+    Core endpoint for GPT-family models with streaming and tool calls.
     """
-    endpoint = "/v1/chat/completions"
-    response = await forward_openai(request, endpoint)
-
-    try:
-        await log_event(endpoint, response.status_code, "chat completion request")
-    except Exception:
-        pass
-
-    return response
+    body = await request.json()
+    stream = bool(body.get("stream", False))
+    result = await forward_openai_request("v1/chat/completions", method="POST", json_data=body, stream=stream)
+    if stream:
+        from fastapi.responses import StreamingResponse
+        return StreamingResponse(result, media_type="text/event-stream")
+    from fastapi.responses import JSONResponse
+    return JSONResponse(result)

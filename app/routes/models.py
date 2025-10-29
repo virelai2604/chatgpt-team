@@ -1,50 +1,23 @@
 # ==========================================================
-# app/routes/models.py — Relay v2025-10 Ground Truth Mirror
+# app/routes/models.py — Ground Truth OpenAI-Compatible Mirror
 # ==========================================================
-# OpenAI-compatible /v1/models endpoint.
-# Lists available models and retrieves metadata for a specific model.
-# Fully async, DB-logged, and proxy-forwarded via forward_openai().
-# ==========================================================
+from fastapi import APIRouter
+from app.api.forward_openai import forward_openai_request
 
-from fastapi import APIRouter, Request
-from app.api.forward_openai import forward_openai
+router = APIRouter(prefix="/v1/models", tags=["Models"])
 
-
-router = APIRouter(prefix="/v1", tags=["Models"])
-
-# ----------------------------------------------------------
-# 📋  List Models
-# ----------------------------------------------------------
-@router.get("/models")
-async def list_models(request: Request):
+@router.get("")
+async def list_models():
     """
-    Mirrors GET /v1/models
-    Returns all model IDs, owners, and categories available
-    through the relay.
+    Mirrors OpenAI GET /v1/models
+    Returns all available models and their metadata.
     """
-    endpoint = "/v1/models"
-    response = await forward_openai(request, endpoint)
-    try:
-        await log_event(endpoint, response.status_code, "list models")
-    except Exception:
-        pass
-    return response
+    return await forward_openai_request("v1/models", method="GET")
 
-
-# ----------------------------------------------------------
-# 🔍  Retrieve Specific Model
-# ----------------------------------------------------------
-@router.get("/models/{model}")
-async def get_model(request: Request, model: str):
+@router.get("/{model_id}")
+async def get_model(model_id: str):
     """
-    Mirrors GET /v1/models/{model}
-    Returns metadata about a single model, including ownership,
-    release date, and capability flags.
+    Mirrors OpenAI GET /v1/models/{model_id}
+    Retrieves metadata for a specific model.
     """
-    endpoint = f"/v1/models/{model}"
-    response = await forward_openai(request, endpoint)
-    try:
-        await log_event(endpoint, response.status_code, f"model {model}")
-    except Exception:
-        pass
-    return response
+    return await forward_openai_request(f"v1/models/{model_id}", method="GET")

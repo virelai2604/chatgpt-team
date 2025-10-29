@@ -1,88 +1,59 @@
 # ==========================================================
-# app/routes/files.py — Relay v2025-10 Ground Truth Mirror
+# app/routes/files.py — Ground Truth OpenAI-Compatible Mirror
 # ==========================================================
-# OpenAI-compatible /v1/files endpoint for uploads, listing,
-# retrieval, content download, and deletion.
-# Fully async, DB-logged, and proxy-safe for streaming.
-# ==========================================================
-
-from fastapi import APIRouter, Request
-from app.api.forward_openai import forward_openai
-
+from fastapi import APIRouter, UploadFile, File
+from fastapi.responses import JSONResponse
+from app.api.forward_openai import forward_openai_request
 
 router = APIRouter(prefix="/v1/files", tags=["Files"])
 
-# ----------------------------------------------------------
-# 📤  Upload File
-# ----------------------------------------------------------
-@router.post("")
-async def upload_file(request: Request):
-    """
-    Upload a file to OpenAI (multipart/form-data supported).
-    Mirrors POST /v1/files.
-    """
-    response = await forward_openai(request, "/v1/files")
-    try:
-        await log_event("/v1/files/upload", response.status_code, "file upload")
-    except Exception:
-        pass
-    return response
-
-
-# ----------------------------------------------------------
-# 📄  List Files
-# ----------------------------------------------------------
 @router.get("")
-async def list_files(request: Request):
-    """List files available in the account or organization."""
-    response = await forward_openai(request, "/v1/files")
-    try:
-        await log_event("/v1/files/list", response.status_code, "file list")
-    except Exception:
-        pass
-    return response
+async def list_files():
+    """
+    Mirrors OpenAI GET /v1/files
+    Lists all uploaded files for the current API key.
+    """
+    result = await forward_openai_request("v1/files", method="GET")
+    return JSONResponse(result)
 
+@router.post("")
+async def upload_file(file: UploadFile = File(...)):
+    """
+    Mirrors OpenAI POST /v1/files
+    Upload a file. This relay implementation transmits filename and content
+    as JSON text for simplicity. Binary-safe multipart proxying can be added later.
+    """
+    content = await file.read()
+    data = {
+        "filename": file.filename,
+        "content": content.decode(errors="ignore"),
+    }
+    result = await forward_openai_request("v1/files", method="POST", json_data=data)
+    return JSONResponse(result)
 
-# ----------------------------------------------------------
-# 📥  Retrieve File Metadata
-# ----------------------------------------------------------
 @router.get("/{file_id}")
-async def retrieve_file(request: Request, file_id: str):
-    """Retrieve file metadata."""
-    endpoint = f"/v1/files/{file_id}"
-    response = await forward_openai(request, endpoint)
-    try:
-        await log_event("/v1/files/retrieve", response.status_code, f"file {file_id}")
-    except Exception:
-        pass
-    return response
+async def retrieve_file(file_id: str):
+    """
+    Mirrors OpenAI GET /v1/files/{file_id}
+    Retrieves metadata for a specific file.
+    """
+    result = await forward_openai_request(f"v1/files/{file_id}", method="GET")
+    return JSONResponse(result)
 
-
-# ----------------------------------------------------------
-# 📂  Retrieve File Content
-# ----------------------------------------------------------
 @router.get("/{file_id}/content")
-async def retrieve_file_content(request: Request, file_id: str):
-    """Download the raw content of a file."""
-    endpoint = f"/v1/files/{file_id}/content"
-    response = await forward_openai(request, endpoint)
-    try:
-        await log_event(endpoint, response.status_code, f"download {file_id}")
-    except Exception:
-        pass
-    return response
+async def retrieve_file_content(file_id: str):
+    """
+    Mirrors OpenAI GET /v1/files/{file_id}/content
+    Streams or returns the raw file content.
+    """
+    result = await forward_openai_request(f"v1/files/{file_id}/content", method="GET")
+    return JSONResponse(result)
 
-
-# ----------------------------------------------------------
-# 🗑️  Delete File
-# ----------------------------------------------------------
 @router.delete("/{file_id}")
-async def delete_file(request: Request, file_id: str):
-    """Delete a file upstream."""
-    endpoint = f"/v1/files/{file_id}"
-    response = await forward_openai(request, endpoint)
-    try:
-        await log_event("/v1/files/delete", response.status_code, f"file {file_id}")
-    except Exception:
-        pass
-    return response
+async def delete_file(file_id: str):
+    """
+    Mirrors OpenAI DELETE /v1/files/{file_id}
+    Deletes a file permanently.
+    """
+    result = await forward_openai_request(f"v1/files/{file_id}", method="DELETE")
+    return JSONResponse(result)
