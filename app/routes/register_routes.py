@@ -1,73 +1,67 @@
 # ==========================================================
-# app/routes/register_routes.py — Ground Truth Edition (2025.10)
+# app/routes/register_routes.py — Ground Truth Edition (Final)
 # ==========================================================
 """
-Registers all API route modules for the ChatGPT Team Relay.
-
-Order matters:
-  - Specific routes (models, files, vector stores, responses, realtime)
-    are mounted first.
-  - Passthrough proxy routes must be registered last to catch all
-    unmatched /v1/* calls.
+Registers all route modules for the ChatGPT Team Relay.
+Covers all OpenAI-compatible endpoints and internal APIs.
 """
 
 from fastapi import FastAPI
-from app.routes import (
-    models,
-    files,
-    vector_stores,
-    responses,
-    realtime,
-    relay_status,
-    tools
+
+# Import public OpenAI-compatible routes
+from . import (
+    models,         # /v1/models
+    files,          # /v1/files and /v1/files/images|videos
+    vector_stores,  # /v1/vector_stores
+    tools,          # /v1/responses/tools
+    realtime,       # /v1/realtime
+    responses,      # /v1/responses (core Responses API)
 )
-from app.api.passthrough_proxy import router as passthrough_router
+
+# Import internal relay-only APIs
+from app.api import (
+    tools_api,          # /v1/tools_api
+    passthrough_proxy,  # /v1/{path:path} fallback
+)
 
 
-# ----------------------------------------------------------
-# Route registration function
-# ----------------------------------------------------------
+# ==========================================================
+# Register All Routes
+# ==========================================================
 def register_routes(app: FastAPI):
     """
-    Attaches all endpoint routers to the FastAPI app
-    in the correct order for full OpenAI API compatibility.
+    Attach all API routes to the FastAPI app.
+    The order matters — passthrough proxy must come last.
     """
 
-    # Core OpenAI-compatible endpoints
-    app.include_router(models.router)          # /v1/models
-    app.include_router(files.router)           # /v1/files
-    app.include_router(vector_stores.router)   # /v1/vector_stores
-    app.include_router(responses.router)       # /v1/responses (+ tools)
-    app.include_router(realtime.router)        # /v1/realtime/*
-    app.include_router(tools.router)           # /v1/responses/tools
+    # ------------------------------
+    # Public OpenAI-compatible API
+    # ------------------------------
 
-    # Relay meta/status routes (optional)
-    app.include_router(relay_status.router)
+    # Models
+    app.include_router(models.router)
 
-    # Passthrough proxy — MUST be last
-    app.include_router(passthrough_router)
+    # Files and media endpoints
+    app.include_router(files.router)
 
-    # ------------------------------------------------------
-    # Root & Health Endpoints
-    # ------------------------------------------------------
-    @app.get("/", tags=["Meta"])
-    async def root():
-        """
-        Root endpoint reporting relay status, version, and documentation URLs.
-        Used by test_gt_all_endpoints.py::test_root_and_health
-        """
-        return {
-            "service": "ChatGPT Team Relay",
-            "status": "running",  # ✅ must include this exact field
-            "version": "Ground Truth Edition v2025.10",
-            "docs": "/docs",
-            "openapi_yaml": "/v1/openapi.yaml",
-            "health": "/health",
-        }
+    # Vector Stores (semantic search / retrieval)
+    app.include_router(vector_stores.router)
 
-    @app.get("/health", tags=["Health"])
-    async def health():
-        """
-        Lightweight readiness probe for load balancers or CI tests.
-        """
-        return {"status": "ok", "version": "2025.10"}
+    # Tools API (part of /v1/responses per OpenAI spec)
+    app.include_router(tools.router)
+
+    # Realtime streaming endpoints
+    app.include_router(realtime.router)
+
+    # Core Responses API (streaming, chain wait, etc.)
+    app.include_router(responses.router)
+
+    # ------------------------------
+    # Internal / Relay-Only APIs
+    # ------------------------------
+
+    # Local diagnostic API for relay tool registry
+    app.include_router(tools_api.router)
+
+    # Passthrough proxy — must be last to avoid intercepting real endpoints
+    app.include_router(passthrough_proxy.router)
