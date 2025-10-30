@@ -3,16 +3,38 @@ services:
     name: chatgpt-team-relay
     env: python
     plan: starter
+
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python main.py"
+
+    # Use uvicorn directly so the FastAPI app stays alive and streams correctly
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT --log-level info"
+
     envVars:
       - key: APP_MODE
         value: production
       - key: RELAY_VERSION
         value: "Ground Truth Edition v2025.10"
       - key: OPENAI_BASE_URL
-        value: https://api.openai.com
+        value: "https://api.openai.com"
       - key: OPENAI_API_KEY
-        sync: false
+        sync: false           # your secret key will be added via Render dashboard
+      - key: DEFAULT_MODEL
+        value: gpt-4o-mini
+      - key: ENABLE_STREAM
+        value: "true"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: CORS_ALLOW_ORIGINS
+        value: "https://chat.openai.com"
+      - key: CORS_ALLOW_METHODS
+        value: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+      - key: CORS_ALLOW_HEADERS
+        value: "*"
       - key: VALIDATION_SCHEMA_PATH
-        value: ChatGPT-API_reference_ground_truth-2025-10-29.json   # ✅ Add this line
+        value: "ChatGPT-API_reference_ground_truth-2025-10-29.json"
+      - key: RELAY_NAME
+        value: "ChatGPT Team Relay"
+      - key: RELAY_TIMEOUT
+        value: "120"
+
+    healthCheckPath: /health

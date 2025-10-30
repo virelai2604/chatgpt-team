@@ -4,29 +4,25 @@
 """
 Main FastAPI entrypoint for the ChatGPT Team Relay.
 Implements the Ground Truth Edition v2025.10 — fully OpenAI-compatible API mirror.
-This file wires together routes, middleware, and the universal passthrough proxy.
 """
 
+import os
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+from app.routes.register_routes import register_routes
 
 # ==========================================================
-# Route imports
+# Environment Loader
 # ==========================================================
-# Core OpenAI-compatible routes
-from app.routes.models import router as models_router
-from app.routes.files import router as files_router
-from app.routes.vector_stores import router as vector_stores_router
-from app.routes.responses import router as responses_router
-from app.routes.realtime import router as realtime_router
+load_dotenv()
 
-# Catch-all fallback proxy — must be last
-from app.api.passthrough_proxy import router as passthrough_router
-
-# Error handling utilities
-from app.utils.error_handler import register_error_handlers
-
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    print("[WARN] OPENAI_API_KEY not found in environment.")
+else:
+    print(f"[OK] Loaded OPENAI_API_KEY: {api_key[:8]}... (hidden)")
 
 # ==========================================================
 # App Initialization
@@ -38,8 +34,9 @@ app = FastAPI(
     version="2025.10",
 )
 
-# CORS Configuration
-# Matches OpenAI SDK defaults: fully permissive for public relay endpoints
+# ==========================================================
+# CORS
+# ==========================================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -48,36 +45,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # ==========================================================
 # Route Registration
 # ==========================================================
-# Order matters — specific routes first, catch-all last.
-app.include_router(models_router)         # /v1/models
-app.include_router(files_router)          # /v1/files
-app.include_router(vector_stores_router)  # /v1/vector_stores
-app.include_router(responses_router)      # /v1/responses (+tools)
-app.include_router(realtime_router)       # /v1/realtime/sessions
-
-# 👇 Must be registered last: fallback proxy to OpenAI
-app.include_router(passthrough_router)    # /v1/{path:path}
-
+register_routes(app)
 
 # ==========================================================
-# Error Handling
-# ==========================================================
-app = register_error_handlers(app)
-
-
-# ==========================================================
-# Root Healthcheck
+# Root + Health
 # ==========================================================
 @app.get("/", tags=["Meta"])
 async def root():
-    """
-    Relay root endpoint.
-    Returns relay service metadata and documentation pointers.
-    """
     return {
         "service": "ChatGPT Team Relay (Cloudflare / Render)",
         "status": "running",
@@ -85,24 +62,21 @@ async def root():
         "docs": "/docs",
         "openapi_spec": "/v1/openapi.yaml",
         "health": "/health",
-        "upstream": "https://api.openai.com",
+        "upstream": os.getenv("OPENAI_BASE_URL", "https://api.openai.com"),
     }
 
-
-# ==========================================================
-# Health Endpoint (explicit)
-# ==========================================================
 @app.get("/health", tags=["Health"])
 async def healthcheck():
     return {"status": "ok", "version": "2025.10"}
 
-
 # ==========================================================
-# Run (local only)
-# ==========================================================
-# Example:
-#   uvicorn app.main:app --reload --port 8080
+# Local Run
 # ==========================================================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8080)),
+        reload=True
+    )
