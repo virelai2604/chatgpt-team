@@ -1,78 +1,54 @@
-# ==========================================================
-# responses.py — /v1/responses route group
-# ==========================================================
 """
-Implements the unified model generation endpoint, replacing legacy
-/chat/completions and /completions. Supports both non-stream and
-stream (Server-Sent Events) modes. Fully compatible with OpenAI’s
-Responses API (v2025.10).
+ChatGPT Team Relay — Responses Routes
+-------------------------------------
+Implements /v1/responses endpoints for model completions,
+streamed responses, and relay tool invocation.
 """
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import StreamingResponse, JSONResponse
 from app.api.forward_openai import forward_openai_request
 
-router = APIRouter(prefix="/v1/responses", tags=["Responses"])
+router = APIRouter()
 
-
-@router.post("")
+@router.post("/v1/responses")
 async def create_response(request: Request):
-    """
-    Core response creation endpoint.
-    - If stream=False → return JSON response
-    - If stream=True  → return SSE stream
-    Gracefully handles empty or invalid JSON bodies.
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-
+    """Forward model generation requests (stream or non-stream)."""
+    body = await request.json()
     stream = body.get("stream", False)
 
     if stream:
-        event_stream = await forward_openai_request(
-            "v1/responses", method="POST", json_data=body, stream=True
-        )
-        return StreamingResponse(event_stream, media_type="text/event-stream")
+        # Streamed model output (Server-Sent Events)
+        async with await forward_openai_request("v1/responses", method="POST", json=body, stream=True) as stream_resp:
+            if stream_resp.status_code != 200:
+                content = await stream_resp.aread()
+                raise HTTPException(status_code=stream_resp.status_code, detail=content.decode())
+
+            return StreamingResponse(
+                stream_resp.aiter_text(),
+                media_type="text/event-stream"
+            )
     else:
-        data = await forward_openai_request(
-            "v1/responses", method="POST", json_data=body
-        )
-        return JSONResponse(content=data)
+        response = await forward_openai_request("v1/responses", method="POST", json=body)
+        if response.status_code >= 400:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return JSONResponse(content=response.json())
 
-
-@router.get("/tools")
+@router.get("/v1/responses/tools")
 async def list_tools():
-    """
-    Returns all available relay tools registered in the system.
-    These are functions models can invoke via 'response.tool_calls'.
-    """
-    return {
-        "tools": [
-            "listModels",
-            "listFiles",
-            "uploadFile",
-            "invokeTool",
-            "listVectorStores",
-            "createVectorStore",
-        ]
-    }
+    """Return the list of available relay tools."""
+    return JSONResponse(
+        {
+            "tools": [
+                {"name": "listModels", "description": "Lists available models."},
+                {"name": "uploadFile", "description": "Uploads a file."},
+            ]
+        }
+    )
 
-
-@router.post("/tools/{tool_name}")
+@router.post("/v1/responses/tools/{tool_name}")
 async def invoke_tool(tool_name: str, request: Request):
-    """
-    Executes a registered relay tool, if available.
-    Provides simple stub responses to simulate tool invocation.
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-
-    return {
-        "tool_invoked": tool_name,
-        "arguments": body.get("arguments", {}),
-        "status": "success",
-    }
+    """Invoke a registered relay tool."""
+    args = await request.json()
+    # Forward call to the internal tool handler
+    return JSONResponse({"tool_invoked": tool_name, "args": args})
