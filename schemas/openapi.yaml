@@ -1,45 +1,32 @@
 openapi: 3.1.0
 info:
   title: ChatGPT Team Relay API
-  description: >
-    Clean Ground Truth edition of the ChatGPT Team Relay API.
-    Mirrors OpenAI's 2025.10 specification with realtime, multimodal,
-    file, and vector store support.
-  version: "2025.10"
-
+  description: |
+    Clean Ground Truth edition of the ChatGPT Team Relay API. Mirrors OpenAI's 2025.10 specification with realtime, multimodal, file, and vector store support.
+  version: '2025.10'
 servers:
   - url: https://chatgpt-team-relay.onrender.com
     description: Production Relay Endpoint
-
 externalDocs:
   description: Full documentation
   url: https://chatgpt-team-relay.onrender.com/docs
-
-components:
-  schemas: {}
-  securitySchemes:
-    ApiKeyAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-
 paths:
-
   /v1/models:
     get:
       summary: List available models
       description: Returns all supported models, including realtime-capable ones.
-      tags: [Models]
+      tags:
+        - Models
       operationId: listModels
       responses:
         '200':
           description: Successful Response
-
   /v1/files:
     get:
       summary: List uploaded files
       description: Lists all files uploaded under the current API key.
-      tags: [Files]
+      tags:
+        - Files
       operationId: listFiles
       responses:
         '200':
@@ -47,7 +34,8 @@ paths:
     post:
       summary: Upload a new file
       description: Uploads a file for later use by models or tools.
-      tags: [Files]
+      tags:
+        - Files
       operationId: uploadFile
       requestBody:
         required: true
@@ -59,78 +47,116 @@ paths:
                 file:
                   type: string
                   format: binary
+                purpose:
+                  type: string
+                  description: The intended use for the uploaded file.
+                  example: assistants
       responses:
         '200':
           description: Successful Response
-
   /v1/files/{file_id}:
     get:
       summary: Retrieve file metadata
       description: Returns metadata for a specific uploaded file.
-      tags: [Files]
+      tags:
+        - Files
       operationId: getFile
       parameters:
         - name: file_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
     delete:
       summary: Delete a file
       description: Permanently removes a file from the system.
-      tags: [Files]
+      tags:
+        - Files
       operationId: deleteFile
       parameters:
         - name: file_id
           in: path
           required: true
-          schema: { type: string }
-
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
   /v1/vector_stores:
     get:
       summary: List vector stores
       description: Returns a list of vector stores.
-      tags: [Vector Stores]
+      tags:
+        - Vector Stores
       operationId: listVectorStores
+      responses:
+        '200':
+          description: Successful Response
     post:
       summary: Create vector store
       description: Creates a new vector store for embeddings or RAG.
-      tags: [Vector Stores]
+      tags:
+        - Vector Stores
       operationId: createVectorStore
-
+      responses:
+        '200':
+          description: Successful Response
   /v1/vector_stores/{store_id}:
     get:
       summary: Retrieve vector store metadata
       description: Returns details for a specific vector store.
-      tags: [Vector Stores]
+      tags:
+        - Vector Stores
       operationId: getVectorStore
       parameters:
         - name: store_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
     patch:
       summary: Update vector store
       description: Updates the attributes of a vector store.
-      tags: [Vector Stores]
+      tags:
+        - Vector Stores
       operationId: updateVectorStore
+      parameters:
+        - name: store_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
     delete:
       summary: Delete vector store
       description: Permanently deletes a vector store.
-      tags: [Vector Stores]
+      tags:
+        - Vector Stores
       operationId: deleteVectorStore
       parameters:
         - name: store_id
           in: path
           required: true
-          schema: { type: string }
-
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
   /v1/responses:
     post:
       summary: Create model response
-      description: >
-        Generates a model output using GPT or other models.
-        Replaces legacy /chat/completions and /completions endpoints.
-      tags: [Responses]
+      description: |
+        Generates a model output using GPT or other models. Replaces legacy /chat/completions and /completions endpoints.
+      tags:
+        - Responses
       operationId: createResponse
       requestBody:
         required: true
@@ -143,12 +169,11 @@ paths:
                   type: string
                   description: Model ID to use for generation.
                 input:
-                  description: >
-                    The input to send to the model — either a simple string prompt
-                    or an array of input content blocks (text, images, etc.).
+                  description: |
+                    The input to send to the model — either a simple string prompt or an array of input content blocks (text, images, etc.).
                   oneOf:
                     - type: string
-                      example: "Write a haiku about electrons."
+                      example: Write a haiku about electrons.
                     - type: array
                       items:
                         type: object
@@ -156,7 +181,7 @@ paths:
                         properties:
                           role:
                             type: string
-                            example: "user"
+                            example: user
                           content:
                             type: array
                             items:
@@ -165,55 +190,46 @@ paths:
                               properties:
                                 type:
                                   type: string
-                                  enum: [text, image]
+                                  enum:
+                                    - text
+                                    - image
                                 text:
                                   type: string
-                                  example: "Describe the photo."
+                                  example: Describe the photo.
                                 image_url:
                                   type: string
-                                  example: "data:image/png;base64,iVBOR..."
+                                  example: data:image/png;base64,iVBOR...
                 stream:
                   type: boolean
-                  description: >
+                  description: |
                     If true, the response is streamed back via SSE.
                   example: false
       responses:
         '200':
           description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                  object:
-                    type: string
-                  output:
-                    type: string
-                    description: Generated text or structured output.
-
   /v1/responses/tools:
     get:
       summary: List available tools
       description: Returns all registered relay tools that can be invoked by models.
-      tags: [Responses]
+      tags:
+        - Responses
       operationId: listTools
       responses:
         '200':
           description: Successful Response
-
   /v1/responses/tools/{tool_name}:
     post:
       summary: Invoke a registered tool
       description: Executes a relay tool (function calling).
-      tags: [Responses]
+      tags:
+        - Responses
       operationId: invokeTool
       parameters:
         - name: tool_name
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -226,14 +242,13 @@ paths:
       responses:
         '200':
           description: Tool executed successfully
-
   /v1/realtime/sessions:
     post:
       summary: Create realtime session
-      description: >
-        Creates a new realtime session configuration for GPT-4o models.
-        Returns session ID, secret, and WebSocket URL.
-      tags: [Realtime]
+      description: |
+        Creates a new realtime session configuration for GPT-4o models. Returns session ID, secret, and WebSocket URL.
+      tags:
+        - Realtime
       operationId: createRealtimeSession
       requestBody:
         required: true
@@ -242,29 +257,39 @@ paths:
             schema:
               type: object
               properties:
-                model: { type: string, example: gpt-4o-realtime-preview }
-                voice: { type: string, example: verse }
+                model:
+                  type: string
+                  example: gpt-4o-realtime-preview
+                voice:
+                  type: string
+                  example: verse
                 modalities:
                   type: array
-                  items: { type: string }
-                expires_in: { type: integer, example: 3600 }
-
+                  items:
+                    type: string
+                expires_in:
+                  type: integer
+                  example: 3600
+      responses:
+        '200':
+          description: Successful Response
   /v1/realtime/models:
     get:
       summary: List realtime models
       description: Returns all realtime-capable models supported by the relay.
-      tags: [Realtime]
+      tags:
+        - Realtime
       operationId: listRealtimeModels
       responses:
         '200':
           description: Successful Response
-
   /v1/realtime/events:
     post:
       summary: Send realtime event
-      description: >
+      description: |
         Sends a realtime event (text, audio, or image) to an active session.
-      tags: [Realtime]
+      tags:
+        - Realtime
       operationId: sendRealtimeEvent
       requestBody:
         required: true
@@ -273,47 +298,114 @@ paths:
             schema:
               type: object
               properties:
-                session_id: { type: string }
+                session_id:
+                  type: string
                 type:
                   type: string
                   enum:
                     - input_audio_buffer.append
                     - input_image.append
                     - response.create
-                data: { type: string }
+                data:
+                  type: string
+      responses:
+        '200':
+          description: Successful Response
     get:
       summary: Stream realtime events (SSE)
-      description: >
+      description: |
         Streams realtime model output and session events using Server-Sent Events.
-      tags: [Realtime]
+      tags:
+        - Realtime
       operationId: streamRealtimeEvents
       responses:
         '200':
           description: Successful SSE stream
-
   /v1/{path}:
     get:
       summary: Passthrough proxy (GET)
       description: Fallback route that forwards GET requests to OpenAI upstream.
-      tags: [Passthrough]
+      tags:
+        - Passthrough
       operationId: passthroughGet
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: The OpenAI API path segment to proxy.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
     post:
       summary: Passthrough proxy (POST)
       description: Fallback route that forwards POST requests to OpenAI upstream.
-      tags: [Passthrough]
+      tags:
+        - Passthrough
       operationId: passthroughPost
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: The OpenAI API path segment to proxy.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
     put:
       summary: Passthrough proxy (PUT)
       description: Fallback route that forwards PUT requests to OpenAI upstream.
-      tags: [Passthrough]
+      tags:
+        - Passthrough
       operationId: passthroughPut
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: The OpenAI API path segment to proxy.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
     patch:
       summary: Passthrough proxy (PATCH)
       description: Fallback route that forwards PATCH requests to OpenAI upstream.
-      tags: [Passthrough]
+      tags:
+        - Passthrough
       operationId: passthroughPatch
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: The OpenAI API path segment to proxy.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
     delete:
       summary: Passthrough proxy (DELETE)
       description: Fallback route that forwards DELETE requests to OpenAI upstream.
-      tags: [Passthrough]
+      tags:
+        - Passthrough
       operationId: passthroughDelete
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: The OpenAI API path segment to proxy.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful Response
+components:
+  schemas: {}
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
