@@ -6,9 +6,22 @@ info:
     Mirrors OpenAI's 2025.10 specification with realtime, multimodal,
     file, and vector store support.
   version: "2025.10"
+
 servers:
   - url: https://chatgpt-team-relay.onrender.com
     description: Production Relay Endpoint
+
+externalDocs:
+  description: Full documentation
+  url: https://chatgpt-team-relay.onrender.com/docs
+
+components:
+  schemas: {}
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
 
 paths:
 
@@ -179,6 +192,16 @@ paths:
                   output:
                     type: string
                     description: Generated text or structured output.
+
+  /v1/responses/tools:
+    get:
+      summary: List available tools
+      description: Returns all registered relay tools that can be invoked by models.
+      tags: [Responses]
+      operationId: listTools
+      responses:
+        '200':
+          description: Successful Response
 
   /v1/responses/tools/{tool_name}:
     post:
