@@ -1,131 +1,126 @@
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
-import json
+# ==========================================================
+# app/routes/tools.py — Ground Truth Tool Execution Layer (v2025.10)
+# ==========================================================
+"""
+Updated to support the compact registry format used by:
+  C:\Tools\ChatGpt Domain\Cloudflare\chatgpt-team\app\manifests\tools_manifest.json
+
+Example:
+{
+  "version": "2025.10",
+  "registry": [
+    "code_interpreter",
+    "file_search",
+    "file_upload",
+    "file_download",
+    "vector_store_retrieval",
+    "image_generation",
+    "web_search",
+    "video_generation",
+    "computer_use"
+  ]
+}
+"""
+
 import os
-import httpx
+import json
+import logging
+import importlib
+import inspect
+import asyncio
+from typing import Any, Dict
 
-router = APIRouter(prefix="/v1/responses/tools", tags=["Tools"])
+logger = logging.getLogger("tools")
 
-# Path to your local manifest (optional)
-TOOLS_MANIFEST_PATH = os.getenv("TOOLS_MANIFEST", "app/manifests/tools_manifest.json")
+TOOLS_MANIFEST_PATH = os.getenv(
+    "TOOLS_MANIFEST_PATH",
+    "app/manifests/tools_manifest.json"
+)
 
-# Upstream OpenAI configuration (for proxy fallback)
-OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
-API_KEY = os.getenv("OPENAI_API_KEY")
-HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+# Default convention mapping
+DEFAULT_TOOL_MAP = {
+    "code_interpreter": ("app.tools.code_interpreter", "run_code"),
+    "file_search": ("app.tools.file_search", "search_files"),
+    "file_upload": ("app.tools.file_upload", "upload_file"),
+    "file_download": ("app.tools.file_download", "download_file"),
+    "vector_store_retrieval": ("app.tools.vector_store_retrieval", "retrieve_vectors"),
+    "image_generation": ("app.tools.image_generation", "generate_image"),
+    "web_search": ("app.tools.web_search", "search_web"),
+    "video_generation": ("app.tools.video_generation", "generate_video"),
+    "computer_use": ("app.tools.computer_use", "run_computer_task"),
+}
 
-
-# ==========================================================
-# GET /v1/responses/tools
-# ==========================================================
-@router.get("")
-async def list_tools():
-    """
-    GET /v1/responses/tools
-    Returns a list of available tools compatible with Responses API.
-    Matches OpenAI's schema exactly:
-    {
-      "object": "list",
-      "data": [ { "id": "code_interpreter", "name": "...", "type": "function", ... } ]
-    }
-    """
-    tools = []
-
-    # Load local manifest if it exists
-    if os.path.exists(TOOLS_MANIFEST_PATH):
-        try:
-            with open(TOOLS_MANIFEST_PATH, "r") as f:
-                manifest = json.load(f)
-                # Manifest may define "registry": [...]
-                registry = manifest.get("registry", [])
-                for name in registry:
-                    tools.append({
-                        "id": name,
-                        "name": name,
-                        "type": "function",
-                        "description": f"Tool for {name.replace('_', ' ')}.",
-                        "function": {
-                            "name": name,
-                            "description": f"Executes the {name} tool.",
-                            "parameters": {}
-                        }
-                    })
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Invalid tools manifest: {e}")
-
-    # Fallback: define core built-ins if manifest missing or empty
-    if not tools:
-        tools = [
+# ----------------------------------------------------------
+# Load and normalize manifest
+# ----------------------------------------------------------
+if os.path.exists(TOOLS_MANIFEST_PATH):
+    with open(TOOLS_MANIFEST_PATH, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+        version = manifest.get("version", "unknown")
+        registry = manifest.get("registry", [])
+        _TOOL_REGISTRY = [
             {
-                "id": "code_interpreter",
-                "name": "code_interpreter",
-                "type": "function",
-                "description": "Executes Python code snippets in a secure sandbox.",
-                "function": {
-                    "name": "code_interpreter",
-                    "description": "Runs Python code.",
-                    "parameters": {"type": "object", "properties": {"code": {"type": "string"}}}
-                }
-            },
-            {
-                "id": "file_search",
-                "name": "file_search",
-                "type": "function",
-                "description": "Searches uploaded or vector-stored files for relevant content.",
-                "function": {
-                    "name": "file_search",
-                    "description": "Performs text search within uploaded files.",
-                    "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}
-                }
+                "name": t,
+                "module": DEFAULT_TOOL_MAP.get(t, (None, None))[0],
+                "function": DEFAULT_TOOL_MAP.get(t, (None, None))[1],
             }
+            for t in registry
+            if t in DEFAULT_TOOL_MAP
         ]
+        logger.info(f"🧩 Loaded {len(_TOOL_REGISTRY)} tools from manifest v{version}")
+else:
+    logger.warning(f"⚠️ tools_manifest.json not found at {TOOLS_MANIFEST_PATH}")
+    _TOOL_REGISTRY = []
 
-    return JSONResponse({"object": "list", "data": tools})
+
+# ----------------------------------------------------------
+# Registry helpers
+# ----------------------------------------------------------
+def list_registered_tools() -> list[dict]:
+    """Return a normalized tool registry list."""
+    return _TOOL_REGISTRY
 
 
-# ==========================================================
-# POST /v1/responses/tools/{tool_name}
-# ==========================================================
-@router.post("/{tool_name}")
-async def invoke_tool(tool_name: str, request: Request):
-    """
-    POST /v1/responses/tools/{tool_name}
-    Invokes a specific tool. 
-    If local, simulate execution; if not, forward to OpenAI upstream.
-    """
+def get_tool_entry(name: str) -> dict | None:
+    """Find tool definition by name."""
+    for t in _TOOL_REGISTRY:
+        if t["name"] == name:
+            return t
+    return None
+
+
+# ----------------------------------------------------------
+# Tool executor
+# ----------------------------------------------------------
+async def execute_tool_from_manifest(tool_name: str, params: Dict[str, Any]) -> Any:
+    """Execute a tool dynamically using its module + function."""
+    entry = get_tool_entry(tool_name)
+    if not entry:
+        raise ValueError(f"Tool '{tool_name}' not found in manifest registry.")
+
+    module_name, function_name = entry["module"], entry["function"]
+    if not module_name or not function_name:
+        raise ValueError(f"Invalid manifest entry for '{tool_name}'.")
+
+    logger.info(f"🛠️ Executing tool: {tool_name} ({function_name})")
+
     try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
+        module = importlib.import_module(module_name)
+        func = getattr(module, function_name)
+    except Exception as e:
+        raise RuntimeError(f"Failed to import {module_name}.{function_name}: {e}")
 
-    # Simulate known tools locally
-    if tool_name == "code_interpreter":
-        code = payload.get("code", "print('Hello')")
-        return {
-            "object": "tool_call",
-            "id": "local_tool_call_code_interpreter",
-            "tool_name": "code_interpreter",
-            "status": "succeeded",
-            "output": f"Executed code: {code}"
-        }
+    if not callable(func):
+        raise TypeError(f"Function {function_name} in {module_name} is not callable")
 
-    if tool_name == "file_search":
-        query = payload.get("query", "")
-        return {
-            "object": "tool_call",
-            "id": "local_tool_call_file_search",
-            "tool_name": "file_search",
-            "status": "succeeded",
-            "output": f"Search results for '{query}' (mock data)."
-        }
-
-    # Forward unknown tools to OpenAI upstream if available
-    async with httpx.AsyncClient() as client:
-        r = await client.post(
-            f"{OPENAI_BASE}/v1/responses/tools/{tool_name}",
-            headers=HEADERS,
-            json=payload,
-        )
-        if r.status_code == 404:
-            raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found upstream.")
-        return JSONResponse(r.json(), status_code=r.status_code)
+    try:
+        if inspect.iscoroutinefunction(func):
+            result = await func(**params)
+        else:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, lambda: func(**params))
+        logger.debug(f"✅ Tool {tool_name} completed successfully")
+        return result
+    except Exception as e:
+        logger.error(f"❌ Tool {tool_name} failed: {e}")
+        raise RuntimeError(f"Tool {tool_name} execution failed: {e}")

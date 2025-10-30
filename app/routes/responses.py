@@ -1,169 +1,158 @@
 # ==========================================================
-# app/routes/responses.py — Ground Truth Edition (Final)
+# app/routes/responses.py — Ground Truth Responses API (2025.10)
 # ==========================================================
 """
-Implements the OpenAI Responses API, including:
-- POST /v1/responses (stream + non-stream)
-- CHAIN_WAIT_MODE (polls until completion)
-- /v1/responses/tools list & invocation
+Implements the OpenAI-compatible /v1/responses endpoint.
+
+Includes:
+  • /v1/responses (non-stream and stream modes)
+  • /v1/responses/tools/* (dynamic tool execution)
+  • Chain Wait orchestration for multi-step tool usage
 """
 
+import logging
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
-import httpx
+from fastapi.responses import JSONResponse, StreamingResponse
+from typing import Dict, Any
 import asyncio
-import time
-import os
 import json
+import os
 
+from app.routes.tools import execute_tool_from_manifest, list_registered_tools
+from app.api.forward_openai import forward_openai_request
+
+# Router
 router = APIRouter(prefix="/v1/responses", tags=["Responses"])
+logger = logging.getLogger("responses")
 
-OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
-API_KEY = os.getenv("OPENAI_API_KEY")
-HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
-CHAIN_WAIT = os.getenv("CHAIN_WAIT_MODE", "false").lower() == "true"
+# Environment configuration
+CHAIN_WAIT_MODE = os.getenv("CHAIN_WAIT_MODE", "false").lower() == "true"
+ENABLE_STREAM = os.getenv("ENABLE_STREAM", "true").lower() == "true"
 
-TOOLS_MANIFEST = os.getenv("TOOLS_MANIFEST", "app/manifests/tools_manifest.json")
 
-# ==========================================================
-# Helper: Poll for response completion
-# ==========================================================
-async def _poll_until_complete(response_id: str, timeout: int = 60):
-    """Poll /v1/responses/{id} until completed or timeout."""
-    async with httpx.AsyncClient(timeout=None) as client:
-        start = time.time()
-        while time.time() - start < timeout:
-            r = await client.get(f"{OPENAI_BASE}/v1/responses/{response_id}", headers=HEADERS)
-            try:
-                j = r.json()
-            except Exception:
-                await asyncio.sleep(0.5)
-                continue
-            if "completed" in r.text or j.get("status") == "completed" or j.get("output"):
-                return j
-            await asyncio.sleep(0.5)
-        return {"id": response_id, "status": "timeout", "message": "Chain wait exceeded"}
-
-# ==========================================================
-# POST /v1/responses
-# ==========================================================
+# ----------------------------------------------------------
+# POST /v1/responses — Main Responses Endpoint
+# ----------------------------------------------------------
 @router.post("")
 async def create_response(request: Request):
-    body = await request.json()
-    stream_mode = bool(body.get("stream", False))
+    """Unified Responses endpoint with optional streaming."""
+    headers = request.headers
+    accept = headers.get("accept", "")
+    stream_mode = "text/event-stream" in accept or ENABLE_STREAM
 
-    # Non-stream mode
-    if not stream_mode:
-        async with httpx.AsyncClient(timeout=None) as client:
-            r = await client.post(f"{OPENAI_BASE}/v1/responses", headers=HEADERS, json=body)
-            if not CHAIN_WAIT:
-                return JSONResponse(r.json(), status_code=r.status_code)
-            j = r.json()
-            rid = j.get("id")
-            if not rid:
-                return JSONResponse(j, status_code=r.status_code)
-            result = await _poll_until_complete(rid)
-            result["chain_wait"] = True
-            return JSONResponse(result, status_code=200)
+    try:
+        body = await request.json()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
 
-    # Stream mode
-    async def event_stream():
-        async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream("POST", f"{OPENAI_BASE}/v1/responses", headers=HEADERS, json=body) as r:
-                async for chunk in r.aiter_bytes():
-                    yield chunk
+    model = body.get("model")
+    input_data = body.get("input")
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    if not model:
+        raise HTTPException(status_code=400, detail="Missing 'model' field in request body.")
 
-# ==========================================================
-# GET /v1/responses/{id}
-# ==========================================================
-@router.get("/{response_id}")
-async def get_response(response_id: str):
-    async with httpx.AsyncClient() as client:
-        r = await client.get(f"{OPENAI_BASE}/v1/responses/{response_id}", headers=HEADERS)
-    return JSONResponse(r.json(), status_code=r.status_code)
+    if stream_mode:
+        async def event_stream():
+            logger.info(f"🌀 Streaming response for model: {model}")
+            async for chunk in forward_openai_request(
+                endpoint="/v1/responses",
+                json_body=body,
+                stream=True,
+            ):
+                yield f"data: {json.dumps(chunk)}\n\n"
+            yield "data: [DONE]\n\n"
 
-# ==========================================================
-# DELETE /v1/responses/{id}
-# ==========================================================
-@router.delete("/{response_id}")
-async def delete_response(response_id: str):
-    async with httpx.AsyncClient() as client:
-        r = await client.delete(f"{OPENAI_BASE}/v1/responses/{response_id}", headers=HEADERS)
-    return JSONResponse(r.json(), status_code=r.status_code)
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
 
-# ==========================================================
-# POST /v1/responses/{id}/cancel
-# ==========================================================
-@router.post("/{response_id}/cancel")
-async def cancel_response(response_id: str):
-    async with httpx.AsyncClient() as client:
-        r = await client.post(f"{OPENAI_BASE}/v1/responses/{response_id}/cancel", headers=HEADERS)
-    return JSONResponse(r.json(), status_code=r.status_code)
+    # Non-streaming mode
+    result = await forward_openai_request(
+        endpoint="/v1/responses",
+        json_body=body,
+        stream=False,
+    )
+    return JSONResponse(result)
 
-# ==========================================================
-# GET /v1/responses/tools
-# ==========================================================
+
+# ----------------------------------------------------------
+# POST /v1/responses/tools/{tool_name} — Dynamic Tool Executor
+# ----------------------------------------------------------
+@router.post("/tools/{tool_name}")
+async def execute_tool(tool_name: str, request: Request):
+    """
+    Dynamically executes a registered tool defined in tools_manifest.json.
+
+    Example:
+        POST /v1/responses/tools/image_generation
+        { "prompt": "a futuristic city skyline" }
+    """
+    try:
+        params = await request.json()
+    except Exception:
+        params = {}
+
+    # Confirm tool is registered
+    registry = list_registered_tools()
+    tool_entry = next((t for t in registry if t["name"] == tool_name), None)
+    if not tool_entry:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found in manifest registry.")
+
+    logger.info(f"🧠 Executing tool: {tool_name} with params: {params}")
+
+    try:
+        result = await execute_tool_from_manifest(tool_name, params)
+        return JSONResponse({"tool": tool_name, "result": result})
+    except Exception as e:
+        logger.error(f"❌ Tool '{tool_name}' failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ----------------------------------------------------------
+# GET /v1/responses/tools — Tool Registry Listing
+# ----------------------------------------------------------
 @router.get("/tools")
 async def list_tools():
-    """Return a Ground Truth–formatted list of available tools."""
-    tools = []
-    if os.path.exists(TOOLS_MANIFEST):
-        try:
-            with open(TOOLS_MANIFEST, "r") as f:
-                manifest = json.load(f)
-                for name in manifest.get("registry", []):
-                    tools.append({
-                        "id": name,
-                        "name": name,
-                        "type": "function",
-                        "description": f"Tool for {name.replace('_', ' ')}."
-                    })
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Invalid tools manifest: {e}")
+    """List all dynamically registered tools."""
+    tools = list_registered_tools()
+    return {"count": len(tools), "tools": tools}
 
-    if not tools:
-        tools = [
-            {"id": "code_interpreter", "name": "code_interpreter", "type": "function", "description": "Executes Python code."},
-            {"id": "file_search", "name": "file_search", "type": "function", "description": "Searches uploaded files."},
-        ]
 
-    return JSONResponse({"object": "list", "data": tools})
+# ----------------------------------------------------------
+# CHAIN_WAIT_MODE (Optional: Orchestrated Tool Flow)
+# ----------------------------------------------------------
+@router.post("/chain/wait")
+async def chain_wait_mode(request: Request):
+    """
+    Demonstrates a chain-wait orchestration pattern:
+      - Accepts a sequence of steps (model + tool)
+      - Waits for each to complete before continuing
+    """
+    if not CHAIN_WAIT_MODE:
+        raise HTTPException(status_code=400, detail="CHAIN_WAIT_MODE is disabled.")
 
-# ==========================================================
-# POST /v1/responses/tools/{tool_name}
-# ==========================================================
-@router.post("/tools/{tool_name}")
-async def invoke_tool(tool_name: str, request: Request):
-    """Invoke a specific tool (local simulation or upstream passthrough)."""
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
+    body = await request.json()
+    steps = body.get("steps", [])
+    if not steps:
+        raise HTTPException(status_code=400, detail="No steps provided.")
 
-    # Local tool simulation
-    if tool_name == "code_interpreter":
-        code = payload.get("code", "")
-        return {
-            "object": "tool_call",
-            "id": f"local_tool_{tool_name}",
-            "status": "succeeded",
-            "output": f"Executed code: {code}"
-        }
+    outputs = []
+    for step in steps:
+        model = step.get("model")
+        input_data = step.get("input")
+        tool = step.get("tool")
+        params = step.get("params", {})
 
-    if tool_name == "file_search":
-        query = payload.get("query", "")
-        return {
-            "object": "tool_call",
-            "id": f"local_tool_{tool_name}",
-            "status": "succeeded",
-            "output": f"Search results for query: '{query}'"
-        }
+        logger.info(f"⏳ Executing chain step: {model or tool}")
+        if tool:
+            result = await execute_tool_from_manifest(tool, params)
+            outputs.append({"tool": tool, "result": result})
+        elif model:
+            result = await forward_openai_request(
+                endpoint="/v1/responses",
+                json_body={"model": model, "input": input_data},
+                stream=False,
+            )
+            outputs.append({"model": model, "response": result})
+        else:
+            outputs.append({"error": "Invalid step entry"})
 
-    # Forward to upstream if not local
-    async with httpx.AsyncClient(timeout=None) as client:
-        r = await client.post(f"{OPENAI_BASE}/v1/responses/tools/{tool_name}", headers=HEADERS, json=payload)
-    if r.status_code == 404:
-        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found upstream")
-    return JSONResponse(r.json(), status_code=r.status_code)
+    return JSONResponse({"steps": outputs})

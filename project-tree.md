@@ -5,6 +5,7 @@
   📄 check_env.py
   📄 generate_tree.py
   📄 main.py
+  📄 project-tree.md
   📄 pytest.ini
   📄 render.yaml
   📄 requirements.txt

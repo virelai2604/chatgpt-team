@@ -1,67 +1,81 @@
 # ==========================================================
-# app/routes/register_routes.py — Ground Truth Edition (Final)
+# app/routes/register_routes.py — Ground Truth Route Registry (2025.10)
 # ==========================================================
 """
-Registers all route modules for the ChatGPT Team Relay.
-Covers all OpenAI-compatible endpoints and internal APIs.
+Registers all /v1/* routes for the ChatGPT Team Relay.
+
+Implements:
+  • Core API routes (responses, conversations, files, realtime, etc.)
+  • Tool invocation via /v1/responses/tools/*
+  • Forward + passthrough proxy routes
+  • Full compliance with the OpenAI API 2025 spec
 """
 
+import logging
 from fastapi import FastAPI
 
-# Import public OpenAI-compatible routes
-from . import (
-    models,         # /v1/models
-    files,          # /v1/files and /v1/files/images|videos
-    vector_stores,  # /v1/vector_stores
-    tools,          # /v1/responses/tools
-    realtime,       # /v1/realtime
-    responses,      # /v1/responses (core Responses API)
+# ----------------------------------------------------------
+# Import core route definitions
+# ----------------------------------------------------------
+from app.routes import (
+    models,
+    files,
+    responses,
+    conversations,
+    realtime,
+    vector_stores,
 )
 
-# Import internal relay-only APIs
+# ----------------------------------------------------------
+# Import proxy + forwarder APIs
+# ----------------------------------------------------------
 from app.api import (
-    tools_api,          # /v1/tools_api
-    passthrough_proxy,  # /v1/{path:path} fallback
+    passthrough_proxy,
 )
 
+logger = logging.getLogger("register_routes")
 
-# ==========================================================
-# Register All Routes
-# ==========================================================
+
+# ----------------------------------------------------------
+# Route Registration Function
+# ----------------------------------------------------------
 def register_routes(app: FastAPI):
-    """
-    Attach all API routes to the FastAPI app.
-    The order matters — passthrough proxy must come last.
-    """
+    """Attach all FastAPI route modules to the main application."""
+    logger.info("🔗 Registering /v1 API routes...")
 
-    # ------------------------------
-    # Public OpenAI-compatible API
-    # ------------------------------
-
-    # Models
+    # ------------------------------------------------------
+    # Core OpenAI-Compatible Routes
+    # ------------------------------------------------------
     app.include_router(models.router)
-
-    # Files and media endpoints
     app.include_router(files.router)
-
-    # Vector Stores (semantic search / retrieval)
+    app.include_router(responses.router)
+    app.include_router(conversations.router)
+    app.include_router(realtime.router)
     app.include_router(vector_stores.router)
 
-    # Tools API (part of /v1/responses per OpenAI spec)
-    app.include_router(tools.router)
+    # ------------------------------------------------------
+    # Tool Execution (Dynamic)
+    # ------------------------------------------------------
+    # Tools are not static routers — they’re invoked dynamically
+    # by /v1/responses/tools/<tool_name> within responses.py.
+    logger.info("🧠 Tool execution handled dynamically via /v1/responses/tools")
 
-    # Realtime streaming endpoints
-    app.include_router(realtime.router)
-
-    # Core Responses API (streaming, chain wait, etc.)
-    app.include_router(responses.router)
-
-    # ------------------------------
-    # Internal / Relay-Only APIs
-    # ------------------------------
-
-    # Local diagnostic API for relay tool registry
-    app.include_router(tools_api.router)
-
-    # Passthrough proxy — must be last to avoid intercepting real endpoints
+    # ------------------------------------------------------
+    # Proxy Fallbacks (OpenAI passthrough)
+    # ------------------------------------------------------
     app.include_router(passthrough_proxy.router)
+
+    # ------------------------------------------------------
+    # Route Summary Log
+    # ------------------------------------------------------
+    total_routes = len(app.router.routes)
+    prefixes = sorted(set(
+        r.path.split("/")[1] for r in app.router.routes if r.path != "/"
+    ))
+
+    logger.info(f"✅ Registered {total_routes} routes.")
+    logger.info("🔗 Active route prefixes:")
+    for prefix in prefixes:
+        logger.info(f"   • /{prefix}")
+
+    logger.info("✅ All /v1 routes registered successfully.")
