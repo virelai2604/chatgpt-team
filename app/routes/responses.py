@@ -11,24 +11,21 @@ import httpx
 router = APIRouter(prefix="/v1/responses", tags=["Responses"])
 
 # ==========================================================
-# POST /v1/responses  →  Create model response (stream / non-stream)
+# POST /v1/responses → Create model response (stream / non-stream)
 # ==========================================================
 @router.post("")
 async def create_response(request: Request):
     """
     Mirrors OpenAI POST /v1/responses
-    Generates model output. Supports streaming (SSE) and standard JSON.
+    Supports both standard and Server-Sent Event (stream) responses.
     """
-    print("\n>>> [DEBUG] Incoming /v1/responses request")
-
     try:
         body = await request.json()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
 
-    pprint.pprint(body)
     is_stream = bool(body.get("stream", False))
-    print(f"[DEBUG] Stream mode: {is_stream}")
+    pprint.pprint({"stream": is_stream, "body": body})
 
     try:
         result = await forward_openai_request(
@@ -43,21 +40,16 @@ async def create_response(request: Request):
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
 
     if is_stream:
-        print("[DEBUG] Returning streaming response")
-        return StreamingResponse(result, media_type="text/event-stream")
+        return StreamingResponse(result, media_type="text/event-stream; charset=utf-8")
 
-    print("[DEBUG] Returning non-stream JSON response")
     return JSONResponse(result)
 
+
 # ==========================================================
-# POST /v1/responses/input_tokens  →  Token counting
+# POST /v1/responses/input_tokens → Token counting
 # ==========================================================
 @router.post("/input_tokens")
 async def count_input_tokens(request: Request):
-    """
-    Mirrors OpenAI POST /v1/responses/input_tokens
-    Returns token usage count for a given model + input.
-    """
     try:
         body = await request.json()
     except Exception:
@@ -70,27 +62,21 @@ async def count_input_tokens(request: Request):
     )
     return JSONResponse(result)
 
+
 # ==========================================================
-# GET /v1/responses/tools  →  Tool registry
+# GET /v1/responses/tools → Tool registry
 # ==========================================================
 @router.get("/tools")
 async def get_tools():
-    """
-    Mirrors OpenAI GET /v1/responses/tools
-    Returns all registered relay tools in OpenAI-compatible format.
-    """
     tools = await list_tools()
     return JSONResponse({"tools": tools})
 
+
 # ==========================================================
-# POST /v1/responses/tools/{tool_name}  →  Manual tool invocation
+# POST /v1/responses/tools/{tool_name} → Manual tool invocation
 # ==========================================================
 @router.post("/tools/{tool_name}")
 async def invoke_tool(tool_name: str, request: Request):
-    """
-    Mirrors OpenAI POST /v1/responses/tools/{tool_name}
-    Allows manual execution of a registered tool for debugging or testing.
-    """
     try:
         body = await request.json()
     except Exception:
