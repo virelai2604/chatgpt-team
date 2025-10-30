@@ -2,10 +2,9 @@
 # main.py — ChatGPT Team Relay (Ground Truth Edition)
 # ==========================================================
 """
-Main FastAPI entrypoint for the ChatGPT Team Relay.
-Implements the Ground Truth Edition v2025.10 — a fully
-OpenAI-compatible API mirror with streaming, tools, realtime,
-and CHAIN_WAIT support.
+Main FastAPI entrypoint for ChatGPT Team Relay.
+Implements the full OpenAI-compatible Responses API,
+including /responses/tools, streaming, and CHAIN_WAIT_MODE.
 """
 
 import os
@@ -14,52 +13,29 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.routes.register_routes import register_routes
+from app.middleware.validation import ResponseValidationMiddleware
+from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
 
-# ==========================================================
-# Environment Loader
-# ==========================================================
+# Load environment variables
 load_dotenv()
 
-api_key = os.getenv("OPENAI_API_KEY")
-chain_wait_mode = os.getenv("CHAIN_WAIT_MODE", "false").lower() == "true"
-openai_base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+CHAIN_WAIT_MODE = os.getenv("CHAIN_WAIT_MODE", "false").lower() == "true"
 
-# ==========================================================
-# Startup Info
-# ==========================================================
-if not api_key:
-    print("[WARN] OPENAI_API_KEY not found in environment.")
-else:
-    print(f"[OK] Loaded OPENAI_API_KEY: {api_key[:8]}... (hidden)")
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
 
-if chain_wait_mode:
-    print("[INFO] Relay is running in CHAIN_WAIT_MODE=True — waiting for object completion.")
-else:
-    print("[INFO] Relay is running in normal (non-wait) mode.")
-
-# ==========================================================
-# Logging Configuration
-# ==========================================================
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
-
-# ==========================================================
-# FastAPI Initialization
-# ==========================================================
+# Initialize FastAPI app
 app = FastAPI(
     title="ChatGPT Team Relay API",
-    description="Ground Truth compliant OpenAI-compatible relay (v2025.10)",
+    description="OpenAI-compatible relay with Responses, Tools, Files, and Realtime support",
     version="2025.10",
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# ==========================================================
-# CORS Configuration
-# ==========================================================
+# CORS setup
 allowed_origins = os.getenv("CORS_ALLOW_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -69,44 +45,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==========================================================
-# Route Registration
-# ==========================================================
+# Add validation middleware (optional schema validation)
+app.add_middleware(ResponseValidationMiddleware)
+app.add_middleware(P4OrchestratorMiddleware)
+
+# Register all /v1 routes
 register_routes(app)
 
-# ==========================================================
-# Meta + Health Endpoints
-# ==========================================================
 @app.get("/", tags=["Meta"])
 async def root():
-    """Root service metadata and status."""
+    """Root metadata endpoint"""
     return {
-        "service": "ChatGPT Team Relay (Cloudflare / Render)",
+        "service": "ChatGPT Team Relay",
         "status": "running",
         "version": "Ground Truth Edition v2025.10",
+        "chain_wait_mode": CHAIN_WAIT_MODE,
+        "openai_base": OPENAI_BASE,
         "docs": "/docs",
-        "openapi_spec": "/v1/openapi.yaml",
         "health": "/health",
-        "upstream": openai_base,
-        "chain_wait_mode": chain_wait_mode,
     }
 
-
 @app.get("/health", tags=["Health"])
-async def healthcheck():
-    """Simple readiness probe."""
+async def health():
+    """Basic health check"""
     return {"status": "ok", "version": "2025.10"}
 
-
-# ==========================================================
-# Local Run Entrypoint
-# ==========================================================
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=int(os.getenv("PORT", 8080)),
-        reload=True,
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8080)), reload=True)

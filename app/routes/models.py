@@ -1,28 +1,30 @@
-# ==========================================================
-# app/routes/models.py — Ground Truth OpenAI-Compatible Mirror
-# ==========================================================
-"""
-Mirrors OpenAI’s /v1/models endpoints for model listing and metadata retrieval.
-Implements full Ground Truth API compatibility.
-"""
-
-from fastapi import APIRouter
-from app.api.forward_openai import forward_openai_request
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
+import httpx
+import os
 
 router = APIRouter(prefix="/v1/models", tags=["Models"])
 
+OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+API_KEY = os.getenv("OPENAI_API_KEY")
+HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+
+
 @router.get("")
 async def list_models():
-    """
-    GET /v1/models
-    Returns all available models from the OpenAI upstream.
-    """
-    return await forward_openai_request("v1/models", method="GET")
+    """List available models (mirrors OpenAI API)."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{OPENAI_BASE}/v1/models", headers=HEADERS)
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text)
+    return JSONResponse(r.json())
+
 
 @router.get("/{model_id}")
 async def get_model(model_id: str):
-    """
-    GET /v1/models/{model_id}
-    Retrieves metadata for a specific model.
-    """
-    return await forward_openai_request(f"v1/models/{model_id}", method="GET")
+    """Retrieve metadata for a specific model."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{OPENAI_BASE}/v1/models/{model_id}", headers=HEADERS)
+    if r.status_code == 404:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return JSONResponse(r.json(), status_code=r.status_code)

@@ -1,56 +1,52 @@
 # ==========================================================
-# app/api/passthrough_proxy.py — Ground Truth Edition
+# app/api/passthrough_proxy.py — Ground Truth Edition (Final)
 # ==========================================================
 """
-Fallback proxy for any unmatched /v1/* routes.
-Passes through arbitrary requests to OpenAI’s upstream API.
+Fallback proxy that captures any unhandled OpenAI-style route
+and forwards it using forward_openai.py.
+Provides transparent compatibility with new or unknown endpoints.
 """
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
-from app.api.forward_openai import forward_openai_request
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
+from .forward_openai import forward_openai_request
 
-router = APIRouter(prefix="/v1", tags=["Passthrough"])
+router = APIRouter(prefix="/v1", tags=["Passthrough Proxy"])
 
-# ----------------------------------------------------------
-# Internal handler
-# ----------------------------------------------------------
-async def _handle(request: Request, path: str, method: str):
+
+@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def passthrough(request: Request, path: str):
+    """
+    Forward any unhandled /v1/* request to OpenAI.
+    Automatically preserves HTTP method, body, and headers.
+    """
+    method = request.method
+    content_type = request.headers.get("content-type", "")
+    body = None
+    files = None
+    data = None
+
     try:
-        # Parse JSON if possible, otherwise skip
-        body = None
-        if request.headers.get("content-type", "").startswith("application/json"):
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            files = {
+                k: (v.filename, await v.read(), v.content_type)
+                for k, v in form.items()
+                if hasattr(v, "filename")
+            }
+            data = {k: v for k, v in form.items() if not hasattr(v, "filename")}
+        elif "application/json" in content_type:
             body = await request.json()
-    except Exception:
-        body = None
+        else:
+            raw = await request.body()
+            body = raw.decode("utf-8") if raw else None
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
 
-    # Forward the request
-    return await forward_openai_request(f"v1/{path}", method=method, json=body)
+    # Determine if streaming
+    is_stream = "text/event-stream" in request.headers.get("accept", "")
 
-# ----------------------------------------------------------
-# Route definitions (matches OpenAI HTTP verbs)
-# ----------------------------------------------------------
-@router.get("/{path:path}")
-async def passthrough_get(request: Request, path: str):
-    """Fallback GET passthrough"""
-    return await _handle(request, path, "GET")
-
-@router.post("/{path:path}")
-async def passthrough_post(request: Request, path: str):
-    """Fallback POST passthrough"""
-    return await _handle(request, path, "POST")
-
-@router.put("/{path:path}")
-async def passthrough_put(request: Request, path: str):
-    """Fallback PUT passthrough"""
-    return await _handle(request, path, "PUT")
-
-@router.patch("/{path:path}")
-async def passthrough_patch(request: Request, path: str):
-    """Fallback PATCH passthrough"""
-    return await _handle(request, path, "PATCH")
-
-@router.delete("/{path:path}")
-async def passthrough_delete(request: Request, path: str):
-    """Fallback DELETE passthrough"""
-    return await _handle(request, path, "DELETE")
+    result = await forward_openai_request(
+        path=path,
+        method=method,
+        json=body if isinstance(body,

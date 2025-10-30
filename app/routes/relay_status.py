@@ -1,25 +1,20 @@
-# ==========================================================
-# app/routes/relay_status.py — Relay Health Check
-# ==========================================================
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+import os
+import platform
+import time
 
-router = APIRouter(tags=["Relay"])
+router = APIRouter(prefix="/v1/status", tags=["Status"])
 
-@router.get("/health")
-async def health():
-    """
-    Lightweight readiness probe for Render and tests.
-    """
-    return JSONResponse({"status": "ok", "service": "ChatGPT Team Relay"})
+start_time = time.time()
 
-@router.get("/v1/relay/status")
-async def relay_status():
-    """
-    Detailed relay health endpoint for diagnostics.
-    """
-    return JSONResponse({
-        "status": "operational",
-        "relay_version": "v2.3.4-fp",
-        "components": ["routes", "middleware", "forward_openai", "proxy"],
-    })
+@router.get("")
+async def status():
+    uptime = round(time.time() - start_time, 2)
+    return {
+        "relay": os.getenv("RELAY_NAME", "ChatGPT Team Relay"),
+        "version": os.getenv("BIFL_VERSION", "v2.3.4-fp"),
+        "environment": os.getenv("ENVIRONMENT", "production"),
+        "uptime": f"{uptime}s",
+        "platform": platform.system(),
+        "build_date": os.getenv("BUILD_DATE", "unknown")
+    }
