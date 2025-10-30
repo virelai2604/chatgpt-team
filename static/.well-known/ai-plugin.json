@@ -4,9 +4,7 @@
   "name_for_model": "chatgpt_team_relay",
   "description_for_human": "A relay service that mirrors the OpenAI API and supports tool invocation, file handling, and streaming responses.",
   "description_for_model": "Relay endpoint compatible with OpenAI Responses, Models, Files, and Realtime APIs.",
-  "auth": {
-    "type": "none"
-  },
+  "auth": { "type": "none" },
   "api": {
     "type": "openapi",
     "url": "https://chatgpt-team-relay.onrender.com/v1/openapi.yaml"

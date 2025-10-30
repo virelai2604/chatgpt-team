@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "2025.10",
   "registry": [
     "code_interpreter",
     "file_search",
@@ -7,14 +7,8 @@
     "file_download",
     "vector_store_retrieval",
     "image_generation",
-    "video_generation",
     "web_search",
+    "video_generation",
     "computer_use"
-  ],
-  "metadata": {
-    "description": "Official ChatGPT Team Relay tool manifest for OpenAI-compatible endpoints.",
-    "last_updated": "2025-10-29T00:00:00Z",
-    "maintainer": "ChatGPT Team Relay",
-    "schema_alignment": "OpenAI Relay v2.3"
-  }
+  ]
 }
