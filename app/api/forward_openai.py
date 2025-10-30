@@ -1,82 +1,129 @@
 # ==========================================================
-# app/api/forward_openai.py — Ground Truth Edition (Final)
+# app/api/forward_openai.py — OpenAI-Compatible Forward Proxy
 # ==========================================================
 """
-Unified OpenAI request forwarder for ChatGPT Team Relay.
-Handles:
-  - JSON and multipart requests
-  - Server-Sent Events (SSE) for streaming
-  - Standardized error handling
+Generic forwarder for OpenAI API requests.
+Used by passthrough_proxy.py, vector store calls, and SDK mirror routes.
+
+Implements full support for:
+  • All HTTP verbs (GET, POST, PUT, PATCH, DELETE)
+  • JSON and multipart/form-data
+  • Streaming (SSE-style)
+  • Graceful error forwarding
+
+Compliant with OpenAI Python SDK behavior (as of 2025.10).
 """
 
 import os
 import logging
 import httpx
+from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi import HTTPException
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
-TIMEOUT = float(os.getenv("FORWARD_TIMEOUT", 120.0))
+OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+TIMEOUT = float(os.getenv("OPENAI_TIMEOUT", "60"))
 
 logger = logging.getLogger("forward_openai")
 
+HEADERS = {
+    "Authorization": f"Bearer {OPENAI_API_KEY}",
+    "Accept": "application/json",
+}
 
+
+# ----------------------------------------------------------
+# Helper: Forward a request to OpenAI
+# ----------------------------------------------------------
 async def forward_openai_request(
     path: str,
     method: str = "GET",
     json: dict | None = None,
     data: dict | None = None,
     files: dict | None = None,
+    headers: dict | None = None,
     stream: bool = False,
-):
+) -> JSONResponse | StreamingResponse:
     """
-    Forward an arbitrary OpenAI-compatible request.
+    Forwards an HTTP request to the OpenAI API.
+    Supports full SDK compatibility (JSON, multipart, SSE).
     """
-    if not OPENAI_API_KEY:
-        raise HTTPException(status_code=401, detail="OPENAI_API_KEY not configured")
+    headers = headers or HEADERS
+    url = path if path.startswith("http") else f"{OPENAI_BASE.rstrip('/')}/{path.lstrip('/')}"
 
-    url = f"{OPENAI_BASE_URL.rstrip('/')}/{path.lstrip('/')}"
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Accept": "application/json, text/event-stream",
-    }
-
-    async def _iter_sse(resp):
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         try:
-            async for chunk in resp.aiter_text():
-                yield chunk
+            logger.info(f"🔁 Forwarding {method.upper()} → {url}")
+            resp = await client.request(
+                method=method.upper(),
+                url=url,
+                headers=headers,
+                json=json,
+                data=data,
+                files=files,
+                stream=stream,
+            )
         except Exception as e:
-            logger.warning(f"[Stream interrupted] {e}")
+            logger.error(f"Forwarding error to {url}: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT)) as client:
-            # Multipart (e.g., file upload)
-            if files or data:
-                resp = await client.request(method, url, headers=headers, data=data, files=files)
-                return JSONResponse(_safe_json(resp), status_code=resp.status_code)
+        # Handle streaming case
+        if stream:
+            async def _streamer():
+                async for chunk in resp.aiter_text():
+                    yield chunk
+            return StreamingResponse(_streamer(), media_type=resp.headers.get("content-type", "text/event-stream"))
 
-            # Streaming (SSE)
-            if stream:
-                async with client.stream(method, url, json=json, headers=headers) as resp:
-                    if resp.status_code != 200:
-                        raise HTTPException(status_code=resp.status_code, detail=await resp.aread())
-                    return StreamingResponse(_iter_sse(resp), media_type="text/event-stream")
+        # Regular JSON or binary
+        if "application/json" in resp.headers.get("content-type", ""):
+            try:
+                return JSONResponse(resp.json(), status_code=resp.status_code)
+            except Exception:
+                return JSONResponse({"error": "Invalid JSON from upstream"}, status_code=resp.status_code)
 
-            # Normal JSON
-            resp = await client.request(method, url, json=json, headers=headers)
-            return JSONResponse(_safe_json(resp), status_code=resp.status_code)
-
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="OpenAI request timed out")
-    except Exception as e:
-        logger.exception(f"[Forward error] {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Pass through binary content
+        return StreamingResponse(
+            resp.aiter_bytes(),
+            media_type=resp.headers.get("content-type", "application/octet-stream"),
+            status_code=resp.status_code,
+        )
 
 
-def _safe_json(resp: httpx.Response) -> dict:
-    """Attempt to parse JSON safely."""
-    try:
-        return resp.json()
-    except Exception:
-        return {"status_code": resp.status_code, "text": resp.text}
+# ----------------------------------------------------------
+# Proxy utility — used in passthrough_proxy
+# ----------------------------------------------------------
+async def forward_from_request(request: Request, subpath: str):
+    """
+    Generic proxy used by /v1/passthrough_proxy/* and /v1/forward_openai/*.
+    Replicates incoming method, headers, and body.
+    """
+    method = request.method.upper()
+    url = f"{OPENAI_BASE.rstrip('/')}/{subpath.lstrip('/')}"
+    headers = dict(request.headers)
+    headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
+
+    content_type = headers.get("content-type", "")
+    body = None
+    json_payload = None
+
+    if "application/json" in content_type:
+        try:
+            json_payload = await request.json()
+        except Exception:
+            json_payload = {}
+    elif "multipart/form-data" in content_type:
+        body = await request.form()
+    else:
+        body = await request.body()
+
+    logger.debug(f"Proxy {method} → {url}")
+
+    resp = await forward_openai_request(
+        path=url,
+        method=method,
+        json=json_payload,
+        data=body if not json_payload else None,
+        headers=headers,
+    )
+
+    return resp

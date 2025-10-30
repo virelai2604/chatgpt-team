@@ -1,52 +1,95 @@
 # ==========================================================
-# app/api/passthrough_proxy.py — Ground Truth Edition (Final)
+# app/api/passthrough_proxy.py — Safe Generic API Passthrough
 # ==========================================================
 """
-Fallback proxy that captures any unhandled OpenAI-style route
-and forwards it using forward_openai.py.
-Provides transparent compatibility with new or unknown endpoints.
+Provides a universal proxy for all unhandled /v1/* routes.
+
+Used to:
+  • Mirror unsupported OpenAI endpoints (assistants, threads, etc.)
+  • Gracefully deprecate legacy endpoints (return 404/410)
+  • Forward all other traffic to OpenAI transparently
+
+Requires forward_openai_request() from forward_openai.py.
 """
 
+import logging
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
-from .forward_openai import forward_openai_request
+from fastapi.responses import JSONResponse
+from app.api.forward_openai import forward_openai_request
 
-router = APIRouter(prefix="/v1", tags=["Passthrough Proxy"])
+router = APIRouter(prefix="/v1", tags=["Passthrough"])
+logger = logging.getLogger("passthrough_proxy")
+
+# ----------------------------------------------------------
+# Helper: identify deprecated routes
+# ----------------------------------------------------------
+DEPRECATED_ENDPOINTS = [
+    "assistants",
+    "threads",
+    "messages",
+    "runs",
+]
+
+def _is_deprecated(path: str) -> bool:
+    return any(path.strip("/").startswith(ep) for ep in DEPRECATED_ENDPOINTS)
 
 
-@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-async def passthrough(request: Request, path: str):
+# ----------------------------------------------------------
+# Catch-all passthrough handler
+# ----------------------------------------------------------
+@router.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def passthrough(request: Request, full_path: str):
     """
-    Forward any unhandled /v1/* request to OpenAI.
-    Automatically preserves HTTP method, body, and headers.
+    Forward any /v1/* endpoint not explicitly defined elsewhere.
     """
-    method = request.method
+    method = request.method.upper()
+    logger.info(f"🌐 Passthrough proxy → /v1/{full_path} [{method}]")
+
+    # Handle deprecated endpoints explicitly
+    if _is_deprecated(full_path):
+        # Return 410 Gone (spec-compliant for deprecated APIs)
+        return JSONResponse(
+            {
+                "error": {
+                    "message": f"The endpoint /v1/{full_path} is deprecated. "
+                               "Use /v1/responses instead.",
+                    "type": "deprecated_endpoint",
+                    "code": 410
+                }
+            },
+            status_code=410,
+        )
+
+    # Build forward path (strip redundant slashes)
+    forward_path = f"v1/{full_path}".lstrip("/")
+
+    # Parse request body
     content_type = request.headers.get("content-type", "")
     body = None
-    files = None
-    data = None
+    json_payload = None
+    if "application/json" in content_type:
+        try:
+            json_payload = await request.json()
+        except Exception:
+            json_payload = {}
+    elif "multipart/form-data" in content_type:
+        body = await request.form()
+    else:
+        raw = await request.body()
+        body = raw if raw else None
 
     try:
-        if "multipart/form-data" in content_type:
-            form = await request.form()
-            files = {
-                k: (v.filename, await v.read(), v.content_type)
-                for k, v in form.items()
-                if hasattr(v, "filename")
-            }
-            data = {k: v for k, v in form.items() if not hasattr(v, "filename")}
-        elif "application/json" in content_type:
-            body = await request.json()
-        else:
-            raw = await request.body()
-            body = raw.decode("utf-8") if raw else None
+        resp = await forward_openai_request(
+            path=forward_path,
+            method=method,
+            json=json_payload,
+            data=body if not json_payload else None,
+            headers=dict(request.headers),
+        )
+        return resp
+    except HTTPException as e:
+        logger.error(f"Proxy error: {e.detail}")
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
-
-    # Determine if streaming
-    is_stream = "text/event-stream" in request.headers.get("accept", "")
-
-    result = await forward_openai_request(
-        path=path,
-        method=method,
-        json=body if isinstance(body,
+        logger.error(f"Unexpected passthrough error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

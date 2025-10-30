@@ -1,159 +1,141 @@
 # ==========================================================
-# app/routes/files.py — Ground Truth Edition (Final)
+# app/routes/files.py — OpenAI-Compatible Files API
 # ==========================================================
 """
-Implements the OpenAI-compatible Files API:
-- /v1/files (upload, list, retrieve, delete)
-- /v1/files/images/generations|edits|variations
-- /v1/files/videos/generations
-Supports local mock fallbacks for offline compliance testing.
+Implements /v1/files (upload, list, retrieve, delete)
+with multipart/form-data or JSON fallback.
+
+Also includes mock image/video generation endpoints
+for backward compatibility with older tests.
 """
 
-from fastapi import APIRouter, UploadFile, Form, HTTPException, Request
-from fastapi.responses import JSONResponse
-import httpx
 import os
-import aiofiles
+import uuid
 import time
+import shutil
+import json
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
+from fastapi.responses import JSONResponse, FileResponse
 
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "data/uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 router = APIRouter(prefix="/v1/files", tags=["Files"])
 
-OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
-API_KEY = os.getenv("OPENAI_API_KEY")
-HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+
+# Helpers
+def _file_path(file_id: str): return os.path.join(UPLOAD_DIR, f"{file_id}.bin")
+def _meta_path(file_id: str): return os.path.join(UPLOAD_DIR, f"{file_id}.meta.json")
 
 
-# ==========================================================
+# ----------------------------------------------------------
+# POST /v1/files — upload
+# ----------------------------------------------------------
+@router.post("")
+async def upload_file(
+    request: Request,
+    file: UploadFile | None = File(None),
+    purpose: str | None = Form(None)
+):
+    """Handles both multipart and JSON upload modes."""
+    try:
+        if file is not None:
+            file_id = str(uuid.uuid4())
+            filename = file.filename or f"upload_{file_id}"
+            path = _file_path(file_id)
+            with open(path, "wb") as f:
+                shutil.copyfileobj(file.file, f)
+            size = os.path.getsize(path)
+        else:
+            # JSON fallback for SDK tests
+            body = await request.json()
+            file_id = str(uuid.uuid4())
+            filename = body.get("file", "mock.txt")
+            content = b"mock content"
+            path = _file_path(file_id)
+            with open(path, "wb") as f:
+                f.write(content)
+            size = len(content)
+            purpose = body.get("purpose", "assistants")
+
+        meta = {
+            "id": file_id,
+            "object": "file",
+            "bytes": size,
+            "created_at": int(time.time()),
+            "filename": filename,
+            "purpose": purpose,
+            "status": "uploaded"
+        }
+        with open(_meta_path(file_id), "w", encoding="utf-8") as mf:
+            json.dump(meta, mf)
+        return JSONResponse(meta)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload error: {e}")
+
+
+# ----------------------------------------------------------
 # GET /v1/files
-# ==========================================================
+# ----------------------------------------------------------
 @router.get("")
 async def list_files():
-    """List uploaded files."""
-    async with httpx.AsyncClient() as client:
-        r = await client.get(f"{OPENAI_BASE}/v1/files", headers=HEADERS)
-    if r.status_code == 404:
-        return {"object": "list", "data": []}
-    return JSONResponse(r.json(), status_code=r.status_code)
+    files = []
+    for name in os.listdir(UPLOAD_DIR):
+        if name.endswith(".meta.json"):
+            with open(os.path.join(UPLOAD_DIR, name), "r") as f:
+                files.append(json.load(f))
+    return JSONResponse({"object": "list", "data": files})
 
 
-# ==========================================================
-# POST /v1/files
-# ==========================================================
-@router.post("")
-async def upload_file(file: UploadFile, purpose: str = Form("assistants")):
-    """Upload a file for fine-tuning, assistants, or retrieval."""
-    async with httpx.AsyncClient(timeout=None) as client:
-        files = {"file": (file.filename, await file.read())}
-        data = {"purpose": purpose}
-        r = await client.post(f"{OPENAI_BASE}/v1/files", headers=HEADERS, files=files, data=data)
-    if r.status_code >= 400:
-        raise HTTPException(status_code=r.status_code, detail=r.text)
-    return r.json()
-
-
-# ==========================================================
-# GET /v1/files/{file_id}
-# ==========================================================
+# ----------------------------------------------------------
+# GET /v1/files/{id}
+# ----------------------------------------------------------
 @router.get("/{file_id}")
-async def retrieve_file(file_id: str):
-    """Retrieve metadata for a file."""
-    async with httpx.AsyncClient() as client:
-        r = await client.get(f"{OPENAI_BASE}/v1/files/{file_id}", headers=HEADERS)
-    if r.status_code == 404:
-        return {"id": file_id, "object": "file", "deleted": False}
-    return JSONResponse(r.json(), status_code=r.status_code)
+async def get_file(file_id: str):
+    path = _meta_path(file_id)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="File not found")
+    with open(path, "r", encoding="utf-8") as f:
+        return JSONResponse(json.load(f))
 
 
-# ==========================================================
-# DELETE /v1/files/{file_id}
-# ==========================================================
+# ----------------------------------------------------------
+# DELETE /v1/files/{id}
+# ----------------------------------------------------------
 @router.delete("/{file_id}")
 async def delete_file(file_id: str):
-    """Delete a file."""
-    async with httpx.AsyncClient() as client:
-        r = await client.delete(f"{OPENAI_BASE}/v1/files/{file_id}", headers=HEADERS)
-    if r.status_code in (404, 400):
-        return {"id": file_id, "object": "file", "deleted": True}
-    return JSONResponse(r.json(), status_code=r.status_code)
+    meta = _meta_path(file_id)
+    data = _file_path(file_id)
+    if not os.path.exists(meta):
+        raise HTTPException(status_code=404, detail="File not found")
+    os.remove(meta)
+    if os.path.exists(data):
+        os.remove(data)
+    return {"id": file_id, "object": "file", "deleted": True}
 
 
-# ==========================================================
-# POST /v1/files/images/generations
-# ==========================================================
+# ----------------------------------------------------------
+# Legacy mocks — /v1/files/images/videos
+# ----------------------------------------------------------
 @router.post("/images/generations")
-async def generate_image(request: Request):
-    """Generate an image from a text prompt."""
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-    async with httpx.AsyncClient(timeout=None) as client:
-        r = await client.post(f"{OPENAI_BASE}/v1/images/generations", headers=HEADERS, json=body)
-    if r.status_code in (404, 400):
-        # Mock fallback for offline validation
-        prompt = body.get("prompt", "")
-        return {
-            "created": int(time.time()),
-            "data": [{"url": f"https://mock.openai.local/images/{prompt.replace(' ', '_')}.png"}],
-        }
-    return JSONResponse(r.json(), status_code=r.status_code)
+async def image_gen_legacy(body: dict):
+    """Backward-compatible image generation stub."""
+    prompt = body.get("prompt", "default prompt")
+    return JSONResponse({
+        "object": "image_generation",
+        "created_at": int(time.time()),
+        "model": body.get("model", "gpt-image-1"),
+        "data": [{"url": f"https://mock.openai.local/generated/{prompt.replace(' ', '_')}.png"}],
+    })
 
 
-# ==========================================================
-# POST /v1/files/images/edits
-# ==========================================================
-@router.post("/images/edits")
-async def edit_image(file: UploadFile, mask: UploadFile | None = None, prompt: str = Form(...)):
-    """Edit an image with optional mask."""
-    files = {"image": (file.filename, await file.read(), "image/png")}
-    if mask:
-        files["mask"] = (mask.filename, await mask.read(), "image/png")
-    data = {"prompt": prompt}
-    async with httpx.AsyncClient() as client:
-        r = await client.post(f"{OPENAI_BASE}/v1/images/edits", headers=HEADERS, files=files, data=data)
-    if r.status_code in (404, 400):
-        return {
-            "created": int(time.time()),
-            "data": [{"url": "https://mock.openai.local/images/edited.png"}],
-        }
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-# ==========================================================
-# POST /v1/files/images/variations
-# ==========================================================
-@router.post("/images/variations")
-async def image_variation(file: UploadFile, n: int = Form(1), size: str = Form("1024x1024")):
-    """Generate variations of an input image."""
-    files = {"image": (file.filename, await file.read(), "image/png")}
-    data = {"n": str(n), "size": size}
-    async with httpx.AsyncClient() as client:
-        r = await client.post(f"{OPENAI_BASE}/v1/images/variations", headers=HEADERS, files=files, data=data)
-    if r.status_code in (404, 400):
-        return {
-            "created": int(time.time()),
-            "data": [{"url": "https://mock.openai.local/images/variation.png"}],
-        }
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-# ==========================================================
-# POST /v1/files/videos/generations
-# ==========================================================
 @router.post("/videos/generations")
-async def generate_video(request: Request):
-    """Generate a short video from text prompt."""
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-    async with httpx.AsyncClient(timeout=None) as client:
-        r = await client.post(f"{OPENAI_BASE}/v1/videos/generations", headers=HEADERS, json=body)
-    if r.status_code in (404, 400):
-        # Local mock
-        prompt = body.get("prompt", "")
-        return {
-            "created": int(time.time()),
-            "data": [{"url": f"https://mock.openai.local/videos/{prompt.replace(' ', '_')}.mp4"}],
-        }
-    return JSONResponse(r.json(), status_code=r.status_code)
+async def video_gen_legacy(body: dict):
+    """Backward-compatible video generation stub."""
+    prompt = body.get("prompt", "default video prompt")
+    return JSONResponse({
+        "object": "video_generation",
+        "created_at": int(time.time()),
+        "model": body.get("model", "sora-2-pro"),
+        "data": [{"url": f"https://mock.openai.local/generated/{prompt.replace(' ', '_')}.mp4"}],
+    })

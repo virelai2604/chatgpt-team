@@ -1,142 +1,142 @@
-# ==========================================================
-# app/api/tools_api.py — Relay-Internal Tools API
-# ==========================================================
-"""
-Internal ChatGPT Team Relay endpoint for inspecting and invoking
-registered tools directly.
+# ============================================================
+# app/api/tools_api.py — Unified Dynamic Tools API (Oct 2025)
+# ============================================================
 
-⚠️ This is *not* part of the OpenAI API spec.
-It exists for diagnostics, introspection, and debugging only.
-Public SDKs use /v1/responses/tools instead.
-"""
-
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
-import os, json
+import importlib
+import json
+import os
+import asyncio
+import traceback
 
-router = APIRouter(prefix="/v1/tools_api", tags=["Relay Tools API"])
+# ============================================================
+# Configuration
+# ============================================================
 
 TOOLS_MANIFEST_PATH = os.getenv("TOOLS_MANIFEST", "app/manifests/tools_manifest.json")
 
-# ==========================================================
-# Built-in relay tools (always available)
-# ==========================================================
-BUILTIN_TOOLS = [
-    {
-        "id": "code_interpreter",
-        "name": "code_interpreter",
-        "type": "function",
-        "description": "Executes Python code snippets in a sandboxed environment.",
-        "function": {
-            "name": "code_interpreter",
-            "parameters": {"type": "object", "properties": {"code": {"type": "string"}}},
-        },
-    },
-    {
-        "id": "file_search",
-        "name": "file_search",
-        "type": "function",
-        "description": "Searches uploaded or stored files for relevant content.",
-        "function": {
-            "name": "file_search",
-            "parameters": {"type": "object", "properties": {"query": {"type": "string"}}},
-        },
-    },
-    {
-        "id": "vector_store_retrieval",
-        "name": "vector_store_retrieval",
-        "type": "function",
-        "description": "Retrieves semantically similar documents from vector stores.",
-        "function": {
-            "name": "vector_store_retrieval",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "top_k": {"type": "integer", "default": 5},
-                },
-            },
-        },
-    },
-]
+if os.path.exists(TOOLS_MANIFEST_PATH):
+    with open(TOOLS_MANIFEST_PATH, "r") as f:
+        _manifest = json.load(f)
+        TOOL_REGISTRY = _manifest.get("registry", [])
+else:
+    TOOL_REGISTRY = []
 
-# ==========================================================
-# Helper: Load external manifest (if present)
-# ==========================================================
-def load_manifest_tools():
-    tools = BUILTIN_TOOLS.copy()
-    if os.path.exists(TOOLS_MANIFEST_PATH):
-        try:
-            with open(TOOLS_MANIFEST_PATH, "r") as f:
-                manifest = json.load(f)
-                for t in manifest.get("registry", []):
-                    if not any(x["id"] == t for x in tools):
-                        tools.append(
-                            {
-                                "id": t,
-                                "name": t,
-                                "type": "function",
-                                "description": f"Tool from manifest: {t}",
-                                "function": {"name": t, "parameters": {}},
-                            }
-                        )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Invalid tools manifest: {e}")
-    return tools
+router = APIRouter(prefix="/v1/tools", tags=["Tools"])
 
-# ==========================================================
-# GET /v1/tools_api
-# ==========================================================
+
+# ============================================================
+# GET /v1/tools
+# ============================================================
+
 @router.get("")
 async def list_tools():
     """
-    Returns the full relay tool registry — both built-ins and
-    any defined in tools_manifest.json.
+    Lists all available tools dynamically.
+    Schema matches OpenAI's responses tool listing spec.
     """
-    tools = load_manifest_tools()
+    tools = []
+
+    for name in TOOL_REGISTRY:
+        try:
+            module = importlib.import_module(f"app.tools.{name}")
+            schema = getattr(module, "TOOL_SCHEMA", {"name": name, "description": f"Tool {name}"})
+            tools.append({
+                "id": name,
+                "name": name,
+                "type": "function",
+                "description": schema.get("description", f"Tool: {name}"),
+                "function": {
+                    "name": schema.get("name", name),
+                    "description": schema.get("description", ""),
+                    "parameters": schema.get("parameters", {}),
+                },
+            })
+        except Exception as e:
+            tools.append({
+                "id": name,
+                "name": name,
+                "type": "function",
+                "description": f"Error loading tool: {e}",
+                "function": {
+                    "name": name,
+                    "description": "Load failed",
+                    "parameters": {},
+                },
+            })
+
     return JSONResponse({"object": "list", "data": tools})
 
-# ==========================================================
-# GET /v1/tools_api/{tool_name}
-# ==========================================================
-@router.get("/{tool_name}")
-async def get_tool(tool_name: str):
-    """Return metadata for a specific relay tool."""
-    tools = load_manifest_tools()
-    tool = next((t for t in tools if t["id"] == tool_name or t["name"] == tool_name), None)
-    if not tool:
-        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
-    return JSONResponse(tool)
 
-# ==========================================================
-# POST /v1/tools_api/{tool_name}
-# ==========================================================
+# ============================================================
+# POST /v1/tools/{tool_name}
+# ============================================================
+
 @router.post("/{tool_name}")
 async def invoke_tool(tool_name: str, request: Request):
     """
-    Simulate tool execution locally (for debugging).
-    Returns a standardized "tool_call" object like the
-    OpenAI Responses API would.
+    Executes a specific tool by its name, as defined in the manifest.
+    The result is formatted to match the OpenAI Responses ToolCall object:
+    {
+      "object": "tool_call",
+      "status": "succeeded",
+      "tool": "<tool_name>",
+      "output": <tool result>
+    }
     """
+    if tool_name not in TOOL_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found in manifest")
+
+    # Parse request body
     try:
         payload = await request.json()
     except Exception:
         payload = {}
 
-    tools = load_manifest_tools()
-    tool = next((t for t in tools if t["id"] == tool_name or t["name"] == tool_name), None)
-    if not tool:
-        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
+    # Import tool module
+    try:
+        module = importlib.import_module(f"app.tools.{tool_name}")
+    except ModuleNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Module 'app.tools.{tool_name}' not found")
 
-    # Simulate execution
-    output = f"Executed tool '{tool_name}' with input: {json.dumps(payload)}"
+    if not hasattr(module, "run"):
+        raise HTTPException(status_code=500, detail=f"Tool '{tool_name}' missing async 'run(payload)' method")
 
-    return JSONResponse(
-        {
+    # Run tool safely
+    try:
+        result = await module.run(payload)
+        return JSONResponse({
             "object": "tool_call",
-            "id": f"local_tool_{tool_name}",
-            "tool_name": tool_name,
             "status": "succeeded",
-            "output": output,
-        }
-    )
+            "tool": tool_name,
+            "output": result,
+        })
+    except Exception as e:
+        tb = traceback.format_exc()
+        raise HTTPException(status_code=500, detail=f"Tool '{tool_name}' execution failed: {e}\n{tb}")
+
+
+# ============================================================
+# POST /v1/tools/validate (optional)
+# ============================================================
+
+@router.post("/validate")
+async def validate_registry():
+    """
+    Validates that all tools in the manifest can be imported and executed.
+    Useful for CI/CD pipeline health checks.
+    """
+    errors = []
+    for name in TOOL_REGISTRY:
+        try:
+            mod = importlib.import_module(f"app.tools.{name}")
+            if not hasattr(mod, "run"):
+                errors.append(f"{name}: missing 'run()'")
+        except Exception as e:
+            errors.append(f"{name}: {e}")
+
+    if errors:
+        raise HTTPException(status_code=500, detail={"validation_errors": errors})
+
+    return {"status": "ok", "count": len(TOOL_REGISTRY)}

@@ -3,8 +3,13 @@
 # ==========================================================
 """
 Main FastAPI entrypoint for ChatGPT Team Relay.
-Implements the full OpenAI-compatible Responses API,
-including /responses/tools, streaming, and CHAIN_WAIT_MODE.
+Implements a complete OpenAI-compatible API surface:
+  • /v1/responses  (stream + non-stream)
+  • /v1/files       (multipart upload)
+  • /v1/responses/tools and /v1/tools
+  • /v1/conversations
+  • /v1/realtime
+and other /v1 routes.
 """
 
 import os
@@ -12,30 +17,53 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+
 from app.routes.register_routes import register_routes
 from app.middleware.validation import ResponseValidationMiddleware
 from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
 
-# Load environment variables
+
+# ==========================================================
+# Environment setup
+# ==========================================================
 load_dotenv()
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
 CHAIN_WAIT_MODE = os.getenv("CHAIN_WAIT_MODE", "false").lower() == "true"
+ENABLE_STREAM = os.getenv("ENABLE_STREAM", "false").lower() == "true"
+PORT = int(os.getenv("PORT", 8080))
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
+# ==========================================================
+# Logging
+# ==========================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger("chatgpt-team-relay")
 
-# Initialize FastAPI app
+logger.info("🚀 Launching ChatGPT Team Relay — Ground Truth Edition")
+logger.info(f"OpenAI Base: {OPENAI_BASE}")
+logger.info(f"CHAIN_WAIT_MODE={CHAIN_WAIT_MODE}, ENABLE_STREAM={ENABLE_STREAM}")
+if not API_KEY:
+    logger.warning("⚠️  No OPENAI_API_KEY found — upstream endpoints may fail.")
+
+
+# ==========================================================
+# FastAPI app
+# ==========================================================
 app = FastAPI(
     title="ChatGPT Team Relay API",
-    description="OpenAI-compatible relay with Responses, Tools, Files, and Realtime support",
+    description="OpenAI-compatible relay for Responses, Tools, Files, Vector Stores, and Realtime.",
     version="2025.10",
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# CORS setup
+# ----------------------------------------------------------
+# Middleware
+# ----------------------------------------------------------
 allowed_origins = os.getenv("CORS_ALLOW_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -44,32 +72,50 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Add validation middleware (optional schema validation)
 app.add_middleware(ResponseValidationMiddleware)
 app.add_middleware(P4OrchestratorMiddleware)
 
-# Register all /v1 routes
+# ----------------------------------------------------------
+# Route registration
+# ----------------------------------------------------------
 register_routes(app)
+logger.info("✅ All /v1 routes registered successfully.")
 
+
+# ==========================================================
+# Meta & health routes
+# ==========================================================
 @app.get("/", tags=["Meta"])
 async def root():
-    """Root metadata endpoint"""
     return {
         "service": "ChatGPT Team Relay",
         "status": "running",
         "version": "Ground Truth Edition v2025.10",
         "chain_wait_mode": CHAIN_WAIT_MODE,
+        "enable_stream": ENABLE_STREAM,
         "openai_base": OPENAI_BASE,
         "docs": "/docs",
         "health": "/health",
     }
 
+
 @app.get("/health", tags=["Health"])
 async def health():
-    """Basic health check"""
     return {"status": "ok", "version": "2025.10"}
 
+
+# ==========================================================
+# Entry point
+# ==========================================================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8080)), reload=True)
+
+    host = os.getenv("HOST", "0.0.0.0")
+    logger.info(f"🌐 Running on http://{host}:{PORT}")
+    uvicorn.run(
+        "main:app",
+        host=host,
+        port=PORT,
+        reload=True,
+        log_level="info",
+    )
