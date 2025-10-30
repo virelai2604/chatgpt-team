@@ -1,48 +1,45 @@
-# ==========================================================
-# vector_stores.py — /v1/vector_stores
-# ==========================================================
-import httpx
-from fastapi import APIRouter, Request
+"""
+ChatGPT Team Relay — Vector Store Routes
+----------------------------------------
+Implements CRUD proxy routes for /v1/vector_stores endpoints.
+"""
+
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse
 from app.api.forward_openai import forward_openai_request
 
-router = APIRouter(prefix="/v1/vector_stores", tags=["Vector Stores"])
+router = APIRouter()
 
-
-@router.get("")
+@router.get("/v1/vector_stores")
 async def list_vector_stores():
-    return await forward_openai_request("v1/vector_stores", method="GET")
+    """GET /v1/vector_stores"""
+    response = await forward_openai_request("v1/vector_stores", method="GET")
+    return JSONResponse(content=response.json())
 
-
-@router.post("")
+@router.post("/v1/vector_stores")
 async def create_vector_store(request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-    return await forward_openai_request("v1/vector_stores", method="POST", json_data=body)
-
-
-@router.get("/{store_id}")
-async def get_vector_store(store_id: str):
-    return await forward_openai_request(f"v1/vector_stores/{store_id}", method="GET")
-
-
-@router.patch("/{store_id}")
-async def update_vector_store(store_id: str, request: Request):
+    """POST /v1/vector_stores"""
     body = await request.json()
-    # Coerce metadata values to strings (OpenAI requires string values)
-    if "metadata" in body and isinstance(body["metadata"], dict):
-        body["metadata"] = {k: str(v) for k, v in body["metadata"].items()}
+    response = await forward_openai_request("v1/vector_stores", method="POST", json=body)
+    if response.status_code >= 400:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+    return JSONResponse(content=response.json())
 
-    try:
-        return await forward_openai_request(f"v1/vector_stores/{store_id}", method="PATCH", json_data=body)
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 405:
-            # Fallback to POST if PATCH unsupported
-            return await forward_openai_request(f"v1/vector_stores/{store_id}", method="POST", json_data=body)
-        raise
+@router.get("/v1/vector_stores/{store_id}")
+async def get_vector_store(store_id: str):
+    """GET /v1/vector_stores/{store_id}"""
+    response = await forward_openai_request(f"v1/vector_stores/{store_id}", method="GET")
+    return JSONResponse(content=response.json())
 
+@router.patch("/v1/vector_stores/{store_id}")
+async def update_vector_store(store_id: str, request: Request):
+    """PATCH /v1/vector_stores/{store_id}"""
+    body = await request.json()
+    response = await forward_openai_request(f"v1/vector_stores/{store_id}", method="PATCH", json=body)
+    return JSONResponse(content=response.json())
 
-@router.delete("/{store_id}")
+@router.delete("/v1/vector_stores/{store_id}")
 async def delete_vector_store(store_id: str):
-    return await forward_openai_request(f"v1/vector_stores/{store_id}", method="DELETE")
+    """DELETE /v1/vector_stores/{store_id}"""
+    response = await forward_openai_request(f"v1/vector_stores/{store_id}", method="DELETE")
+    return JSONResponse(content=response.json())

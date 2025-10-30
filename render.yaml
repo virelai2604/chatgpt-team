@@ -36,5 +36,9 @@ services:
         value: "ChatGPT Team Relay"
       - key: RELAY_TIMEOUT
         value: "120"
+      - key: CHAIN_WAIT_MODE
+        value: "true"
+
+
 
     healthCheckPath: /health
