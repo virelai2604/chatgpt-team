@@ -1,49 +1,28 @@
-# ============================================================
-# Tool: file_search — Semantic search mock
-# ============================================================
+"""
+app/tools/file_search.py
+Searches text content in a directory or list of files.
+"""
 
-import json
+import os
+import asyncio
 
-TOOL_SCHEMA = {
-    "name": "file_search",
-    "description": "Search uploaded files or vector stores for matching text.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "query": {"type": "string"},
-            "vector_store_id": {"type": "string"},
-            "top_k": {"type": "integer", "default": 3}
-        },
-        "required": ["query"]
-    },
-    "returns": {
-        "type": "object",
-        "properties": {
-            "matches": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "filename": {"type": "string"},
-                        "score": {"type": "number"},
-                        "excerpt": {"type": "string"}
-                    }
-                }
-            }
-        }
-    }
-}
+async def search_files(params: dict):
+    query = params.get("query", "")
+    directory = params.get("directory", ".")
+    if not query:
+        return {"error": "Missing search query."}
 
-async def run(payload: dict) -> dict:
-    """Performs mock semantic search across files."""
-    query = payload.get("query", "")
-    top_k = int(payload.get("top_k", 3))
-    results = [
-        {
-            "filename": f"mock_doc_{i+1}.txt",
-            "score": 0.9 - i * 0.1,
-            "excerpt": f"Snippet showing relevance to query: '{query}'"
-        }
-        for i in range(top_k)
-    ]
-    return {"matches": results}
+    results = []
+    for root, _, files in os.walk(directory):
+        for f in files:
+            try:
+                path = os.path.join(root, f)
+                with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                    content = fh.read()
+                    if query.lower() in content.lower():
+                        results.append(path)
+            except Exception:
+                continue
+
+    await asyncio.sleep(0.1)
+    return {"query": query, "matches": results[:50]}

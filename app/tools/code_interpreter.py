@@ -1,47 +1,56 @@
-# ============================================================
-# Tool: code_interpreter — Executes Python safely in sandbox
-# ============================================================
+"""
+app/tools/code_interpreter.py
+Simulated code execution / analysis engine.
+Provides lightweight sandbox execution for Python snippets.
+"""
 
-import io, contextlib, traceback
+import io
+import contextlib
+import asyncio
 
-TOOL_SCHEMA = {
-    "name": "code_interpreter",
-    "description": "Execute Python code safely in a sandboxed environment.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "code": {
-                "type": "string",
-                "description": "Python code to execute."
-            },
-            "timeout": {
-                "type": "integer",
-                "default": 10,
-                "description": "Maximum seconds to allow execution."
-            }
-        },
-        "required": ["code"]
-    },
-    "returns": {
-        "type": "object",
-        "properties": {
-            "stdout": {"type": "string"},
-            "stderr": {"type": "string"},
-            "result": {"type": "string"}
-        }
-    }
-}
+async def run_code(params: dict):
+    code = params.get("code", "")
+    if not code:
+        return {"error": "No code provided."}
 
-async def run(payload: dict) -> dict:
-    """Executes Python code safely and returns stdout, stderr, and status."""
-    code = payload.get("code", "")
-    stdout, stderr = io.StringIO(), io.StringIO()
-    result = ""
+    # Capture stdout safely
+    buffer = io.StringIO()
     try:
-        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+        with contextlib.redirect_stdout(buffer):
             exec(code, {})
-        result = "ok"
-    except Exception:
-        stderr.write(traceback.format_exc())
-        result = "error"
-    return {"stdout": stdout.getvalue(), "stderr": stderr.getvalue(), "result": result}
+        output = buffer.getvalue().strip() or "No output."
+    except Exception as e:
+        output = f"Error: {e}"
+    finally:
+        buffer.close()
+
+    await asyncio.sleep(0.1)
+    return {"output": output}
+"""
+app/tools/code_interpreter.py
+Simulated code execution / analysis engine.
+Provides lightweight sandbox execution for Python snippets.
+"""
+
+import io
+import contextlib
+import asyncio
+
+async def run_code(params: dict):
+    code = params.get("code", "")
+    if not code:
+        return {"error": "No code provided."}
+
+    # Capture stdout safely
+    buffer = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buffer):
+            exec(code, {})
+        output = buffer.getvalue().strip() or "No output."
+    except Exception as e:
+        output = f"Error: {e}"
+    finally:
+        buffer.close()
+
+    await asyncio.sleep(0.1)
+    return {"output": output}

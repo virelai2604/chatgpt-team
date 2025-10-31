@@ -1,28 +1,25 @@
-# ============================================================
-# Tool: computer_use — Simulated OS automation
-# ============================================================
+"""
+app/tools/computer_use.py
+Simulated computer interaction tool (Ground Truth placeholder).
+Used for file creation, environment introspection, etc.
+"""
 
-TOOL_SCHEMA = {
-    "name": "computer_use",
-    "description": "Simulate or perform computer actions (GUI automation, file I/O, typing).",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "action": {"type": "string"},
-            "target": {"type": "string"},
-            "text": {"type": "string"}
-        },
-        "required": ["action"]
-    },
-    "returns": {
-        "type": "object",
-        "properties": {"status": {"type": "string"}, "details": {"type": "string"}}
-    }
-}
+import os
+import asyncio
 
-async def run(payload: dict) -> dict:
-    """Simulates computer actions (mock)."""
-    action = payload.get("action", "")
-    target = payload.get("target", "")
-    text = payload.get("text", "")
-    return {"status": "ok", "details": f"Simulated {action} on {target or 'system'} with text='{text}'"}
+async def perform_action(params: dict):
+    action = params.get("action", "inspect")
+    path = params.get("path", ".")
+
+    if action == "list_files":
+        try:
+            files = os.listdir(path)
+        except Exception as e:
+            return {"error": str(e)}
+        return {"path": path, "files": files}
+
+    if action == "get_env":
+        return {"environment": dict(os.environ)}
+
+    await asyncio.sleep(0.1)
+    return {"message": f"Performed {action} successfully."}

@@ -1,126 +1,115 @@
 # ==========================================================
-# app/routes/tools.py — Ground Truth Tool Execution Layer (v2025.10)
+# app/routes/tools.py — Ground Truth 2025.11 Unified Tool Executor
 # ==========================================================
 """
-Updated to support the compact registry format used by:
-  C:\Tools\ChatGpt Domain\Cloudflare\chatgpt-team\app\manifests\tools_manifest.json
+Implements dynamic tool execution for /v1/responses/tools/*.
 
-Example:
-{
-  "version": "2025.10",
-  "registry": [
-    "code_interpreter",
-    "file_search",
-    "file_upload",
-    "file_download",
-    "vector_store_retrieval",
-    "image_generation",
-    "web_search",
-    "video_generation",
-    "computer_use"
-  ]
-}
+This router dynamically loads tool entrypoints from the manifest.
+Supports both modern ('entrypoint') and legacy ('module' + 'function') formats.
+Compatible with OpenAI Ground Truth SDK (2025.11) and GPT-5 Codex relay tests.
 """
 
-import os
-import json
-import logging
 import importlib
 import inspect
-import asyncio
+import logging
 from typing import Any, Dict
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
+
+from app.manifests import TOOLS_MANIFEST
 
 logger = logging.getLogger("tools")
-
-TOOLS_MANIFEST_PATH = os.getenv(
-    "TOOLS_MANIFEST_PATH",
-    "app/manifests/tools_manifest.json"
-)
-
-# Default convention mapping
-DEFAULT_TOOL_MAP = {
-    "code_interpreter": ("app.tools.code_interpreter", "run_code"),
-    "file_search": ("app.tools.file_search", "search_files"),
-    "file_upload": ("app.tools.file_upload", "upload_file"),
-    "file_download": ("app.tools.file_download", "download_file"),
-    "vector_store_retrieval": ("app.tools.vector_store_retrieval", "retrieve_vectors"),
-    "image_generation": ("app.tools.image_generation", "generate_image"),
-    "web_search": ("app.tools.web_search", "search_web"),
-    "video_generation": ("app.tools.video_generation", "generate_video"),
-    "computer_use": ("app.tools.computer_use", "run_computer_task"),
-}
-
-# ----------------------------------------------------------
-# Load and normalize manifest
-# ----------------------------------------------------------
-if os.path.exists(TOOLS_MANIFEST_PATH):
-    with open(TOOLS_MANIFEST_PATH, "r", encoding="utf-8") as f:
-        manifest = json.load(f)
-        version = manifest.get("version", "unknown")
-        registry = manifest.get("registry", [])
-        _TOOL_REGISTRY = [
-            {
-                "name": t,
-                "module": DEFAULT_TOOL_MAP.get(t, (None, None))[0],
-                "function": DEFAULT_TOOL_MAP.get(t, (None, None))[1],
-            }
-            for t in registry
-            if t in DEFAULT_TOOL_MAP
-        ]
-        logger.info(f"🧩 Loaded {len(_TOOL_REGISTRY)} tools from manifest v{version}")
-else:
-    logger.warning(f"⚠️ tools_manifest.json not found at {TOOLS_MANIFEST_PATH}")
-    _TOOL_REGISTRY = []
+router = APIRouter(prefix="/v1/tools", tags=["Tools"])
 
 
 # ----------------------------------------------------------
-# Registry helpers
+# Manifest utilities
 # ----------------------------------------------------------
-def list_registered_tools() -> list[dict]:
-    """Return a normalized tool registry list."""
-    return _TOOL_REGISTRY
+def load_tools_manifest() -> list[Dict[str, Any]]:
+    """Return loaded manifest list."""
+    return TOOLS_MANIFEST
 
 
-def get_tool_entry(name: str) -> dict | None:
-    """Find tool definition by name."""
-    for t in _TOOL_REGISTRY:
-        if t["name"] == name:
-            return t
-    return None
+def _resolve_entrypoint(tool_name: str, entry: Dict[str, Any]) -> tuple[str, str]:
+    """Resolve entrypoint path into (module, function)."""
+    if "entrypoint" in entry:
+        path = entry["entrypoint"]
+        if "." not in path:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Invalid entrypoint format for {tool_name}: '{path}'"
+            )
+        parts = path.split(".")
+        return ".".join(parts[:-1]), parts[-1]
+    elif "module" in entry and "function" in entry:
+        return entry["module"], entry["function"]
+    else:
+        raise HTTPException(status_code=500, detail=f"Invalid manifest entry for {tool_name}.")
 
 
 # ----------------------------------------------------------
-# Tool executor
+# Core executor
 # ----------------------------------------------------------
 async def execute_tool_from_manifest(tool_name: str, params: Dict[str, Any]) -> Any:
-    """Execute a tool dynamically using its module + function."""
-    entry = get_tool_entry(tool_name)
-    if not entry:
-        raise ValueError(f"Tool '{tool_name}' not found in manifest registry.")
+    """
+    Loads and executes a tool dynamically.
+    Supports both sync and async callables.
+    Raises HTTPException with OpenAI-style error payloads if something fails.
+    """
+    tools = load_tools_manifest()
+    match = next((t for t in tools if t.get("name") == tool_name and t.get("enabled", True)), None)
 
-    module_name, function_name = entry["module"], entry["function"]
-    if not module_name or not function_name:
-        raise ValueError(f"Invalid manifest entry for '{tool_name}'.")
-
-    logger.info(f"🛠️ Executing tool: {tool_name} ({function_name})")
+    if not match:
+        raise HTTPException(status_code=404, detail={"error": {"message": f"Tool '{tool_name}' not found", "type": "not_found"}})
 
     try:
-        module = importlib.import_module(module_name)
-        func = getattr(module, function_name)
+        module_path, function_name = _resolve_entrypoint(tool_name, match)
+    except HTTPException:
+        raise
     except Exception as e:
-        raise RuntimeError(f"Failed to import {module_name}.{function_name}: {e}")
-
-    if not callable(func):
-        raise TypeError(f"Function {function_name} in {module_name} is not callable")
+        raise HTTPException(status_code=500, detail={"error": {"message": f"Invalid manifest for {tool_name}: {e}", "type": "manifest_error"}})
 
     try:
+        mod = importlib.import_module(module_path)
+        func = getattr(mod, function_name, None)
+        if not callable(func):
+            raise HTTPException(status_code=500, detail={"error": {"message": f"Function '{function_name}' not callable in {module_path}", "type": "invalid_function"}})
+
         if inspect.iscoroutinefunction(func):
             result = await func(**params)
         else:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, lambda: func(**params))
-        logger.debug(f"✅ Tool {tool_name} completed successfully")
+            result = func(**params)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ Tool {tool_name} failed: {e}")
-        raise RuntimeError(f"Tool {tool_name} execution failed: {e}")
+        raise HTTPException(status_code=500, detail={"error": {"message": f"Execution error in tool '{tool_name}': {e}", "type": "execution_error"}})
+
+
+# ----------------------------------------------------------
+# API Endpoints (debug + manual)
+# ----------------------------------------------------------
+@router.get("")
+async def list_tools():
+    """List all registered tools (for debugging)."""
+    try:
+        tools = load_tools_manifest()
+        return JSONResponse({"object": "tool.list", "data": tools})
+    except Exception as e:
+        logger.exception("❌ Failed to list tools")
+        raise HTTPException(status_code=500, detail={"error": {"message": str(e), "type": "manifest_load_error"}})
+
+
+@router.post("/{tool_name}")
+async def invoke_tool(tool_name: str, request: Request):
+    """Manually invoke a tool (debug)."""
+    try:
+        payload = await request.json()
+        params = payload if isinstance(payload, dict) else {}
+        result = await execute_tool_from_manifest(tool_name, params)
+        return JSONResponse(result)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.exception(f"❌ Tool '{tool_name}' failed: {e}")
+        raise HTTPException(status_code=500, detail={"error": {"message": str(e), "type": "unexpected_error"}})
