@@ -1,41 +1,25 @@
-# ============================================================
-# Tool: file_upload — Stores mock file content
-# ============================================================
+"""
+app/tools/file_upload.py
+Uploads a local file to OpenAI-compatible file storage or a mock system.
+"""
 
-import os, time, uuid
+import os
+import httpx
+import asyncio
 
-TOOL_SCHEMA = {
-    "name": "file_upload",
-    "description": "Upload a file and return metadata for later use.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "filename": {"type": "string"},
-            "content": {"type": "string", "description": "Base64 or plain file data."}
-        },
-        "required": ["filename", "content"]
-    },
-    "returns": {
-        "type": "object",
-        "properties": {
-            "id": {"type": "string"},
-            "object": {"type": "string"},
-            "created_at": {"type": "string"},
-            "filename": {"type": "string"}
-        }
-    }
-}
+async def upload_file(params: dict):
+    filepath = params.get("filepath")
+    purpose = params.get("purpose", "assistants")
+    openai_url = params.get("openai_url", "https://api.openai.com/v1/files")
 
-async def run(payload: dict) -> dict:
-    """Stores file locally and returns metadata."""
-    file_id = str(uuid.uuid4())
-    filename = payload.get("filename", "file.txt")
-    content = payload.get("content", "")
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(content)
-    return {
-        "id": file_id,
-        "object": "file",
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "filename": filename
-    }
+    if not filepath or not os.path.exists(filepath):
+        return {"error": f"File not found: {filepath}"}
+
+    with open(filepath, "rb") as f:
+        files = {"file": (os.path.basename(filepath), f, "application/octet-stream")}
+        data = {"purpose": purpose}
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(openai_url, data=data, files=files)
+
+    await asyncio.sleep(0.1)
+    return {"filepath": filepath, "status": resp.status_code, "response": resp.text}

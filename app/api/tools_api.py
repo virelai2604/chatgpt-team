@@ -1,142 +1,98 @@
-# ============================================================
-# app/api/tools_api.py — Unified Dynamic Tools API (Oct 2025)
-# ============================================================
+# ==========================================================
+# app/api/tools_api.py — Ground Truth Tool API Bridge (v2025.11)
+# ==========================================================
+"""
+Provides the API bridge between /v1/responses and the tool execution system.
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
-import importlib
-import json
-import os
-import asyncio
-import traceback
+This module is responsible for:
+  • Invoking tools defined in the Ground Truth manifest.
+  • Returning unified error payloads in OpenAI-style schema.
+  • Listing available tools via the manifest loader.
 
-# ============================================================
-# Configuration
-# ============================================================
+This version is fully aligned with GPT-5 Codex / Ground Truth SDK 2025.11.
+"""
 
-TOOLS_MANIFEST_PATH = os.getenv("TOOLS_MANIFEST", "app/manifests/tools_manifest.json")
+import logging
+from fastapi import HTTPException
+from typing import Any, Dict
 
-if os.path.exists(TOOLS_MANIFEST_PATH):
-    with open(TOOLS_MANIFEST_PATH, "r") as f:
-        _manifest = json.load(f)
-        TOOL_REGISTRY = _manifest.get("registry", [])
-else:
-    TOOL_REGISTRY = []
+# Imports from the unified tools router
+from app.routes.tools import execute_tool_from_manifest, load_tools_manifest
 
-router = APIRouter(prefix="/v1/tools", tags=["Tools"])
+logger = logging.getLogger("tools_api")
 
 
-# ============================================================
-# GET /v1/tools
-# ============================================================
-
-@router.get("")
-async def list_tools():
+# ----------------------------------------------------------
+# Tool Execution
+# ----------------------------------------------------------
+async def execute_tool(tool_name: str, params: Dict[str, Any]) -> Any:
     """
-    Lists all available tools dynamically.
-    Schema matches OpenAI's responses tool listing spec.
+    Execute a tool by name using the Ground Truth manifest entrypoint.
+    Wraps execute_tool_from_manifest() and ensures OpenAI-style errors.
+
+    Args:
+        tool_name: The tool identifier (e.g., 'image_generation').
+        params: JSON parameters to be passed to the tool.
+    Returns:
+        Any result returned by the tool (JSON serializable).
+    Raises:
+        HTTPException: If the tool fails, is missing, or returns invalid output.
     """
-    tools = []
-
-    for name in TOOL_REGISTRY:
-        try:
-            module = importlib.import_module(f"app.tools.{name}")
-            schema = getattr(module, "TOOL_SCHEMA", {"name": name, "description": f"Tool {name}"})
-            tools.append({
-                "id": name,
-                "name": name,
-                "type": "function",
-                "description": schema.get("description", f"Tool: {name}"),
-                "function": {
-                    "name": schema.get("name", name),
-                    "description": schema.get("description", ""),
-                    "parameters": schema.get("parameters", {}),
-                },
-            })
-        except Exception as e:
-            tools.append({
-                "id": name,
-                "name": name,
-                "type": "function",
-                "description": f"Error loading tool: {e}",
-                "function": {
-                    "name": name,
-                    "description": "Load failed",
-                    "parameters": {},
-                },
-            })
-
-    return JSONResponse({"object": "list", "data": tools})
-
-
-# ============================================================
-# POST /v1/tools/{tool_name}
-# ============================================================
-
-@router.post("/{tool_name}")
-async def invoke_tool(tool_name: str, request: Request):
-    """
-    Executes a specific tool by its name, as defined in the manifest.
-    The result is formatted to match the OpenAI Responses ToolCall object:
-    {
-      "object": "tool_call",
-      "status": "succeeded",
-      "tool": "<tool_name>",
-      "output": <tool result>
-    }
-    """
-    if tool_name not in TOOL_REGISTRY:
-        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found in manifest")
-
-    # Parse request body
     try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-
-    # Import tool module
-    try:
-        module = importlib.import_module(f"app.tools.{tool_name}")
-    except ModuleNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Module 'app.tools.{tool_name}' not found")
-
-    if not hasattr(module, "run"):
-        raise HTTPException(status_code=500, detail=f"Tool '{tool_name}' missing async 'run(payload)' method")
-
-    # Run tool safely
-    try:
-        result = await module.run(payload)
-        return JSONResponse({
-            "object": "tool_call",
-            "status": "succeeded",
-            "tool": tool_name,
-            "output": result,
-        })
+        logger.info(f"🧠 [tools_api] Executing tool '{tool_name}' with params: {params}")
+        result = await execute_tool_from_manifest(tool_name, params)
+        logger.info(f"✅ [tools_api] Tool '{tool_name}' executed successfully.")
+        return result
+    except HTTPException:
+        raise  # Already formatted correctly
     except Exception as e:
-        tb = traceback.format_exc()
-        raise HTTPException(status_code=500, detail=f"Tool '{tool_name}' execution failed: {e}\n{tb}")
+        logger.exception(f"❌ [tools_api] Tool '{tool_name}' execution failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Execution error in '{tool_name}': {e}",
+                    "type": "execution_error",
+                }
+            },
+        )
 
 
-# ============================================================
-# POST /v1/tools/validate (optional)
-# ============================================================
-
-@router.post("/validate")
-async def validate_registry():
+# ----------------------------------------------------------
+# Manifest Access
+# ----------------------------------------------------------
+def get_registered_tools() -> list[Dict[str, Any]]:
     """
-    Validates that all tools in the manifest can be imported and executed.
-    Useful for CI/CD pipeline health checks.
+    Returns the list of registered tools from the loaded manifest.
+
+    This is a read-only helper for debugging and introspection.
     """
-    errors = []
-    for name in TOOL_REGISTRY:
-        try:
-            mod = importlib.import_module(f"app.tools.{name}")
-            if not hasattr(mod, "run"):
-                errors.append(f"{name}: missing 'run()'")
-        except Exception as e:
-            errors.append(f"{name}: {e}")
+    try:
+        logger.debug("📜 Loading registered tools from manifest")
+        tools = load_tools_manifest()
+        return tools
+    except Exception as e:
+        logger.exception("❌ Failed to load tools manifest")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": f"Failed to load tools manifest: {e}",
+                    "type": "manifest_error",
+                }
+            },
+        )
 
-    if errors:
-        raise HTTPException(status_code=500, detail={"validation_errors": errors})
 
-    return {"status": "ok", "count": len(TOOL_REGISTRY)}
+# ----------------------------------------------------------
+# Compatibility Helpers (optional)
+# ----------------------------------------------------------
+def tool_exists(name: str) -> bool:
+    """
+    Check whether a tool is registered in the current manifest.
+    """
+    try:
+        tools = load_tools_manifest()
+        return any(t.get("name") == name and t.get("enabled", True) for t in tools)
+    except Exception:
+        return False

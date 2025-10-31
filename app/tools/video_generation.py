@@ -1,35 +1,19 @@
-# ============================================================
-# Tool: video_generation — Mock video generator
-# ============================================================
+"""
+app/tools/video_generation.py
+Simulates video generation based on prompt and model.
+"""
 
-import uuid
+import asyncio
 
-TOOL_SCHEMA = {
-    "name": "video_generation",
-    "description": "Create or remix short videos from text prompts.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "prompt": {"type": "string"},
-            "seconds": {"type": "integer", "default": 10},
-            "remixed_from_video_id": {"type": "string", "nullable": True}
-        },
-        "required": ["prompt"]
-    },
-    "returns": {
-        "type": "object",
-        "properties": {
-            "id": {"type": "string"},
-            "status": {"type": "string"},
-            "url": {"type": "string"},
-            "duration": {"type": "integer"}
-        }
+async def generate_video(params: dict):
+    prompt = params.get("prompt", "")
+    model = params.get("model", "sora-2-pro")
+    duration = int(params.get("seconds", 3))
+
+    await asyncio.sleep(0.2)
+    return {
+        "model": model,
+        "prompt": prompt,
+        "duration_s": duration,
+        "video_url": f"https://fakevideo.ai/render?model={model}&prompt={prompt.replace(' ', '+')}&dur={duration}",
     }
-}
-
-async def run(payload: dict) -> dict:
-    """Simulates video generation."""
-    vid = str(uuid.uuid4())
-    prompt = payload.get("prompt", "")
-    sec = int(payload.get("seconds", 10))
-    return {"id": vid, "status": "completed", "url": f"https://mock.videos/{vid}.mp4", "duration": sec}

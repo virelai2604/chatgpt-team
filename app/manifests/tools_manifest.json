@@ -1,14 +1,62 @@
 {
-  "version": "2025.10",
-  "registry": [
-    "code_interpreter",
-    "file_search",
-    "file_upload",
-    "file_download",
-    "vector_store_retrieval",
-    "image_generation",
-    "web_search",
-    "video_generation",
-    "computer_use"
+  "version": "2025.11",
+  "source": "Ground Truth Relay — OpenAI-Compatible Specification",
+  "tools": [
+    {
+      "name": "code_interpreter",
+      "description": "Executes Python code safely in an isolated sandbox environment.",
+      "entrypoint": "app.tools.code_interpreter.run_code",
+      "category": "core",
+      "enabled": true
+    },
+    {
+      "name": "computer_use",
+      "description": "Performs system-level simulated actions such as file listing and environment inspection.",
+      "entrypoint": "app.tools.computer_use.perform_action",
+      "category": "system",
+      "enabled": true
+    },
+    {
+      "name": "file_download",
+      "description": "Downloads a remote file and provides metadata such as size and saved path.",
+      "entrypoint": "app.tools.file_download.download_file",
+      "category": "file_io",
+      "enabled": true
+    },
+    {
+      "name": "file_search",
+      "description": "Searches for a given text query in files under a specified directory.",
+      "entrypoint": "app.tools.file_search.search_files",
+      "category": "file_io",
+      "enabled": true
+    },
+    {
+      "name": "image_generation",
+      "description": "Generates an image from a text prompt using GPT-Image-1.",
+      "entrypoint": "app.tools.image_generation.generate_image",
+      "category": "media",
+      "enabled": true
+    },
+    {
+      "name": "video_generation",
+      "description": "Generates a video clip from a text prompt using Sora-2 models.",
+      "entrypoint": "app.tools.video_generation.generate_video",
+      "category": "media",
+      "enabled": true
+    },
+    {
+      "name": "vector_store_retrieval",
+      "description": "Performs similarity search across vector stores to retrieve relevant documents.",
+      "entrypoint": "app.tools.vector_store_retrieval.retrieve_vectors",
+      "category": "ml",
+      "enabled": true
+    },
+    {
+      "name": "web_search",
+      "description": "Performs live or simulated web search queries using the DuckDuckGo API.",
+      "entrypoint": "app.tools.web_search.perform_search",
+      "category": "external",
+      "enabled": true
+    }
   ]
 }

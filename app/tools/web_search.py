@@ -1,29 +1,25 @@
-# ============================================================
-# Tool: web_search — Mock search provider
-# ============================================================
+"""
+app/tools/web_search.py
+Performs live web search via DuckDuckGo or fallback mock results.
+"""
 
-TOOL_SCHEMA = {
-    "name": "web_search",
-    "description": "Perform a real-time web search and return the top results.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "query": {"type": "string"},
-            "max_results": {"type": "integer", "default": 5}
-        },
-        "required": ["query"]
-    },
-    "returns": {
-        "type": "array",
-        "items": {
-            "type": "object",
-            "properties": {"title": {"type": "string"}, "url": {"type": "string"}, "snippet": {"type": "string"}}
-        }
-    }
-}
+import httpx
+import asyncio
 
-async def run(payload: dict) -> list:
-    """Returns mock search results."""
-    query = payload.get("query", "")
-    n = int(payload.get("max_results", 5))
-    return [{"title": f"Result {i+1}", "url": f"https://example.com/{i}", "snippet": f"Mock snippet for '{query}'"} for i in range(n)]
+async def perform_search(params: dict):
+    query = params.get("query", "")
+    if not query:
+        return {"error": "Missing 'query' parameter."}
+
+    # Use DuckDuckGo API (no API key needed)
+    url = f"https://api.duckduckgo.com/?q={query}&format=json"
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(url)
+        if resp.status_code == 200:
+            data = resp.json()
+            related = data.get("RelatedTopics", [])
+            results = [t.get("Text", "") for t in related if t.get("Text")]
+            return {"query": query, "results": results[:5]}
+
+    await asyncio.sleep(0.1)
+    return {"query": query, "results": ["No results found."]}
