@@ -1,129 +1,76 @@
-# ==========================================================
-# app/api/conversations.py — Ground Truth Conversations API
-# ==========================================================
 """
-Implements /v1/conversations — a lightweight context management layer.
-
-Each conversation acts as a container for messages, metadata, and state
-shared across multiple /v1/responses calls.
-
-This module mirrors the OpenAI API behavior (2025.10 spec):
-  - Stateless by default (in-memory)
-  - Simple CRUD routes for listing, creating, fetching, and deleting
-  - Optional "metadata" and "messages" fields
-  - No external database required
+conversations.py — /v1/conversations
+Implements conversation and thread memory management.
+Ground Truth API v1.7 + OpenAI SDK 2.6.1 compliant.
 """
 
-import uuid
-import time
-import logging
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
+from typing import Dict, Any
+import time
+import uuid
+from app.utils.logger import logger
 
-logger = logging.getLogger("conversations")
-router = APIRouter(prefix="/v1/conversations", tags=["Conversations"])
+router = APIRouter()
 
-# ----------------------------------------------------------
-# In-memory store for conversation state
-# ----------------------------------------------------------
-_CONVERSATIONS: dict[str, dict] = {}
+# In-memory store for demo (replace with DB later)
+CONVERSATIONS: Dict[str, Dict[str, Any]] = {}
 
-
-# ----------------------------------------------------------
-# Helper: create a new conversation object
-# ----------------------------------------------------------
-def _new_conversation(title: str | None = None, metadata: dict | None = None):
-    convo_id = f"cnv_{uuid.uuid4().hex[:24]}"
-    now = int(time.time())
-    conversation = {
-        "id": convo_id,
-        "object": "conversation",
-        "title": title or f"Conversation {convo_id[-4:]}",
-        "created_at": now,
-        "updated_at": now,
-        "metadata": metadata or {},
-        "messages": [],
-    }
-    _CONVERSATIONS[convo_id] = conversation
-    logger.info(f"🗨️ Created conversation {convo_id}")
-    return conversation
-
-
-# ----------------------------------------------------------
-# Routes
-# ----------------------------------------------------------
-
-@router.get("")
-async def list_conversations():
-    """List all active conversations."""
-    return {"object": "list", "data": list(_CONVERSATIONS.values())}
-
-
-@router.post("")
+@router.post("/v1/conversations")
 async def create_conversation(request: Request):
-    """Create a new conversation."""
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-
-    title = payload.get("title")
-    metadata = payload.get("metadata", {})
-    convo = _new_conversation(title, metadata)
-    return JSONResponse(convo, status_code=201)
-
-
-@router.get("/{conversation_id}")
-async def get_conversation(conversation_id: str):
-    """Retrieve a single conversation by ID."""
-    convo = _CONVERSATIONS.get(conversation_id)
-    if not convo:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    return convo
-
-
-@router.delete("/{conversation_id}")
-async def delete_conversation(conversation_id: str):
-    """Delete a conversation."""
-    if conversation_id not in _CONVERSATIONS:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    del _CONVERSATIONS[conversation_id]
-    logger.info(f"🗑️ Deleted conversation {conversation_id}")
-    return {"deleted": True, "id": conversation_id}
-
-
-@router.post("/{conversation_id}/messages")
-async def append_message(conversation_id: str, request: Request):
-    """
-    Append a message to a conversation.
-    Typically used internally by /v1/responses to maintain state.
-    """
-    convo = _CONVERSATIONS.get(conversation_id)
-    if not convo:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-
-    try:
-        payload = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-
-    message = {
-        "id": f"msg_{uuid.uuid4().hex[:24]}",
-        "role": payload.get("role", "user"),
-        "content": payload.get("content"),
-        "timestamp": int(time.time()),
+    body = await request.json()
+    conv_id = f"conv_{uuid.uuid4().hex[:10]}"
+    CONVERSATIONS[conv_id] = {
+        "id": conv_id,
+        "object": "conversation",
+        "created": int(time.time()),
+        "metadata": body.get("metadata", {}),
+        "items": []
     }
+    logger.info(f"Created conversation {conv_id}")
+    return JSONResponse(CONVERSATIONS[conv_id])
 
-    convo["messages"].append(message)
-    convo["updated_at"] = int(time.time())
-    logger.debug(f"💬 Added message to {conversation_id}")
-    return message
-
-
-@router.get("/{conversation_id}/messages")
-async def list_messages(conversation_id: str):
-    """List messages within a conversation."""
-    convo = _CONVERSATIONS.get(conversation_id)
-    if not convo:
+@router.get("/v1/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str):
+    conv = CONVERSATIONS.get(conversation_id)
+    if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    return {"object": "list", "data": convo["messages"]}
+    return conv
+
+@router.post("/v1/conversations/{conversation_id}")
+async def update_conversation(conversation_id: str, request: Request):
+    body = await request.json()
+    conv = CONVERSATIONS.get(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conv["metadata"].update(body.get("metadata", {}))
+    return conv
+
+@router.delete("/v1/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str):
+    if conversation_id in CONVERSATIONS:
+        del CONVERSATIONS[conversation_id]
+    return {"id": conversation_id, "object": "conversation", "deleted": True}
+
+@router.get("/v1/conversations/{conversation_id}/items")
+async def list_conversation_items(conversation_id: str):
+    conv = CONVERSATIONS.get(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"object": "list", "data": conv["items"]}
+
+@router.post("/v1/conversations/{conversation_id}/items")
+async def add_conversation_item(conversation_id: str, request: Request):
+    conv = CONVERSATIONS.get(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    body = await request.json()
+    item = {
+        "id": f"item_{uuid.uuid4().hex[:8]}",
+        "object": "conversation.item",
+        "created": int(time.time()),
+        "role": body.get("role", "user"),
+        "content": body.get("content", "")
+    }
+    conv["items"].append(item)
+    return item

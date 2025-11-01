@@ -1,102 +1,65 @@
 """
-p4_orchestrator.py
--------------------------------------------------------------
-Middleware: Intercepts POST requests to /v1/p4
-and orchestrates a structured reasoning prompt chain.
-
-Purpose:
-- Convert user reasoning requests into structured
-  /v1/responses payloads.
-- Forward locally to the relay’s own /v1/responses endpoint.
-- Preserve OpenAI schema and authentication headers.
-
-Author: ChatGPT Team Relay (Ground-Truth Edition)
--------------------------------------------------------------
+p4_orchestrator.py — Ground Truth API v1.7
+Transforms /v1/p4 requests into /v1/responses payloads for unified reasoning.
 """
 
 import os
 import json
 import httpx
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
-from starlette.requests import Request
-from typing import Any, Dict
+import asyncio
+import time
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import StreamingResponse, JSONResponse
+from app.utils.logger import logger
 
-class P4OrchestratorMiddleware(BaseHTTPMiddleware):
-    """
-    Intercepts /v1/p4 requests and internally forwards them
-    to the /v1/responses endpoint with a reasoning template.
-    """
+router = APIRouter()
+RELAY_URL = os.getenv("RELAY_URL", "http://127.0.0.1:8000")
 
-    async def dispatch(self, request: Request, call_next):
-        # Only intercept reasoning endpoint
-        if not (request.url.path.endswith("/v1/p4") and request.method.upper() == "POST"):
-            return await call_next(request)
 
-        try:
-            body = await request.json()
-        except Exception:
-            return JSONResponse({"error": "invalid_json"}, status_code=400)
-
-        user_input = body.get("input")
-        model = body.get("model", "gpt-4o-mini")
-
-        if not user_input:
-            return JSONResponse({"error": "missing_input"}, status_code=400)
-
-        # Build structured reasoning prompt
-        reasoning_prompt = f"""
-You are a reasoning model. Analyze the input step-by-step and return results in the following structure:
-1. **Answer:** Concise and correct.
-2. **Analogy:** Intuitive, simple comparison.
-3. **Steps/Code:** Reasoning or pseudo-code.
-4. **Test/Takeaway:** Quick verification or summary.
-
-Input: {user_input}
-        """.strip()
-
-        # Prepare request for internal /v1/responses
-        payload = {
-            "model": model,
-            "input": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "input_text", "text": reasoning_prompt}
-                    ]
-                }
-            ],
-            "response_format": "text"
-        }
-
-        # Use PORT from environment for flexibility
-        relay_port = os.getenv("PORT", "8000")
-        local_url = f"http://127.0.0.1:{relay_port}/v1/responses"
-
-        headers = {"Content-Type": "application/json"}
-        # Forward the reasoning prompt internally
-        async with httpx.AsyncClient(timeout=httpx.Timeout(180.0)) as client:
-            try:
-                resp = await client.post(local_url, json=payload, headers=headers)
-            except httpx.RequestError as e:
-                return JSONResponse(
-                    {"error": f"connection_error", "detail": str(e)},
-                    status_code=502,
-                )
-
-        if resp.status_code != 200:
-            try:
-                data = resp.json()
-            except Exception:
-                data = {"error": resp.text}
-            return JSONResponse(
-                {"error": "upstream_error", "detail": data},
-                status_code=resp.status_code,
+async def _forward_responses(payload: dict, headers: dict) -> httpx.Response:
+    """Forward request to /v1/responses with stream or non-stream handling."""
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        if payload.get("stream"):
+            return client.stream(
+                "POST", f"{RELAY_URL}/v1/responses", json=payload, headers=headers
             )
+        return await client.post(f"{RELAY_URL}/v1/responses", json=payload, headers=headers)
 
-        try:
-            output = resp.json()
-        except Exception:
-            output = {"raw_output": resp.text}
 
-        return JSONResponse(output, status_code=200)
+@router.post("/v1/p4")
+async def handle_p4_request(request: Request):
+    """
+    Converts a P4 hybrid reasoning payload into a /v1/responses request.
+    SDK-compatible fields are preserved (model, input, tools, stream).
+    """
+    body = await request.json()
+    headers = {k: v for k, v in request.headers.items()
+               if k.lower() not in {"host", "content-length"}}
+    headers["Authorization"] = headers.get("authorization", os.getenv("OPENAI_API_KEY", ""))
+
+    payload = {
+        "model": body.get("model", "gpt-5"),
+        "input": body.get("prompt") or body.get("input", ""),
+        "instructions": body.get("instructions", ""),
+        "tools": body.get("tools", []),
+        "stream": body.get("stream", False),
+    }
+
+    logger.info(f"P4 orchestrator forwarding to /v1/responses (stream={payload['stream']})")
+
+    try:
+        async with httpx.AsyncClient(timeout=None) as client:
+            if payload["stream"]:
+                async with client.stream("POST", f"{RELAY_URL}/v1/responses",
+                                         json=payload, headers=headers) as resp:
+                    async def sse():
+                        async for chunk in resp.aiter_bytes():
+                            yield chunk
+                    return StreamingResponse(sse(), media_type="text/event-stream")
+            else:
+                resp = await client.post(f"{RELAY_URL}/v1/responses",
+                                         json=payload, headers=headers)
+                return JSONResponse(status_code=resp.status_code, content=resp.json())
+    except Exception as e:
+        logger.error(f"P4 orchestrator failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

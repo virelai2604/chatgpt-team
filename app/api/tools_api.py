@@ -1,98 +1,80 @@
-# ==========================================================
-# app/api/tools_api.py — Ground Truth Tool API Bridge (v2025.11)
-# ==========================================================
 """
-Provides the API bridge between /v1/responses and the tool execution system.
-
-This module is responsible for:
-  • Invoking tools defined in the Ground Truth manifest.
-  • Returning unified error payloads in OpenAI-style schema.
-  • Listing available tools via the manifest loader.
-
-This version is fully aligned with GPT-5 Codex / Ground Truth SDK 2025.11.
+tools_api.py — Ground Truth API v1.7
+Executes tools from tools_manifest.json for /v1/responses.
 """
 
-import logging
+import importlib
+import json
+import asyncio
+import traceback
+import time
+from functools import lru_cache
+from typing import Any, Dict, Callable
 from fastapi import HTTPException
-from typing import Any, Dict
+from app.utils.logger import logger
 
-# Imports from the unified tools router
-from app.routes.tools import execute_tool_from_manifest, load_tools_manifest
-
-logger = logging.getLogger("tools_api")
+MANIFEST_PATH = "app/manifests/tools_manifest.json"
 
 
-# ----------------------------------------------------------
-# Tool Execution
-# ----------------------------------------------------------
-async def execute_tool(tool_name: str, params: Dict[str, Any]) -> Any:
-    """
-    Execute a tool by name using the Ground Truth manifest entrypoint.
-    Wraps execute_tool_from_manifest() and ensures OpenAI-style errors.
-
-    Args:
-        tool_name: The tool identifier (e.g., 'image_generation').
-        params: JSON parameters to be passed to the tool.
-    Returns:
-        Any result returned by the tool (JSON serializable).
-    Raises:
-        HTTPException: If the tool fails, is missing, or returns invalid output.
-    """
+@lru_cache(maxsize=1)
+def load_tools_manifest() -> Dict[str, Any]:
     try:
-        logger.info(f"🧠 [tools_api] Executing tool '{tool_name}' with params: {params}")
-        result = await execute_tool_from_manifest(tool_name, params)
-        logger.info(f"✅ [tools_api] Tool '{tool_name}' executed successfully.")
-        return result
-    except HTTPException:
-        raise  # Already formatted correctly
-    except Exception as e:
-        logger.exception(f"❌ [tools_api] Tool '{tool_name}' execution failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": {
-                    "message": f"Execution error in '{tool_name}': {e}",
-                    "type": "execution_error",
-                }
-            },
-        )
-
-
-# ----------------------------------------------------------
-# Manifest Access
-# ----------------------------------------------------------
-def get_registered_tools() -> list[Dict[str, Any]]:
-    """
-    Returns the list of registered tools from the loaded manifest.
-
-    This is a read-only helper for debugging and introspection.
-    """
-    try:
-        logger.debug("📜 Loading registered tools from manifest")
-        tools = load_tools_manifest()
+        with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+        tools = {t["tool_name"]: t for t in manifest.get("tools", [])
+                 if t.get("enabled")}
+        logger.info(f"Loaded {len(tools)} enabled tools from manifest.")
         return tools
     except Exception as e:
-        logger.exception("❌ Failed to load tools manifest")
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": {
-                    "message": f"Failed to load tools manifest: {e}",
-                    "type": "manifest_error",
-                }
-            },
-        )
+        logger.error(f"Failed to load tools manifest: {e}")
+        raise HTTPException(status_code=500, detail="Error loading tools manifest")
 
 
-# ----------------------------------------------------------
-# Compatibility Helpers (optional)
-# ----------------------------------------------------------
-def tool_exists(name: str) -> bool:
-    """
-    Check whether a tool is registered in the current manifest.
-    """
+async def execute_tool_from_manifest(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    tools = load_tools_manifest()
+    tool = tools.get(tool_name)
+    if not tool:
+        return {
+            "tool": tool_name,
+            "status": "error",
+            "error_type": "NotFound",
+            "message": f"Tool '{tool_name}' not found or disabled."
+        }
+
+    entrypoint = tool.get("entrypoint")
     try:
-        tools = load_tools_manifest()
-        return any(t.get("name") == name and t.get("enabled", True) for t in tools)
-    except Exception:
-        return False
+        module_name, func_name = entrypoint.rsplit(".", 1)
+        module = importlib.import_module(module_name)
+        func: Callable[..., Any] = getattr(module, func_name)
+    except Exception as e:
+        logger.error(f"Invalid entrypoint for {tool_name}: {e}")
+        return {
+            "tool": tool_name,
+            "status": "error",
+            "error_type": "ImportError",
+            "message": str(e)
+        }
+
+    start = time.perf_counter()
+    try:
+        result = await asyncio.wait_for(_maybe_await(func, **args), timeout=30)
+        elapsed = round(time.perf_counter() - start, 3)
+        logger.info(f"Tool '{tool_name}' executed in {elapsed}s")
+        return {"tool": tool_name, "status": "success",
+                "duration": elapsed, "output": result}
+    except asyncio.TimeoutError:
+        msg = f"Tool '{tool_name}' timed out."
+        logger.warning(msg)
+        return {"tool": tool_name, "status": "error",
+                "error_type": "TimeoutError", "message": msg}
+    except Exception as e:
+        tb = traceback.format_exc()
+        logger.error(f"Tool '{tool_name}' failed: {e}\n{tb}")
+        return {"tool": tool_name, "status": "error",
+                "error_type": type(e).__name__, "message": str(e)}
+
+
+async def _maybe_await(func: Callable, **kwargs):
+    if asyncio.iscoroutinefunction(func):
+        return await func(**kwargs)
+    return func(**kwargs)

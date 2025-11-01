@@ -1,141 +1,67 @@
-# ==========================================================
-# app/api/forward_openai.py — OpenAI API Forwarder (v2025.11)
-# ==========================================================
 """
-Handles all outgoing HTTP requests to the OpenAI API.
-Supports:
-  • JSON and multipart/form-data
-  • Full streaming passthrough (SSE)
-  • Unified error handling
-  • Header propagation for OpenAI-Beta / Org / UA
-
-Aligned with:
-  - OpenAI REST API (Nov 2025)
-  - openai-python SDK >= v1.51
+forward_openai.py — Ground Truth API v1.7
+Forwards unmatched requests to upstream OpenAI endpoints.
+Supports JSON + streaming.
 """
 
 import os
-import json
 import httpx
-from fastapi import Request, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse, Response
+from app.utils.logger import logger
 
-# ----------------------------------------------------------
-# Environment Configuration
-# ----------------------------------------------------------
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+router = APIRouter()
 
-if not OPENAI_API_KEY:
-    raise RuntimeError("Missing OPENAI_API_KEY environment variable")
-
-DEFAULT_HEADERS = {
-    "Authorization": f"Bearer {OPENAI_API_KEY}",
-    "User-Agent": "ChatGPT-Team-Relay/2025.11",
-    "Accept": "application/json",
-}
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+TIMEOUT = float(os.getenv("PROXY_TIMEOUT", "180"))
 
 
-# ----------------------------------------------------------
-# Helper: Stream passthrough
-# ----------------------------------------------------------
-async def _stream_response(client: httpx.AsyncClient, method: str, url: str, **kwargs):
-    """Pass streaming responses through directly to the client."""
-    async with client.stream(method, url, **kwargs) as resp:
-        if resp.status_code >= 400:
-            text = await resp.aread()
-            raise HTTPException(status_code=resp.status_code, detail=text.decode(errors="ignore"))
+async def _passthrough(method: str, path: str, request: Request):
+    target_url = f"{OPENAI_API_BASE}{path}"
+    headers = {k: v for k, v in request.headers.items()
+               if k.lower() not in {"host", "content-length"}}
+    headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
+    headers["User-Agent"] = "ChatGPT-Team-Relay/2025.11"
 
-        async for chunk in resp.aiter_text():
-            yield chunk
-
-
-# ----------------------------------------------------------
-# Main Forwarder
-# ----------------------------------------------------------
-async def forward_openai_request(
-    path: str,
-    body: dict | None = None,
-    stream: bool = False,
-    request: Request | None = None,
-):
-    """
-    Forwards a request to the OpenAI API, preserving all relevant headers and body.
-    Supports both standard and streaming (SSE) responses.
-    """
-    url = f"{OPENAI_BASE_URL.rstrip('/')}{path}"
-    method = request.method if request else "POST"
-
-    # Base headers
-    headers = DEFAULT_HEADERS.copy()
-    headers.update({
-        "User-Agent": request.headers.get("User-Agent", "ChatGPT-Team-Relay/2025.11"),
-        "OpenAI-Organization": request.headers.get("OpenAI-Organization", ""),
-        "OpenAI-Beta": request.headers.get("OpenAI-Beta", ""),
-    })
-
-    content = None
-    data = None
-    files = None
-
-    # Parse content-type and build request payload
-    if request:
-        method = request.method
-        ctype = request.headers.get("content-type", "").lower()
-
-        if ctype.startswith("multipart/form-data"):
-            form = await request.form()
-            files = []
-            data = {}
-            for field, value in form.multi_items():
-                if hasattr(value, "filename") and value.filename:
-                    files.append(
-                        (
-                            field,
-                            (value.filename, await value.read(), value.content_type or "application/octet-stream"),
-                        )
-                    )
-                else:
-                    data[field] = value
-
-        elif ctype.startswith("application/json"):
-            try:
-                body = await request.json()
-            except Exception:
-                body = None
-            content = json.dumps(body) if body is not None else None
-            headers["Content-Type"] = "application/json"
-    elif body is not None:
-        content = json.dumps(body)
-        headers["Content-Type"] = "application/json"
-
-    # ------------------------------------------------------
-    # Execute request
-    # ------------------------------------------------------
     try:
-        timeout = httpx.Timeout(300.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            # Streaming (SSE) passthrough
-            if stream:
-                return StreamingResponse(
-                    _stream_response(client, method, url, headers=headers, content=content, data=data, files=files),
-                    media_type="text/event-stream",
-                )
+        body = await request.body()
+    except Exception:
+        body = b""
 
-            # Standard request
-            resp = await client.request(method, url, headers=headers, content=content, data=data, files=files)
-
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        try:
+            resp = await client.request(method, target_url,
+                                        headers=headers, content=body, stream=True)
+            # Streamed
+            if resp.headers.get("content-type", "").startswith("text/event-stream"):
+                async def event_gen():
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+                return StreamingResponse(event_gen(),
+                                         media_type="text/event-stream",
+                                         status_code=resp.status_code)
+            # JSON
             try:
-                payload = resp.json()
+                data = resp.json()
+                out = JSONResponse(status_code=resp.status_code, content=data)
+                # propagate select headers
+                for key in ["x-request-id", "openai-processing-ms"]:
+                    if key in resp.headers:
+                        out.headers[key] = resp.headers[key]
+                return out
             except Exception:
-                payload = {"raw": (await resp.aread()).decode(errors="ignore")}
+                return Response(content=await resp.aread(),
+                                status_code=resp.status_code,
+                                headers=dict(resp.headers))
+        except httpx.RequestError as e:
+            logger.error(f"Passthrough error: {e}")
+            raise HTTPException(status_code=502, detail=str(e))
 
-            if resp.status_code >= 400:
-                raise HTTPException(status_code=resp.status_code, detail=payload)
 
-            return JSONResponse(content=payload, status_code=resp.status_code)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Forwarding error: {e}")
+@router.api_route("/{path:path}",
+                  methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def passthrough_router(request: Request, path: str):
+    if os.getenv("DISABLE_PASSTHROUGH", "false").lower() == "true":
+        raise HTTPException(status_code=404, detail="Passthrough disabled")
+    return await _passthrough(request.method, f"/{path}", request)

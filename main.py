@@ -1,114 +1,86 @@
 # ==========================================================
-# main.py — ChatGPT Team Relay (Ground Truth 2025.11)
+# app/main.py — ChatGPT Team Relay Entry Point (Ground Truth API v1.7)
 # ==========================================================
 """
-Entry point for the ChatGPT Team Relay server.
-Implements:
-  • OpenAI-compatible /v1 REST routes
-  • Unified /v1/responses endpoint (models + tools)
-  • Full passthrough to OpenAI API
-  • Plugin discovery under /.well-known/ai-plugin.json
+Main application bootstrap for the ChatGPT Team Relay.
+Creates the FastAPI app, registers all /v1 routes, configures logging,
+and validates environment variables for upstream passthrough.
 """
 
 import os
-import uvicorn
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from dotenv import load_dotenv
-from app.utils.logger import logger
-from app.middleware.validation import ResponseValidationMiddleware
-from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
+import time
+from fastapi import FastAPI
 from app.routes.register_routes import register_routes
-from fastapi.responses import JSONResponse
+from app.utils.logger import logger
 
-# ----------------------------------------------------------
-# Load environment
-# ----------------------------------------------------------
-load_dotenv()
+
+# --------------------------------------------------------------------------
+# Environment + Metadata
+# --------------------------------------------------------------------------
+
+RELAY_VERSION = "1.7"
+SDK_TARGET = "openai-python 2.6.1"
+START_TIME = time.strftime("%Y-%m-%d %H:%M:%S")
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+DISABLE_PASSTHROUGH = os.getenv("DISABLE_PASSTHROUGH", "false").lower() == "true"
 
-# ----------------------------------------------------------
-# Create app
-# ----------------------------------------------------------
-app = FastAPI(
-    title="ChatGPT Team Relay",
-    version="2025.11",
-    description="OpenAI-compatible relay server with toolchain support",
-)
 
-# ----------------------------------------------------------
-# Middleware stack
-# ----------------------------------------------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(ResponseValidationMiddleware)
-app.add_middleware(P4OrchestratorMiddleware)
+# --------------------------------------------------------------------------
+# Factory
+# --------------------------------------------------------------------------
 
-# ----------------------------------------------------------
-# Register routes
-# ----------------------------------------------------------
-register_routes(app)
+def create_app() -> FastAPI:
+    """
+    Build the FastAPI application and register all Ground Truth routes.
+    """
 
-# ----------------------------------------------------------
-# Serve static plugin manifest
-# ----------------------------------------------------------
-app.mount(
-    "/.well-known",
-    StaticFiles(directory="app/static/.well-known"),
-    name="well-known"
-)
+    logger.info("🚀 Starting ChatGPT Team Relay")
+    logger.info(f"→ Ground Truth API version: {RELAY_VERSION}")
+    logger.info(f"→ Target SDK version: {SDK_TARGET}")
+    logger.info(f"→ Start time: {START_TIME}")
+    logger.info(f"→ OpenAI passthrough: {'disabled' if DISABLE_PASSTHROUGH else 'enabled'}")
 
-# ----------------------------------------------------------
-# Root and health routes
-# ----------------------------------------------------------
-@app.get("/")
-async def root():
-    return {
-        "relay": "ChatGPT Team Relay",
-        "status": "running",
-        "openai_base": OPENAI_BASE_URL,
-        "version": "2025.11"
-    }
-
-@app.get("/health")
-async def health():
-    return {"status": "ok", "version": "2025.11"}
-
-# ----------------------------------------------------------
-# Global error handler
-# ----------------------------------------------------------
-@app.exception_handler(Exception)
-async def handle_exception(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception at {request.url.path}: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={"error": str(exc), "path": request.url.path},
+    app = FastAPI(
+        title="ChatGPT Team Relay",
+        version=RELAY_VERSION,
+        description=(
+            "Unified OpenAI-compatible relay implementing Ground Truth API v1.7. "
+            "Compatible with openai-python 2.6.1 SDK."
+        ),
+        docs_url="/docs",
+        redoc_url="/redoc"
     )
 
-# ----------------------------------------------------------
-# Startup event
-# ----------------------------------------------------------
-@app.on_event("startup")
-async def on_startup():
-    logger.info("🚀 Launching ChatGPT Team Relay — Ground Truth Edition")
-    logger.info(f"OpenAI Base: {OPENAI_BASE_URL}")
-    logger.info("CHAIN_WAIT_MODE=True, ENABLE_STREAM=True")
+    # Register all endpoint families
+    register_routes(app)
 
-    logger.info("🔗 Available /v1 routes:")
-    for route in app.routes:
-        if getattr(route, "path", "").startswith("/v1"):
-            logger.info(f"   {route.path} → {route.name}")
-    logger.info("✅ Application startup complete.\n")
+    # Health check endpoint
+    @app.get("/v1/health")
+    async def health_check():
+        return {
+            "object": "health",
+            "status": "ok",
+            "version": RELAY_VERSION,
+            "sdk_target": SDK_TARGET,
+            "time": START_TIME,
+            "passthrough_enabled": not DISABLE_PASSTHROUGH
+        }
 
-# ----------------------------------------------------------
-# Entrypoint
-# ----------------------------------------------------------
+    logger.info("✅ Relay initialized successfully.")
+    return app
+
+
+# --------------------------------------------------------------------------
+# Local development entry
+# --------------------------------------------------------------------------
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    import uvicorn
+
+    host = os.getenv("RELAY_HOST", "0.0.0.0")
+    port = int(os.getenv("RELAY_PORT", "8000"))
+
+    logger.info(f"Starting local server on {host}:{port}")
+    uvicorn.run("app.main:create_app", host=host, port=port, reload=True)

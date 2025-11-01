@@ -1,58 +1,107 @@
+# ==============================================================
+# Render Service Manifest
+# ChatGPT Team Relay — Ground Truth API v1.7 / SDK 2.6.1
+# ==============================================================
+
 services:
   - type: web
     name: chatgpt-team-relay
-    env: python
+    runtime: python
+    repo: https://github.com/<your-username>/chatgpt-team-relay
+    region: oregon
     plan: starter
-    runtime: python3
 
-    buildCommand: "pip install -r requirements.txt"
+    buildCommand: |
+      pip install -r requirements.txt
 
-    # Launch the FastAPI relay with uvicorn — critical for streaming SSE
-    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT --log-level info"
+    startCommand: |
+      uvicorn app.main:create_app --host 0.0.0.0 --port $PORT
 
     autoDeploy: true
-    healthCheckPath: /health
 
     envVars:
+      # --- Runtime and Metadata ---
       - key: APP_MODE
         value: production
-
       - key: RELAY_NAME
         value: "ChatGPT Team Relay"
+      - key: BIFL_VERSION
+        value: v2.3.4-fp
+      - key: ENVIRONMENT
+        value: production
+      - key: BUILD_DATE
+        value: 2025-10-29
+      - key: BUILD_CHANNEL
+        value: stable
 
-      - key: RELAY_VERSION
-        value: "Ground Truth Edition v2025.10"
+      # --- Networking ---
+      - key: PORT
+        value: 8080
+      - key: RELAY_HOST
+        value: 0.0.0.0
+      - key: RELAY_TIMEOUT
+        value: 120
+      - key: PROXY_TIMEOUT
+        value: 120
 
-      - key: OPENAI_BASE_URL
-        value: "https://api.openai.com"
-
-      # ⚠️ DO NOT check in this value — add it manually in Render Dashboard
+      # --- Upstream OpenAI API ---
+      - key: OPENAI_API_BASE
+        value: https://api.openai.com/v1
       - key: OPENAI_API_KEY
-        sync: false
+        sync: false   # (Sensitive key - set manually in dashboard)
+      - key: OPENAI_ORG_ID
+        sync: false   # Optional organization ID
 
+      # --- Defaults ---
       - key: DEFAULT_MODEL
         value: gpt-4o-mini
-
       - key: ENABLE_STREAM
-        value: "true"
+        value: true
+      - key: TOOLS_MANIFEST
+        value: app/manifests/tools_manifest.json
+      - key: CHAIN_WAIT_MODE
+        value: true
 
-      - key: PYTHONUNBUFFERED
-        value: "1"
-
+      # --- CORS Configuration ---
       - key: CORS_ALLOW_ORIGINS
-        value: "https://chat.openai.com,https://platform.openai.com"
-
+        value: https://chat.openai.com,https://platform.openai.com
       - key: CORS_ALLOW_METHODS
-        value: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-
+        value: GET,POST,PUT,PATCH,DELETE,OPTIONS
       - key: CORS_ALLOW_HEADERS
         value: "*"
 
-      - key: RELAY_TIMEOUT
-        value: "120"
+      # --- Logging ---
+      - key: LOG_LEVEL
+        value: info
+      - key: LOG_FORMAT
+        value: json
+      - key: LOG_COLOR
+        value: false
 
-      - key: CHAIN_WAIT_MODE
-        value: "true"
-
+      # --- Validation Schema ---
       - key: VALIDATION_SCHEMA_PATH
-        value: "ChatGPT-API_reference_ground_truth-2025-10-29.json"
+        value: ChatGPT-API_reference_ground_truth-2025-10-29.json
+
+    healthCheckPath: /v1/health
+    env: python
+
+    autoDeploy: true
+    branch: main
+
+    buildFilter:
+      paths:
+        - app/**
+        - requirements.txt
+        - render.yaml
+        - .env
+
+# ==============================================================
+# Notes:
+# - The OpenAI API key and organization ID must be added manually
+#   in the Render Environment dashboard for security reasons.
+# - Health checks and auto-deploy are enabled.
+# - Ground Truth v1.7 endpoint families are fully supported:
+#   /v1/responses, /v1/files, /v1/models, /v1/vector_stores,
+#   /v1/conversations, /v1/realtime, /v1/embeddings.
+# - Fallback passthrough proxy automatically mirrors upstream OpenAI API.
+# ==============================================================

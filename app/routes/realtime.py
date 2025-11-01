@@ -1,244 +1,162 @@
-# ==========================================================
-# app/routes/realtime.py — Ground Truth Edition (Final)
-# ==========================================================
 """
-Implements OpenAI-compatible Realtime API:
-- List realtime models
-- Create realtime session
-- Post and get realtime events (stubbed locally)
+realtime.py — /v1/realtime
+Ground Truth API v1.7 + OpenAI SDK 2.6.1 alignment
+
+Implements:
+  • POST /v1/realtime/sessions
+  • GET  /v1/realtime/models
+  • GET  /v1/realtime/stream
+  • POST /v1/realtime/events
+
+Handles realtime model sessions, streaming, and event injection.
 """
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
-import httpx
-import os
-import asyncio
+import uuid
 import time
-import json
+import asyncio
+from app.utils.logger import logger
 
-router = APIRouter(prefix="/v1/realtime", tags=["Realtime"])
+router = APIRouter()
 
-OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
-API_KEY = os.getenv("OPENAI_API_KEY")
-HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+# In-memory realtime session store
+REALTIME_SESSIONS = {}
 
+# --------------------------------------------------------------------------
+# 1. Create a realtime session
+# --------------------------------------------------------------------------
 
-# ==========================================================
-# GET /v1/realtime/models
-# ==========================================================
-@router.get("/models")
-async def list_realtime_models():
-    """List all realtime-capable models."""
-    async with httpx.AsyncClient(timeout=None) as client:
-        r = await client.get(f"{OPENAI_BASE}/v1/realtime/models", headers=HEADERS)
-    if r.status_code == 404:
-        # Local fallback list for development
-        return JSONResponse({
-            "object": "list",
-            "data": [
-                {
-                    "id": "gpt-4o-realtime-preview",
-                    "object": "model",
-                    "created": int(time.time()),
-                    "owned_by": "openai",
-                    "description": "A real-time streaming model supporting multimodal inputs and outputs.",
-                }
-            ],
-        })
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-# ==========================================================
-# POST /v1/realtime/sessions
-# ==========================================================
-@router.post("/sessions")
+@router.post("/v1/realtime/sessions")
 async def create_realtime_session(request: Request):
     """
-    Create a new realtime session.
-    Returns session credentials (e.g. WebRTC token or WebSocket URL).
+    Create a new realtime session for a model.
+    SDK equivalent: client.realtime.sessions.create()
     """
     try:
         body = await request.json()
     except Exception:
         body = {}
 
-    async with httpx.AsyncClient(timeout=None) as client:
-        r = await client.post(f"{OPENAI_BASE}/v1/realtime/sessions", headers=HEADERS, json=body)
-    if r.status_code in (400, 404):
-        # Local fallback: mock session object
-        return JSONResponse({
-            "id": "sess_mock_123",
-            "object": "realtime.session",
-            "model": body.get("model", "gpt-4o-realtime-preview"),
-            "client_secret": "mock_client_secret_abc",
-            "webrtc": {
-                "sdp": "mock_sdp",
-                "ice_servers": [{"urls": ["stun:stun.l.google.com:19302"]}],
-            },
-            "expires_at": int(time.time()) + 3600,
-        })
-    return JSONResponse(r.json(), status_code=r.status_code)
+    model = body.get("model", "gpt-4o-realtime-preview")
+    modalities = body.get("modalities", ["text"])
+    voice = body.get("voice", "verse")
+
+    session_id = f"rt_{uuid.uuid4().hex[:10]}"
+    session = {
+        "id": session_id,
+        "object": "realtime.session",
+        "created": int(time.time()),
+        "model": model,
+        "modalities": modalities,
+        "voice": voice,
+        "status": "active",
+        "events": []
+    }
+
+    REALTIME_SESSIONS[session_id] = session
+    logger.info(f"Realtime session created: {session_id} for model {model}")
+    return JSONResponse(session)
 
 
-# ==========================================================
-# POST /v1/realtime/events
-# ==========================================================
-@router.post("/events")
-async def post_realtime_event(request: Request):
-    """
-    Post realtime event data to OpenAI or local session.
-    Typically used for sending audio chunks or user actions.
-    """
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
+# --------------------------------------------------------------------------
+# 2. List realtime-capable models
+# --------------------------------------------------------------------------
 
-    async with httpx.AsyncClient(timeout=None) as client:
-        r = await client.post(f"{OPENAI_BASE}/v1/realtime/events", headers=HEADERS, json=payload)
-    if r.status_code in (404, 501):
-        return JSONResponse({
-            "object": "realtime.event",
-            "status": "accepted",
-            "timestamp": int(time.time()),
-            "detail": "Event accepted (mock).",
-        })
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-# ==========================================================
-# GET /v1/realtime/events
-# ==========================================================
-@router.get("/events")
-async def get_realtime_events():
-    """
-    Stream realtime events.
-    Currently stubbed for mock compliance — returns 501 until full streaming implemented.
-    """
-    # You could later replace this with Server-Sent Events or WebSocket forwarding.
-    return JSONResponse(
-        {"status": "not implemented", "message": "Realtime streaming not yet supported."},
-        status_code=501,
-    )
-# ==========================================================
-# app/routes/realtime.py — Ground Truth Edition (Final)
-# ==========================================================
-"""
-Implements OpenAI-compatible Realtime API:
-- List realtime models
-- Create realtime session
-- Post and get realtime events (stubbed locally)
-"""
-
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
-import httpx
-import os
-import asyncio
-import time
-import json
-
-router = APIRouter(prefix="/v1/realtime", tags=["Realtime"])
-
-OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
-API_KEY = os.getenv("OPENAI_API_KEY")
-HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
-
-
-# ==========================================================
-# GET /v1/realtime/models
-# ==========================================================
-@router.get("/models")
+@router.get("/v1/realtime/models")
 async def list_realtime_models():
-    """List all realtime-capable models."""
-    async with httpx.AsyncClient(timeout=None) as client:
-        r = await client.get(f"{OPENAI_BASE}/v1/realtime/models", headers=HEADERS)
-    if r.status_code == 404:
-        # Local fallback list for development
-        return JSONResponse({
-            "object": "list",
-            "data": [
-                {
-                    "id": "gpt-4o-realtime-preview",
-                    "object": "model",
-                    "created": int(time.time()),
-                    "owned_by": "openai",
-                    "description": "A real-time streaming model supporting multimodal inputs and outputs.",
-                }
-            ],
-        })
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-# ==========================================================
-# POST /v1/realtime/sessions
-# ==========================================================
-@router.post("/sessions")
-async def create_realtime_session(request: Request):
     """
-    Create a new realtime session.
-    Returns session credentials (e.g. WebRTC token or WebSocket URL).
+    List available realtime models.
+    SDK equivalent: client.realtime.models.list()
     """
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-
-    async with httpx.AsyncClient(timeout=None) as client:
-        r = await client.post(f"{OPENAI_BASE}/v1/realtime/sessions", headers=HEADERS, json=body)
-    if r.status_code in (400, 404):
-        # Local fallback: mock session object
-        return JSONResponse({
-            "id": "sess_mock_123",
-            "object": "realtime.session",
-            "model": body.get("model", "gpt-4o-realtime-preview"),
-            "client_secret": "mock_client_secret_abc",
-            "webrtc": {
-                "sdp": "mock_sdp",
-                "ice_servers": [{"urls": ["stun:stun.l.google.com:19302"]}],
-            },
-            "expires_at": int(time.time()) + 3600,
-        })
-    return JSONResponse(r.json(), status_code=r.status_code)
+    models = [
+        {
+            "id": "gpt-4o-realtime-preview",
+            "object": "model",
+            "type": "realtime",
+            "created": int(time.time()),
+            "owned_by": "openai"
+        },
+        {
+            "id": "gpt-5-realtime-alpha",
+            "object": "model",
+            "type": "realtime",
+            "created": int(time.time()),
+            "owned_by": "openai"
+        }
+    ]
+    return {"object": "list", "data": models}
 
 
-# ==========================================================
-# POST /v1/realtime/events
-# ==========================================================
-@router.post("/events")
+# --------------------------------------------------------------------------
+# 3. Stream realtime output (SSE simulation)
+# --------------------------------------------------------------------------
+
+@router.get("/v1/realtime/stream")
+async def stream_realtime(request: Request):
+    """
+    Open a live SSE stream for realtime output.
+    SDK equivalent: client.realtime.stream()
+    """
+    async def event_stream():
+        logger.info("Realtime stream opened.")
+        for i in range(5):
+            chunk = {
+                "event": "realtime.output",
+                "timestamp": int(time.time()),
+                "data": f"Realtime output chunk {i + 1}"
+            }
+            yield f"data: {chunk}\n\n"
+            await asyncio.sleep(0.5)
+        yield "data: {\"event\": \"done\"}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# --------------------------------------------------------------------------
+# 4. Post live input events
+# --------------------------------------------------------------------------
+
+@router.post("/v1/realtime/events")
 async def post_realtime_event(request: Request):
     """
-    Post realtime event data to OpenAI or local session.
-    Typically used for sending audio chunks or user actions.
-    """
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
+    Inject live events into an active realtime session.
+    SDK equivalent: client.realtime.events.create()
 
-    async with httpx.AsyncClient(timeout=None) as client:
-        r = await client.post(f"{OPENAI_BASE}/v1/realtime/events", headers=HEADERS, json=payload)
-    if r.status_code in (404, 501):
-        return JSONResponse({
-            "object": "realtime.event",
-            "status": "accepted",
-            "timestamp": int(time.time()),
-            "detail": "Event accepted (mock).",
-        })
-    return JSONResponse(r.json(), status_code=r.status_code)
+    Typical event types:
+      - input_text: { "text": "Hello world" }
+      - input_audio: base64 audio chunk
+      - input_image: base64 image or reference
+      - metadata: { ... }
+      - stop: {}
 
+    These events are queued to the session’s internal state.
+    """
+    body = await request.json()
+    session_id = body.get("session_id")
+    event_type = body.get("type")
+    data = body.get("data", {})
 
-# ==========================================================
-# GET /v1/realtime/events
-# ==========================================================
-@router.get("/events")
-async def get_realtime_events():
-    """
-    Stream realtime events.
-    Currently stubbed for mock compliance — returns 501 until full streaming implemented.
-    """
-    # You could later replace this with Server-Sent Events or WebSocket forwarding.
-    return JSONResponse(
-        {"status": "not implemented", "message": "Realtime streaming not yet supported."},
-        status_code=501,
-    )
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Missing session_id")
+    if session_id not in REALTIME_SESSIONS:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session = REALTIME_SESSIONS[session_id]
+    if session.get("status") != "active":
+        raise HTTPException(status_code=400, detail="Session is not active")
+
+    event_id = f"evt_{uuid.uuid4().hex[:8]}"
+    event = {
+        "id": event_id,
+        "object": "realtime.event",
+        "session_id": session_id,
+        "type": event_type,
+        "data": data,
+        "created": int(time.time()),
+        "status": "queued"
+    }
+
+    session["events"].append(event)
+    logger.info(f"Realtime event added to {session_id}: {event_type}")
+    return JSONResponse(event)
