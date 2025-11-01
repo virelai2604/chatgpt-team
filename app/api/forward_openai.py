@@ -1,124 +1,141 @@
 # ==========================================================
-# app/api/forward_openai.py — Ground Truth Forwarder (v2025.11 Final)
+# app/api/forward_openai.py — OpenAI API Forwarder (v2025.11)
 # ==========================================================
 """
-Forwards /v1 requests to OpenAI-compatible APIs or a local mock.
-
+Handles all outgoing HTTP requests to the OpenAI API.
 Supports:
-  • Non-streaming JSON responses (POST /v1/responses)
-  • Streaming event responses (text/event-stream)
-  • Offline safe mock mode when OPENAI_API_KEY is unset
+  • JSON and multipart/form-data
+  • Full streaming passthrough (SSE)
+  • Unified error handling
+  • Header propagation for OpenAI-Beta / Org / UA
+
+Aligned with:
+  - OpenAI REST API (Nov 2025)
+  - openai-python SDK >= v1.51
 """
 
 import os
+import json
 import httpx
-import logging
-from typing import Any, AsyncGenerator, Dict, Union, Callable, Awaitable
+from fastapi import Request, HTTPException
+from fastapi.responses import StreamingResponse, JSONResponse
 
 # ----------------------------------------------------------
-# Environment and Config
+# Environment Configuration
 # ----------------------------------------------------------
-OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-TIMEOUT = float(os.getenv("OPENAI_TIMEOUT", "180.0"))
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-logger = logging.getLogger("forward_openai")
+if not OPENAI_API_KEY:
+    raise RuntimeError("Missing OPENAI_API_KEY environment variable")
 
-HEADERS = {
+DEFAULT_HEADERS = {
     "Authorization": f"Bearer {OPENAI_API_KEY}",
-    "Content-Type": "application/json",
+    "User-Agent": "ChatGPT-Team-Relay/2025.11",
+    "Accept": "application/json",
 }
 
 
 # ----------------------------------------------------------
-# Internal streaming handler
+# Helper: Stream passthrough
 # ----------------------------------------------------------
-async def _stream_from_openai(url: str, json_body: Dict[str, Any]) -> AsyncGenerator[str, None]:
-    """Yield streaming chunks from the upstream OpenAI API."""
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        async with client.stream("POST", url, headers=HEADERS, json=json_body) as resp:
-            if resp.status_code != 200:
-                body = await resp.aread()
-                raise RuntimeError(f"OpenAI stream error {resp.status_code}: {body.decode()}")
-            async for line in resp.aiter_lines():
-                if line.startswith("data: "):
-                    yield line[6:]
-    yield "[DONE]"
+async def _stream_response(client: httpx.AsyncClient, method: str, url: str, **kwargs):
+    """Pass streaming responses through directly to the client."""
+    async with client.stream(method, url, **kwargs) as resp:
+        if resp.status_code >= 400:
+            text = await resp.aread()
+            raise HTTPException(status_code=resp.status_code, detail=text.decode(errors="ignore"))
+
+        async for chunk in resp.aiter_text():
+            yield chunk
 
 
 # ----------------------------------------------------------
-# Non-streaming forwarder
-# ----------------------------------------------------------
-async def _forward_once(url: str, json_body: Dict[str, Any]) -> Dict[str, Any]:
-    """Perform a single POST to OpenAI and return JSON."""
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.post(url, headers=HEADERS, json=json_body)
-        if resp.status_code != 200:
-            try:
-                text = resp.text
-            except Exception:
-                text = (await resp.aread()).decode()
-            raise RuntimeError(f"OpenAI request failed {resp.status_code}: {text}")
-        return resp.json()
-
-
-# ----------------------------------------------------------
-# Local mock fallback (offline)
-# ----------------------------------------------------------
-async def _mock_response(endpoint: str, json_body: Dict[str, Any]) -> Dict[str, Any]:
-    """Offline-safe mock response for local testing."""
-    model = json_body.get("model", "gpt-4o-mini")
-    text = json_body.get("input", "Hello from local Ground Truth mock mode.")
-    logger.warning(f"⚠️ Running offline for {endpoint}")
-    return {
-        "id": "mock-response-001",
-        "object": "response",
-        "model": model,
-        "choices": [
-            {"index": 0, "message": {"role": "assistant", "content": f"[MOCK] {text}"}}
-        ],
-    }
-
-
-async def _mock_stream(endpoint: str) -> AsyncGenerator[str, None]:
-    """Offline streaming mock."""
-    yield f"data: [MOCK STREAM for {endpoint}]\n\n"
-    yield "data: [DONE]\n\n"
-
-
-# ----------------------------------------------------------
-# Unified public interface
+# Main Forwarder
 # ----------------------------------------------------------
 async def forward_openai_request(
-    endpoint: str,
-    json_body: Dict[str, Any],
+    path: str,
+    body: dict | None = None,
     stream: bool = False,
-) -> Union[Dict[str, Any], AsyncGenerator[str, None]]:
+    request: Request | None = None,
+):
     """
-    Forward a request to OpenAI (or mock) depending on config.
-
-    Returns:
-        • dict for normal responses
-        • async generator for streamed responses
-    Example:
-        result = await forward_openai_request("/v1/responses", body)
-        async for chunk in await forward_openai_request("/v1/responses", body, stream=True):
-            ...
+    Forwards a request to the OpenAI API, preserving all relevant headers and body.
+    Supports both standard and streaming (SSE) responses.
     """
-    url = f"{OPENAI_BASE}{endpoint}"
+    url = f"{OPENAI_BASE_URL.rstrip('/')}{path}"
+    method = request.method if request else "POST"
 
-    # Offline mock mode
-    if not OPENAI_API_KEY:
-        if stream:
-            logger.info(f"🧩 Using offline mock stream for {endpoint}")
-            return _mock_stream(endpoint)
-        logger.info(f"🧩 Using offline mock response for {endpoint}")
-        return await _mock_response(endpoint, json_body)
+    # Base headers
+    headers = DEFAULT_HEADERS.copy()
+    headers.update({
+        "User-Agent": request.headers.get("User-Agent", "ChatGPT-Team-Relay/2025.11"),
+        "OpenAI-Organization": request.headers.get("OpenAI-Organization", ""),
+        "OpenAI-Beta": request.headers.get("OpenAI-Beta", ""),
+    })
 
-    # Live request
-    if stream:
-        logger.info(f"🌊 Streaming request → {url}")
-        return _stream_from_openai(url, json_body)
-    else:
-        logger.info(f"➡️ Forwarding request → {url}")
-        return await _forward_once(url, json_body)
+    content = None
+    data = None
+    files = None
+
+    # Parse content-type and build request payload
+    if request:
+        method = request.method
+        ctype = request.headers.get("content-type", "").lower()
+
+        if ctype.startswith("multipart/form-data"):
+            form = await request.form()
+            files = []
+            data = {}
+            for field, value in form.multi_items():
+                if hasattr(value, "filename") and value.filename:
+                    files.append(
+                        (
+                            field,
+                            (value.filename, await value.read(), value.content_type or "application/octet-stream"),
+                        )
+                    )
+                else:
+                    data[field] = value
+
+        elif ctype.startswith("application/json"):
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            content = json.dumps(body) if body is not None else None
+            headers["Content-Type"] = "application/json"
+    elif body is not None:
+        content = json.dumps(body)
+        headers["Content-Type"] = "application/json"
+
+    # ------------------------------------------------------
+    # Execute request
+    # ------------------------------------------------------
+    try:
+        timeout = httpx.Timeout(300.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            # Streaming (SSE) passthrough
+            if stream:
+                return StreamingResponse(
+                    _stream_response(client, method, url, headers=headers, content=content, data=data, files=files),
+                    media_type="text/event-stream",
+                )
+
+            # Standard request
+            resp = await client.request(method, url, headers=headers, content=content, data=data, files=files)
+
+            try:
+                payload = resp.json()
+            except Exception:
+                payload = {"raw": (await resp.aread()).decode(errors="ignore")}
+
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=resp.status_code, detail=payload)
+
+            return JSONResponse(content=payload, status_code=resp.status_code)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Forwarding error: {e}")

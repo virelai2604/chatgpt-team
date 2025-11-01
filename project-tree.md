@@ -1,8 +1,8 @@
   📄 .env
+  📄 .gitattributes
   📄 .gitignore
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.json
   📄 __init__.py
-  📄 check_env.py
   📄 generate_tree.py
   📄 main.py
   📄 project-tree.md
@@ -25,9 +25,7 @@
       📄 validation.py
     📁 routes
       📄 __init__.py
-      📄 chat.py
       📄 conversations.py
-      📄 core.py
       📄 files.py
       📄 models.py
       📄 openapi_yaml.py
@@ -51,6 +49,7 @@
     📁 utils
       📄 __init__.py
       📄 error_handler.py
+      📄 logger.py
   📁 data
     📁 conversations
       📄 conversations.db
@@ -76,28 +75,6 @@
       📄 videos.db
   📁 docs
     📄 README.md
-  📁 Downloads
-    📄 20251011_2355_New Video_simple_compose_01k7a34m4zf23tjfwc82bqdc7t.mp4
-    📄 image_1760442301_False.png
-    📄 video_68ee35778a8481918315005f70d6910504b794058e56c65c_sora-2_original.mp4
-    📄 video_68ef00e2908c81919d8731ec3074be9508c17ea8b46cc00a_sora2pro_trailer.mp4
-    📄 video_68ef0355a3f08191992bb8a85d8759df04af34889f5b68e4_sora2pro_hero_trailer.mp4
-    📄 video_68ef071dbd288191894082464c7233db05997b737d23f258_sora2pro_landscape.mp4
-    📄 video_68ef0849e4108191896f375be53f771e0f393645b0dd67da_sora2pro_landscape_remix.mp4
-    📄 video_68ef0a3072e48191b1417e9987639f2d042e1c997e111e3d_sora2pro_hero_12s.mp4
-    📄 video_68ef0c0683808190b18d883a97b976c70e6c4ba285bd56f9_sora2pro_hero_12s_remix.mp4
-    📄 video_68ef66654fb08191a556932c7da4b13408cd40923be90bf4_desert_worm_720p.mp4
-    📄 video_68efa326499c8191ad45b273bcca7ec406896d3a120dc970_sora-2-pro_12s_20251015_204229.mp4
-    📄 video_68efa9745964819186700343d1d65ba30a16e77a2bd19662_sora-2-pro_12s_20251015_210947.mp4
-    📁 old
-      📄 sora2_remix_video_68ed9a5fca7081919e9163df6f6e14d409bef836c0856857.mp4
-      📄 sora2_video_68ed9a0af4e88190a4738d48c18a1e380fa5fdc91bb9eccf.mp4
-      📄 sora2pro_video_68ed9ea74fa48193999883e3538d859700623dae7f6ec44d.mp4
-      📄 video_68ee16b80488819181d5f6028b018eff0c83ed6ba2fb9b9d_sora-2.mp4
-      📄 video_68ee296b1c088193b4cc3200a12809c204e22482894cfa3e_sora-2-pro.mp4
-      📄 video_68ee29efb2288191aee7266b482a12e6003b33e851fc766a_sora-2-pro_remix.mp4
-      📄 video_68ee2f01be14819092b2b8c5285e7765052c1ae6f005cb13_sora-2-pro_original.mp4
-      📄 video_video_68ed9a0af4e88190a4738d48c18a1e380fa5fdc91bb9eccf_content.mp4
   📁 logs
   📁 schemas
     📄 __init__.py
@@ -110,5 +87,5 @@
     📄 __init__.py
     📄 client.py
     📄 sora.py
-    📄 test_gt_all_endpoints.py
+    📄 test_gt_nextgen.py
     📁 downloads

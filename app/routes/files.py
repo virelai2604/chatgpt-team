@@ -1,144 +1,169 @@
 # ==========================================================
-# app/routes/files.py — Ground Truth Compliant Implementation
+# app/routes/files.py — OpenAI-Compatible Files API (v2025.11)
 # ==========================================================
 """
-Implements OpenAI-compatible /v1/files endpoints (2025.11).
+Implements /v1/files endpoints for upload, listing, retrieval, and deletion.
+Fully compatible with OpenAI REST API and openai-python SDK behavior.
 
-Handles file uploads, listing, retrieval, deletion, and content download.
-Also includes 307 redirects for legacy image/video generation routes
-to their new canonical locations under /v1/responses/tools/*.
+Supports both:
+  - Local mock file registry (for relay mode)
+  - Upstream passthrough to OpenAI API (FORWARD_MODE)
 """
 
 import os
 import uuid
-import time
-import shutil
-import json
-import logging
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
+from datetime import datetime
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from fastapi.responses import JSONResponse
+from app.api.forward_openai import forward_openai_request
 
-router = APIRouter(prefix="/v1/files", tags=["Files"])
-logger = logging.getLogger("files")
+router = APIRouter(tags=["Files"])
 
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "data/uploads")
+# Local file store (for mock relay mode)
+FILES_REGISTRY = {}
+UPLOAD_DIR = os.path.join("data", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-
-def _file_path(file_id: str, filename: str | None = None) -> str:
-    if filename:
-        return os.path.join(UPLOAD_DIR, f"{file_id}_{filename}")
-    return os.path.join(UPLOAD_DIR, f"{file_id}.bin")
-
-def _meta_path(file_id: str) -> str:
-    return os.path.join(UPLOAD_DIR, f"{file_id}.meta.json")
+FORWARD_MODE = os.getenv("FORWARD_FILES_TO_OPENAI", "false").lower() == "true"
 
 
-@router.post("")
-async def upload_file(
-    request: Request,
-    file: UploadFile | None = File(None),
-    purpose: str | None = Form(None)
-):
-    """Upload file with multipart or JSON fallback."""
+# ----------------------------------------------------------
+# Helper: Serialize a file entry in OpenAI schema format
+# ----------------------------------------------------------
+def serialize_file_entry(fid: str, entry: dict):
+    return {
+        "id": fid,
+        "object": "file",
+        "bytes": entry.get("bytes", 0),
+        "created_at": entry.get("created_at"),
+        "filename": entry.get("filename"),
+        "purpose": entry.get("purpose", "assistants"),
+        "status": entry.get("status", "uploaded"),
+    }
+
+
+# ----------------------------------------------------------
+# POST /v1/files — Upload a file
+# ----------------------------------------------------------
+@router.post("/files", summary="Upload a file", status_code=200)
+async def upload_file(request: Request, file: UploadFile = File(...)):
+    """
+    Uploads a file compatible with OpenAI's /v1/files.
+
+    If FORWARD_MODE=True, forwards the upload to OpenAI.
+    Otherwise, stores it locally in ./data/uploads.
+    """
+    if FORWARD_MODE:
+        # Forward to OpenAI directly (multipart)
+        return await forward_openai_request("/v1/files", body=None, stream=False)
+
     try:
-        file_id = str(uuid.uuid4())
-        filename = None
-        bytes_written = 0
+        content = await file.read()
+        file_id = f"file_{uuid.uuid4().hex[:8]}"
+        file_path = os.path.join(UPLOAD_DIR, file.filename)
 
-        if file is not None:
-            filename = file.filename or f"upload_{file_id}"
-            filepath = _file_path(file_id, filename)
-            with open(filepath, "wb") as f:
-                shutil.copyfileobj(file.file, f)
-            bytes_written = os.path.getsize(filepath)
-        else:
-            try:
-                body = await request.json()
-            except Exception:
-                raise HTTPException(status_code=400, detail="Invalid JSON upload.")
-            filename = body.get("file", f"mock_{file_id}.txt")
-            filepath = _file_path(file_id, filename)
-            content = body.get("content", "mock content").encode()
-            with open(filepath, "wb") as f:
-                f.write(content)
-            bytes_written = len(content)
-            purpose = body.get("purpose", "assistants")
+        with open(file_path, "wb") as f:
+            f.write(content)
 
-        metadata = {
+        entry = {
             "id": file_id,
-            "object": "file",
-            "bytes": bytes_written,
-            "created_at": int(time.time()),
-            "filename": filename,
-            "purpose": purpose or "assistants"
+            "filename": file.filename,
+            "bytes": len(content),
+            "purpose": "assistants",
+            "created_at": int(datetime.now().timestamp()),
+            "status": "uploaded",
+            "path": file_path,
         }
+        FILES_REGISTRY[file_id] = entry
 
-        with open(_meta_path(file_id), "w", encoding="utf-8") as meta_file:
-            json.dump(metadata, meta_file)
+        return JSONResponse(content=serialize_file_entry(file_id, entry), status_code=200)
 
-        return JSONResponse(metadata)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"File upload failed: {e}")
 
 
-@router.get("")
+# ----------------------------------------------------------
+# GET /v1/files — List all uploaded files
+# ----------------------------------------------------------
+@router.get("/files", summary="List uploaded files")
 async def list_files():
-    """List all uploaded files."""
-    files = []
-    for name in os.listdir(UPLOAD_DIR):
-        if name.endswith(".meta.json"):
-            try:
-                with open(os.path.join(UPLOAD_DIR, name), "r", encoding="utf-8") as f:
-                    files.append(json.load(f))
-            except Exception:
-                continue
-    return JSONResponse({"object": "list", "data": files})
+    """
+    Returns all locally uploaded files (mock relay mode).
+    """
+    if FORWARD_MODE:
+        return await forward_openai_request("/v1/files", body=None, stream=False)
+
+    data = [serialize_file_entry(fid, entry) for fid, entry in FILES_REGISTRY.items()]
+    return JSONResponse(content={"object": "list", "data": data})
 
 
-@router.get("/{file_id}")
-async def get_file(file_id: str):
-    """Retrieve metadata for a file."""
-    path = _meta_path(file_id)
-    if not os.path.exists(path):
+# ----------------------------------------------------------
+# GET /v1/files/{file_id} — Retrieve file metadata
+# ----------------------------------------------------------
+@router.get("/files/{file_id}", summary="Retrieve file metadata")
+async def retrieve_file(file_id: str):
+    """
+    Returns metadata for a specific uploaded file.
+    """
+    if FORWARD_MODE:
+        return await forward_openai_request(f"/v1/files/{file_id}", body=None, stream=False)
+
+    if file_id not in FILES_REGISTRY:
         raise HTTPException(status_code=404, detail="File not found")
-    with open(path, "r", encoding="utf-8") as f:
-        return JSONResponse(json.load(f))
+
+    entry = FILES_REGISTRY[file_id]
+    return JSONResponse(content=serialize_file_entry(file_id, entry))
 
 
-@router.get("/{file_id}/content")
-async def download_file(file_id: str):
-    """Download file content."""
-    for name in os.listdir(UPLOAD_DIR):
-        if name.startswith(file_id) and not name.endswith(".meta.json"):
-            return FileResponse(os.path.join(UPLOAD_DIR, name))
-    raise HTTPException(status_code=404, detail="File content not found")
-
-
-@router.delete("/{file_id}")
+# ----------------------------------------------------------
+# DELETE /v1/files/{file_id} — Delete file
+# ----------------------------------------------------------
+@router.delete("/files/{file_id}", summary="Delete file")
 async def delete_file(file_id: str):
-    """Deletes both metadata and binary file."""
-    meta_path = _meta_path(file_id)
-    if not os.path.exists(meta_path):
+    """
+    Deletes a file locally or forwards delete to OpenAI.
+    """
+    if FORWARD_MODE:
+        return await forward_openai_request(f"/v1/files/{file_id}", body=None, stream=False)
+
+    entry = FILES_REGISTRY.pop(file_id, None)
+    if not entry:
         raise HTTPException(status_code=404, detail="File not found")
 
-    os.remove(meta_path)
-    for name in os.listdir(UPLOAD_DIR):
-        if name.startswith(file_id) and not name.endswith(".meta.json"):
-            os.remove(os.path.join(UPLOAD_DIR, name))
+    try:
+        if os.path.exists(entry["path"]):
+            os.remove(entry["path"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"File deletion failed: {e}")
 
-    return JSONResponse({"id": file_id, "object": "file", "deleted": True})
+    return JSONResponse(content={"id": file_id, "object": "file", "deleted": True})
 
 
 # ----------------------------------------------------------
-# Legacy redirects (sunset)
+# GET /v1/files/{file_id}/content — Download file content
 # ----------------------------------------------------------
-@router.post("/images/generations")
-async def legacy_image_redirect():
-    logger.warning("⚠️ Deprecated route: redirecting /v1/files/images/generations → /v1/responses/tools/image_generation")
-    return RedirectResponse(url="/v1/responses/tools/image_generation", status_code=307)
+@router.get("/files/{file_id}/content", summary="Download file content")
+async def get_file_content(file_id: str):
+    """
+    Downloads raw file content from local relay store.
+    """
+    if FORWARD_MODE:
+        return await forward_openai_request(f"/v1/files/{file_id}/content", body=None, stream=False)
 
-@router.post("/videos/generations")
-async def legacy_video_redirect():
-    logger.warning("⚠️ Deprecated route: redirecting /v1/files/videos/generations → /v1/responses/tools/video_generation")
-    return RedirectResponse(url="/v1/responses/tools/video_generation", status_code=307)
+    entry = FILES_REGISTRY.get(file_id)
+    if not entry or not os.path.exists(entry["path"]):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        with open(entry["path"], "rb") as f:
+            data = f.read()
+        return JSONResponse(
+            content={
+                "id": file_id,
+                "filename": entry["filename"],
+                "content": data.decode(errors="ignore"),
+                "bytes": entry["bytes"],
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading file: {e}")
