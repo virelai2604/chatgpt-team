@@ -26,14 +26,12 @@
     📁 routes
       📄 __init__.py
       📄 conversations.py
+      📄 embeddings.py
       📄 files.py
       📄 models.py
-      📄 openapi_yaml.py
       📄 realtime.py
       📄 register_routes.py
-      📄 relay_status.py
       📄 responses.py
-      📄 tools.py
       📄 vector_stores.py
     📁 tools
       📄 __init__.py

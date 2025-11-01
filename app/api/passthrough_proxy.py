@@ -1,77 +1,120 @@
-# ==========================================================
-# app/api/passthrough_proxy.py — Ground Truth Passthrough Proxy (v2025.11)
-# ==========================================================
 """
-Fallback route handler for undefined /v1 endpoints.
-
-Forwards arbitrary HTTP requests to the configured OpenAI-compatible API,
-while translating known deprecated responses (e.g. 410 → 404).
+passthrough_proxy.py — Ground Truth API v1.7
+Fallback passthrough proxy to the official OpenAI API endpoint.
+Supports JSON and streaming (SSE) passthrough.
 """
 
 import os
 import httpx
-import logging
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, Request, HTTPException, Response
+from fastapi.responses import StreamingResponse, JSONResponse
+from app.utils.logger import logger
 
-OPENAI_BASE = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
+router = APIRouter()
+
+# --------------------------------------------------------------------------
+# Environment and defaults
+# --------------------------------------------------------------------------
+
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-TIMEOUT = float(os.getenv("OPENAI_TIMEOUT", "180.0"))
-
-router = APIRouter(tags=["Passthrough Proxy"])
-logger = logging.getLogger("passthrough_proxy")
-
-headers = {
-    "Authorization": f"Bearer {OPENAI_API_KEY}",
-    "Content-Type": "application/json",
-}
+TIMEOUT = float(os.getenv("PROXY_TIMEOUT", "180"))
+DISABLE_PASSTHROUGH = os.getenv("DISABLE_PASSTHROUGH", "false").lower() == "true"
 
 
-# ----------------------------------------------------------
-# Core Passthrough Logic
-# ----------------------------------------------------------
-async def _passthrough(method: str, path: str, data=None, stream=False):
-    """Generic OpenAI-compatible request forwarder."""
-    url = f"{OPENAI_BASE}{path}"
-    logger.info(f"🌐 Passthrough proxy → {url} [{method}]")
+# --------------------------------------------------------------------------
+# Core passthrough
+# --------------------------------------------------------------------------
+
+async def _passthrough_request(method: str, path: str, request: Request) -> Response:
+    """
+    Generic request forwarder that mirrors the OpenAI API behavior.
+    Automatically handles JSON, binary, and SSE responses.
+    """
+    if DISABLE_PASSTHROUGH:
+        raise HTTPException(status_code=403, detail="Passthrough disabled by configuration")
+
+    target_url = f"{OPENAI_API_BASE}{path}"
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in {"host", "content-length"}}
+
+    # Inject proper OpenAI-style auth and metadata headers
+    headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
+    headers["User-Agent"] = "ChatGPT-Team-Relay/2025.11"
+    headers.setdefault("OpenAI-Organization", os.getenv("OPENAI_ORG_ID", "default-org"))
+    headers.setdefault("OpenAI-Beta", "true")
+
+    # Read request body safely
+    try:
+        body_bytes = await request.body()
+    except Exception:
+        body_bytes = b""
+
+    logger.info(f"🔁 Passthrough {method.upper()} → {target_url}")
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         try:
-            response = await client.request(method, url, headers=headers, json=data)
-        except Exception as e:
+            response = await client.request(
+                method=method.upper(),
+                url=target_url,
+                headers=headers,
+                content=body_bytes,
+                follow_redirects=True,
+                stream=True,
+            )
+
+            # Streamed (SSE) passthrough
+            if response.headers.get("content-type", "").startswith("text/event-stream"):
+                async def event_stream():
+                    async for chunk in response.aiter_bytes():
+                        yield chunk
+
+                return StreamingResponse(
+                    event_stream(),
+                    media_type="text/event-stream",
+                    status_code=response.status_code,
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "X-Relay-Mode": "sse"
+                    }
+                )
+
+            # Standard JSON passthrough
+            try:
+                data = response.json()
+                out = JSONResponse(status_code=response.status_code, content=data)
+                for key in ["x-request-id", "openai-processing-ms", "openai-model"]:
+                    if key in response.headers:
+                        out.headers[key] = response.headers[key]
+                return out
+            except Exception:
+                return Response(
+                    content=await response.aread(),
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                )
+
+        except httpx.RequestError as e:
             logger.error(f"Passthrough network error: {e}")
-            return JSONResponse({"error": "Network error", "detail": str(e)}, status_code=500)
-
-        # Translate deprecated status codes
-        if response.status_code == 410:
-            return JSONResponse({"detail": "Deprecated endpoint"}, status_code=404)
-        if response.status_code == 404:
-            return JSONResponse({"detail": "Not found"}, status_code=404)
-        if response.status_code >= 500:
-            return JSONResponse({"detail": f"Upstream error {response.status_code}"}, status_code=500)
-
-        # Handle streaming
-        if stream and "text/event-stream" in response.headers.get("content-type", ""):
-            return StreamingResponse(response.aiter_text(), media_type="text/event-stream")
-
-        # Return JSON or text fallback
-        try:
-            return JSONResponse(response.json())
-        except Exception:
-            return JSONResponse({"detail": response.text}, status_code=response.status_code)
+            return JSONResponse(status_code=502, content={"error": {"message": str(e), "type": "request_error"}})
 
 
-# ----------------------------------------------------------
-# Catch-All Route for /v1/*
-# ----------------------------------------------------------
-@router.api_route("/v1/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-async def passthrough_proxy(request: Request, path: str):
-    """Catch-all passthrough handler for all undefined /v1 routes."""
-    method = request.method
-    try:
-        data = await request.json()
-    except Exception:
-        data = None
+# --------------------------------------------------------------------------
+# Route handler
+# --------------------------------------------------------------------------
 
-    stream = "text/event-stream" in request.headers.get("accept", "")
-    return await _passthrough(method, f"/v1/{path}", data=data, stream=stream)
+@router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def passthrough(request: Request, path: str):
+    """
+    Catch-all route — forwards all unhandled requests to OpenAI.
+    Prevents recursion into locally served /v1 endpoints.
+    """
+    if any(path.startswith(p) for p in [
+        "v1/responses", "v1/files", "v1/conversations",
+        "v1/vector_stores", "v1/realtime", "v1/embeddings"
+    ]):
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Local route exists but not enabled or overridden."}
+        )
+
+    return await _passthrough_request(request.method, f"/{path}", request)

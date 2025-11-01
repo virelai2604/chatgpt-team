@@ -1,193 +1,60 @@
 {
-  "version": "2025.11",
-  "source": "Ground Truth Relay — OpenAI-Compatible Specification",
+  "$schema": "https://openai.com/ground-truth/tools-manifest-v1.7.json",
+  "version": "1.7",
   "tools": [
     {
-      "name": "code_interpreter",
-      "description": "Executes Python code safely in an isolated sandbox environment. Mirrors OpenAI’s built-in `code_interpreter` tool.",
+      "tool_name": "code_interpreter",
       "entrypoint": "app.tools.code_interpreter.run_code",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "description": "Python source code to execute."
-          }
-        },
-        "required": ["code"]
-      },
-      "category": "core",
-      "enabled": true
+      "enabled": true,
+      "description": "Executes Python code and returns structured outputs."
     },
     {
-      "name": "computer_use",
-      "description": "Performs simulated file and system operations (list directories, inspect environment variables, etc.). Mirrors OpenAI’s `computer_use` tool.",
-      "entrypoint": "app.tools.computer_use.perform_action",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "action": {
-            "type": "string",
-            "description": "Action to perform, e.g., 'list_files' or 'get_env'."
-          },
-          "path": {
-            "type": "string",
-            "description": "Optional path for file operations."
-          }
-        }
-      },
-      "category": "system",
-      "enabled": true
-    },
-    {
-      "name": "file_upload",
-      "description": "Uploads local files to the relay or to OpenAI’s /v1/files endpoint.",
+      "tool_name": "file_upload",
       "entrypoint": "app.tools.file_upload.upload_file",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "filepath": {
-            "type": "string",
-            "description": "Local file path to upload."
-          },
-          "purpose": {
-            "type": "string",
-            "default": "assistants",
-            "description": "Purpose for upload (e.g., 'assistants')."
-          }
-        },
-        "required": ["filepath"]
-      },
-      "category": "file_io",
-      "enabled": true
+      "enabled": true,
+      "description": "Uploads a file to the relay and returns its metadata."
     },
     {
-      "name": "file_download",
-      "description": "Downloads a remote file and returns metadata like path and size.",
+      "tool_name": "file_download",
       "entrypoint": "app.tools.file_download.download_file",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string",
-            "description": "URL of the file to download."
-          }
-        },
-        "required": ["url"]
-      },
-      "category": "file_io",
-      "enabled": true
+      "enabled": true,
+      "description": "Downloads file content by ID."
     },
     {
-      "name": "file_search",
-      "description": "Searches for a text query across local files or within a directory.",
+      "tool_name": "file_search",
       "entrypoint": "app.tools.file_search.search_files",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "description": "Text to search for in files."
-          },
-          "directory": {
-            "type": "string",
-            "default": ".",
-            "description": "Directory path to search in."
-          }
-        },
-        "required": ["query"]
-      },
-      "category": "file_io",
-      "enabled": true
+      "enabled": true,
+      "description": "Searches within uploaded files using keywords or embeddings."
     },
     {
-      "name": "image_generation",
-      "description": "Generates images from text prompts using OpenAI’s /v1/images/generations endpoint.",
-      "entrypoint": "app.tools.image_generation.generate_image",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "prompt": {
-            "type": "string",
-            "description": "Image description prompt."
-          },
-          "model": {
-            "type": "string",
-            "default": "gpt-image-1"
-          }
-        },
-        "required": ["prompt"]
-      },
-      "category": "media",
-      "enabled": true
-    },
-    {
-      "name": "video_generation",
-      "description": "Simulates or generates short video clips from text prompts using Sora-2 or Sora-2-Pro models.",
-      "entrypoint": "app.tools.video_generation.generate_video",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "prompt": {
-            "type": "string",
-            "description": "Video description prompt."
-          },
-          "model": {
-            "type": "string",
-            "default": "sora-2-pro"
-          },
-          "seconds": {
-            "type": "integer",
-            "default": 3,
-            "description": "Duration of generated video in seconds."
-          }
-        },
-        "required": ["prompt"]
-      },
-      "category": "media",
-      "enabled": true
-    },
-    {
-      "name": "vector_store_retrieval",
-      "description": "Performs similarity search in vector stores to retrieve relevant embeddings or documents.",
+      "tool_name": "vector_store_retrieval",
       "entrypoint": "app.tools.vector_store_retrieval.retrieve_vectors",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "description": "Text query to embed and search."
-          },
-          "store_id": {
-            "type": "string",
-            "default": "default"
-          },
-          "k": {
-            "type": "integer",
-            "default": 3
-          }
-        },
-        "required": ["query"]
-      },
-      "category": "ml",
-      "enabled": true
+      "enabled": true,
+      "description": "Retrieves documents from a vector store via embeddings."
     },
     {
-      "name": "web_search",
-      "description": "Performs live or simulated web search queries using the DuckDuckGo API and returns summarized results.",
+      "tool_name": "image_generation",
+      "entrypoint": "app.tools.image_generation.generate_image",
+      "enabled": true,
+      "description": "Generates images from text prompts."
+    },
+    {
+      "tool_name": "video_generation",
+      "entrypoint": "app.tools.video_generation.generate_video",
+      "enabled": true,
+      "description": "Generates video content from text descriptions."
+    },
+    {
+      "tool_name": "web_search",
       "entrypoint": "app.tools.web_search.perform_search",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "description": "Search query string."
-          }
-        },
-        "required": ["query"]
-      },
-      "category": "external",
-      "enabled": true
+      "enabled": true,
+      "description": "Performs external web searches and returns summarized results."
+    },
+    {
+      "tool_name": "computer_use",
+      "entrypoint": "app.tools.computer_use.perform_action",
+      "enabled": true,
+      "description": "Executes system-level operations in a sandboxed environment."
     }
   ]
 }
