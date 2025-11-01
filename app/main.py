@@ -1,10 +1,12 @@
 # ==========================================================
-# app/main.py — ChatGPT Team Relay Entry Point (Ground Truth API v1.7)
+# app/main.py — ChatGPT Team Relay (Ground Truth API v1.7)
 # ==========================================================
 """
-Main application bootstrap for the ChatGPT Team Relay.
-Creates the FastAPI app, registers all /v1 routes, configures logging,
-and validates environment variables for upstream passthrough.
+Entry point for the ChatGPT Team Relay.
+Implements Ground Truth-compliant route registration, structured logging,
+and a root-level /health endpoint for service monitoring.
+
+This configuration matches the OpenAI SDK 2.6.1 expectations and API schema.
 """
 
 import os
@@ -13,9 +15,8 @@ from fastapi import FastAPI
 from app.routes.register_routes import register_routes
 from app.utils.logger import logger
 
-
 # --------------------------------------------------------------------------
-# Environment + Metadata
+# Metadata and Environment
 # --------------------------------------------------------------------------
 
 RELAY_VERSION = "1.7"
@@ -28,14 +29,14 @@ DISABLE_PASSTHROUGH = os.getenv("DISABLE_PASSTHROUGH", "false").lower() == "true
 
 
 # --------------------------------------------------------------------------
-# Factory
+# Application Factory
 # --------------------------------------------------------------------------
 
 def create_app() -> FastAPI:
     """
-    Build the FastAPI application and register all Ground Truth routes.
+    Factory pattern for FastAPI app.
+    Aligned with Ground Truth relay configuration.
     """
-
     logger.info("🚀 Starting ChatGPT Team Relay")
     logger.info(f"→ Ground Truth API version: {RELAY_VERSION}")
     logger.info(f"→ Target SDK version: {SDK_TARGET}")
@@ -47,25 +48,31 @@ def create_app() -> FastAPI:
         version=RELAY_VERSION,
         description=(
             "Unified OpenAI-compatible relay implementing Ground Truth API v1.7. "
-            "Compatible with openai-python 2.6.1 SDK."
+            "Fully aligned with openai-python SDK 2.6.1 and OpenAI API reference."
         ),
         docs_url="/docs",
-        redoc_url="/redoc"
+        redoc_url="/redoc",
     )
 
-    # Register all endpoint families
+    # Register all versioned routes first
     register_routes(app)
 
-    # Health check endpoint
-    @app.get("/v1/health")
+    # ----------------------------------------------------------------------
+    # Root-Level Health Endpoint (per Ground Truth reference)
+    # ----------------------------------------------------------------------
+    @app.get("/health")
     async def health_check():
+        """
+        Non-versioned health endpoint for Render/Kubernetes readiness probes.
+        Not part of /v1 per OpenAI API reference.
+        """
         return {
             "object": "health",
             "status": "ok",
             "version": RELAY_VERSION,
             "sdk_target": SDK_TARGET,
             "time": START_TIME,
-            "passthrough_enabled": not DISABLE_PASSTHROUGH
+            "passthrough_enabled": not DISABLE_PASSTHROUGH,
         }
 
     logger.info("✅ Relay initialized successfully.")
@@ -73,7 +80,7 @@ def create_app() -> FastAPI:
 
 
 # --------------------------------------------------------------------------
-# Local development entry
+# Local Development Entry
 # --------------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -83,4 +90,4 @@ if __name__ == "__main__":
     port = int(os.getenv("RELAY_PORT", "8000"))
 
     logger.info(f"Starting local server on {host}:{port}")
-    uvicorn.run("app.main:create_app", host=host, port=port, reload=True)
+    uvicorn.run("app.main:create_app", host=host, port=port, reload=True, factory=True)
