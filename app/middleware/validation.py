@@ -1,52 +1,46 @@
-"""
-validation.py — Ground Truth API v1.7
-Validates POST /v1/responses payloads against schema.
-"""
+# ================================================================
+# validation.py — Schema Validation Middleware
+# ================================================================
+# This layer ensures all requests follow OpenAI-compatible schema.
+# It runs lightweight checks on required fields, disallowing malformed
+# payloads that could otherwise propagate into downstream APIs.
+# ================================================================
 
-from fastapi import Request, HTTPException
+from fastapi import Request
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-import jsonschema
-import json
-from app.utils.logger import logger
 
-RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "model": {"type": "string"},
-        "input": {"type": ["string", "array", "object"]},
-        "instructions": {"type": ["string", "null"]},
-        "tools": {"type": "array"},
-        "stream": {"type": "boolean"},
-        "temperature": {"type": ["number", "null"]},
-        "max_output_tokens": {"type": ["number", "null"]},
-        "tool_choice": {"type": ["string", "object", "null"]},
-        "response_format": {"type": ["string", "object", "null"]}
-    },
-    "required": ["model", "input"]
+REQUIRED_FIELDS = {
+    "/v1/responses": ["model", "input"],
+    "/v1/embeddings": ["input"],
 }
 
+async def validate_request(req: Request):
+    """
+    Validates that required fields exist in incoming payloads
+    for known OpenAI endpoints.
+    """
+    path = req.url.path
+    if req.method != "POST" or path not in REQUIRED_FIELDS:
+        return None  # Skip validation for non-target endpoints
 
-class ResponseValidator(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        if request.url.path == "/v1/responses" and request.method == "POST":
-            try:
-                body = await request.json()
-                jsonschema.validate(body, RESPONSE_SCHEMA)
-            except jsonschema.ValidationError as e:
-                logger.error(f"Schema validation error: {e.message}")
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": {
-                            "message": f"Invalid request body: {e.message}",
-                            "type": "invalid_request_error",
-                            "param": e.path,
-                            "code": "schema_violation",
-                        }
-                    },
-                )
-            except Exception as e:
-                logger.error(f"Unexpected validation error: {e}")
-                raise HTTPException(status_code=400, detail="Malformed JSON body")
-        return await call_next(request)
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({
+            "error": {
+                "message": "Malformed JSON body.",
+                "type": "json_error",
+            }
+        }, status_code=400)
+
+    missing = [k for k in REQUIRED_FIELDS[path] if k not in body]
+    if missing:
+        return JSONResponse({
+            "error": {
+                "message": f"Missing required fields: {', '.join(missing)}",
+                "type": "validation_error",
+                "code": "schema_violation"
+            }
+        }, status_code=400)
+
+    return None

@@ -1,18 +1,28 @@
-"""
-models.py — /v1/models
-Lists available models. Mimics OpenAI /models endpoint.
-"""
+# ================================================================
+# models.py — Model Metadata Routes
+# ================================================================
+# Provides mock implementations of the OpenAI /v1/models endpoints.
+# The `/models` endpoint is used in ground truth tests.
+# ================================================================
 
 from fastapi import APIRouter
-import time
+from fastapi.responses import JSONResponse
 
-router = APIRouter()
+router = APIRouter(tags=["models"])
 
 MODELS = [
-    {"id": "gpt-5", "object": "model", "created": int(time.time()), "owned_by": "openai"},
-    {"id": "gpt-4o", "object": "model", "created": int(time.time()), "owned_by": "openai"},
+    {"id": "gpt-5", "object": "model"},
+    {"id": "gpt-4o", "object": "model"},
+    {"id": "gpt-4o-mini", "object": "model"},
 ]
 
+@router.get("/models")
 @router.get("/v1/models")
 async def list_models():
-    return {"object": "list", "data": MODELS}
+    """
+    Returns available model metadata.
+    """
+    return JSONResponse({
+        "object": "list",
+        "data": MODELS
+    })

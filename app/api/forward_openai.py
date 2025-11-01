@@ -1,67 +1,58 @@
-"""
-forward_openai.py — Ground Truth API v1.7
-Forwards unmatched requests to upstream OpenAI endpoints.
-Supports JSON + streaming.
-"""
+# ================================================================
+# forward_openai.py — OpenAI Upstream Forwarder
+# ================================================================
+# Forwards compatible /v1/* requests to the official OpenAI API.
+# Used only when DISABLE_PASSTHROUGH=false.
+#
+# The design is stateless, async, and honors the SDK 2.6.1 streaming
+# conventions (with optional text/event-stream passthrough).
+# ================================================================
 
 import os
 import httpx
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse, Response
-from app.utils.logger import logger
+from fastapi import Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
-router = APIRouter()
-
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-TIMEOUT = float(os.getenv("PROXY_TIMEOUT", "180"))
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com")
 
-
-async def _passthrough(method: str, path: str, request: Request):
-    target_url = f"{OPENAI_API_BASE}{path}"
-    headers = {k: v for k, v in request.headers.items()
-               if k.lower() not in {"host", "content-length"}}
+async def forward_request(req: Request, path: str):
+    """
+    Forwards request to OpenAI’s live API.
+    """
+    method = req.method
+    url = f"{OPENAI_BASE_URL}/{path}"
+    headers = dict(req.headers)
     headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
-    headers["User-Agent"] = "ChatGPT-Team-Relay/2025.11"
+    headers["Content-Type"] = "application/json"
 
-    try:
-        body = await request.body()
-    except Exception:
-        body = b""
-
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    # Forward JSON body (if applicable)
+    body = None
+    if method in ("POST", "PUT", "PATCH"):
         try:
-            resp = await client.request(method, target_url,
-                                        headers=headers, content=body, stream=True)
-            # Streamed
-            if resp.headers.get("content-type", "").startswith("text/event-stream"):
-                async def event_gen():
-                    async for chunk in resp.aiter_bytes():
-                        yield chunk
-                return StreamingResponse(event_gen(),
-                                         media_type="text/event-stream",
-                                         status_code=resp.status_code)
-            # JSON
-            try:
-                data = resp.json()
-                out = JSONResponse(status_code=resp.status_code, content=data)
-                # propagate select headers
-                for key in ["x-request-id", "openai-processing-ms"]:
-                    if key in resp.headers:
-                        out.headers[key] = resp.headers[key]
-                return out
-            except Exception:
-                return Response(content=await resp.aread(),
-                                status_code=resp.status_code,
-                                headers=dict(resp.headers))
-        except httpx.RequestError as e:
-            logger.error(f"Passthrough error: {e}")
-            raise HTTPException(status_code=502, detail=str(e))
+            body = await req.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        if method == "GET":
+            r = await client.get(url, headers=headers)
+        elif method == "POST":
+            if body and body.get("stream"):
+                async with client.stream("POST", url, headers=headers, json=body) as resp:
+                    return StreamingResponse(resp.aiter_text(), media_type="text/event-stream")
+            r = await client.post(url, headers=headers, json=body)
+        elif method == "DELETE":
+            r = await client.delete(url, headers=headers)
+        elif method == "PATCH":
+            r = await client.patch(url, headers=headers, json=body)
+        elif method == "PUT":
+            r = await client.put(url, headers=headers, json=body)
+        else:
+            return JSONResponse({"error": "Unsupported method"}, status_code=405)
 
-@router.api_route("/{path:path}",
-                  methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-async def passthrough_router(request: Request, path: str):
-    if os.getenv("DISABLE_PASSTHROUGH", "false").lower() == "true":
-        raise HTTPException(status_code=404, detail="Passthrough disabled")
-    return await _passthrough(request.method, f"/{path}", request)
+    # Proxy the response
+    try:
+        return JSONResponse(r.json(), status_code=r.status_code)
+    except Exception:
+        return JSONResponse({"error": "Upstream response not JSON"}, status_code=r.status_code)
