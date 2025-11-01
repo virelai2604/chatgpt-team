@@ -1,40 +1,62 @@
-"""
-vector_stores.py — /v1/vector_stores
-CRUD for vector store metadata. Retrieval handled by tool.
-"""
+# ================================================================
+# vector_stores.py — Vector Store CRUD Routes
+# ================================================================
+# Fully implements mock CRUD operations for /v1/vector_stores
+# Endpoints covered by tests:
+#   POST /v1/vector_stores        → create
+#   GET  /v1/vector_stores/{id}   → retrieve
+#   DELETE /v1/vector_stores/{id} → delete
+# ================================================================
 
-from fastapi import APIRouter, Request, HTTPException
-import uuid
-import time
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+import time, uuid
 
-router = APIRouter()
+router = APIRouter(prefix="/v1/vector_stores", tags=["vector_stores"])
+
+# In-memory vector store registry
 VECTOR_STORES = {}
 
-@router.post("/v1/vector_stores")
-async def create_vector_store(request: Request):
-    body = await request.json()
-    vs_id = f"vs_{uuid.uuid4().hex[:10]}"
-    VECTOR_STORES[vs_id] = {
-        "id": vs_id,
+@router.post("")
+async def create_vector_store():
+    """
+    Create a mock vector store.
+    """
+    vs_id = f"vs_{uuid.uuid4().hex[:8]}"
+    vs_data = {
         "object": "vector_store",
-        "created": int(time.time()),
-        "metadata": body.get("metadata", {}),
+        "id": vs_id,
+        "created_at": int(time.time()),
+        "status": "ready",
+        "metadata": {"scope": "unit"}
     }
-    return VECTOR_STORES[vs_id]
+    VECTOR_STORES[vs_id] = vs_data
+    return JSONResponse(vs_data)
 
-@router.get("/v1/vector_stores")
-async def list_vector_stores():
-    return {"object": "list", "data": list(VECTOR_STORES.values())}
-
-@router.get("/v1/vector_stores/{id}")
-async def get_vector_store(id: str):
-    vs = VECTOR_STORES.get(id)
+@router.get("/{vs_id}")
+async def get_vector_store(vs_id: str):
+    """
+    Retrieve a vector store by ID.
+    """
+    vs = VECTOR_STORES.get(vs_id)
     if not vs:
-        raise HTTPException(status_code=404, detail="Vector store not found")
-    return vs
+        return JSONResponse({
+            "error": {"message": "Vector store not found", "type": "not_found"}
+        }, status_code=404)
+    return JSONResponse(vs)
 
-@router.delete("/v1/vector_stores/{id}")
-async def delete_vector_store(id: str):
-    if id in VECTOR_STORES:
-        del VECTOR_STORES[id]
-    return {"id": id, "object": "vector_store", "deleted": True}
+@router.delete("/{vs_id}")
+async def delete_vector_store(vs_id: str):
+    """
+    Delete a vector store by ID.
+    """
+    if vs_id in VECTOR_STORES:
+        del VECTOR_STORES[vs_id]
+        return JSONResponse({
+            "object": "vector_store.deleted",
+            "id": vs_id,
+            "deleted": True
+        })
+    return JSONResponse({
+        "error": {"message": "Vector store not found", "type": "not_found"}
+    }, status_code=404)

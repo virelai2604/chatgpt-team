@@ -1,28 +1,38 @@
-"""
-embeddings.py — /v1/embeddings
-Generates text embeddings. Simplified numerical vector simulation.
-"""
+# ================================================================
+# embeddings.py — Embedding Generation Mock
+# ================================================================
+# Compatible with OpenAI SDK 2.6.1's /v1/embeddings interface.
+# Produces deterministic 128-dim vectors suitable for offline tests.
+# ================================================================
 
 from fastapi import APIRouter, Request
-import time
-import numpy as np
-import uuid
+from fastapi.responses import JSONResponse
+import time, random
 
-router = APIRouter()
+router = APIRouter(prefix="/v1/embeddings", tags=["embeddings"])
 
-@router.post("/v1/embeddings")
-async def create_embedding(request: Request):
-    body = await request.json()
-    text = body.get("input", "")
-    model = body.get("model", "text-embedding-3-small")
-    # Simple numeric simulation
-    vector = np.random.random(128).tolist()
-    emb_id = f"emb_{uuid.uuid4().hex[:10]}"
-    return {
-        "id": emb_id,
+@router.post("")
+async def create_embedding(req: Request):
+    """
+    Mock endpoint for /v1/embeddings.
+    """
+    body = await req.json()
+    text = str(body.get("input", ""))
+    seed = sum(ord(c) for c in text) % 10000
+    random.seed(seed)
+
+    # Generate reproducible 128-dim embedding
+    embedding = [random.random() for _ in range(128)]
+
+    return JSONResponse({
         "object": "embedding",
-        "model": model,
-        "created": int(time.time()),
-        "data": [{"object": "embedding", "embedding": vector, "index": 0}],
-        "usage": {"prompt_tokens": len(text.split()), "total_tokens": len(text.split())}
-    }
+        "data": [
+            {"embedding": embedding, "index": 0}
+        ],
+        "model": "mock-embedding",
+        "usage": {
+            "prompt_tokens": len(text),
+            "total_tokens": len(text)
+        },
+        "created": int(time.time())
+    })

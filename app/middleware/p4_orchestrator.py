@@ -1,65 +1,51 @@
-"""
-p4_orchestrator.py — Ground Truth API v1.7
-Transforms /v1/p4 requests into /v1/responses payloads for unified reasoning.
-"""
+# ================================================================
+# p4_orchestrator.py — Pipeline Orchestrator Middleware
+# ================================================================
+# This middleware coordinates API requests and enforces consistency
+# across routes. It acts as the "preflight" logic layer, ensuring
+# every request follows the same lifecycle:
+#   1. Log and timestamp
+#   2. Inject metadata for traceability
+#   3. Perform async validation (optional)
+#   4. Forward downstream to handlers or passthrough
+# ================================================================
 
-import os
-import json
-import httpx
-import asyncio
 import time
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
-from app.utils.logger import logger
+import json
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
-router = APIRouter()
-RELAY_URL = os.getenv("RELAY_URL", "http://127.0.0.1:8000")
+class P4OrchestratorMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        start_time = time.time()
 
+        # Assign a lightweight trace ID for observability
+        trace_id = f"trace_{int(start_time * 1000)}"
+        request.state.trace_id = trace_id
 
-async def _forward_responses(payload: dict, headers: dict) -> httpx.Response:
-    """Forward request to /v1/responses with stream or non-stream handling."""
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        if payload.get("stream"):
-            return client.stream(
-                "POST", f"{RELAY_URL}/v1/responses", json=payload, headers=headers
-            )
-        return await client.post(f"{RELAY_URL}/v1/responses", json=payload, headers=headers)
+        # Log the incoming request path and method
+        print(f"[{trace_id}] {request.method} {request.url.path}")
 
+        # Optionally validate JSON before proceeding
+        if request.method in ("POST", "PUT", "PATCH"):
+            try:
+                _ = await request.json()
+            except Exception:
+                return JSONResponse({
+                    "error": {
+                        "message": "Invalid or malformed JSON in request body.",
+                        "type": "validation_error",
+                        "trace_id": trace_id
+                    }
+                }, status_code=400)
 
-@router.post("/v1/p4")
-async def handle_p4_request(request: Request):
-    """
-    Converts a P4 hybrid reasoning payload into a /v1/responses request.
-    SDK-compatible fields are preserved (model, input, tools, stream).
-    """
-    body = await request.json()
-    headers = {k: v for k, v in request.headers.items()
-               if k.lower() not in {"host", "content-length"}}
-    headers["Authorization"] = headers.get("authorization", os.getenv("OPENAI_API_KEY", ""))
+        # Execute downstream handler
+        response = await call_next(request)
+        elapsed = (time.time() - start_time) * 1000
 
-    payload = {
-        "model": body.get("model", "gpt-5"),
-        "input": body.get("prompt") or body.get("input", ""),
-        "instructions": body.get("instructions", ""),
-        "tools": body.get("tools", []),
-        "stream": body.get("stream", False),
-    }
+        # Add standard telemetry headers
+        response.headers["X-Trace-ID"] = trace_id
+        response.headers["X-Response-Time-ms"] = f"{elapsed:.2f}"
 
-    logger.info(f"P4 orchestrator forwarding to /v1/responses (stream={payload['stream']})")
-
-    try:
-        async with httpx.AsyncClient(timeout=None) as client:
-            if payload["stream"]:
-                async with client.stream("POST", f"{RELAY_URL}/v1/responses",
-                                         json=payload, headers=headers) as resp:
-                    async def sse():
-                        async for chunk in resp.aiter_bytes():
-                            yield chunk
-                    return StreamingResponse(sse(), media_type="text/event-stream")
-            else:
-                resp = await client.post(f"{RELAY_URL}/v1/responses",
-                                         json=payload, headers=headers)
-                return JSONResponse(status_code=resp.status_code, content=resp.json())
-    except Exception as e:
-        logger.error(f"P4 orchestrator failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"[{trace_id}] Completed {request.method} {request.url.path} ({elapsed:.1f} ms)")
+        return response
