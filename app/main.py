@@ -1,8 +1,12 @@
 # ================================================================
-# main.py — ChatGPT Team Relay (OpenAI-Compatible)
+# main.py — ChatGPT Team Relay (Ground Truth API v1.7)
 # ================================================================
-# Entry point for the ChatGPT Team Relay running on Render.com
-# Version: 2.0  |  API Parity: openai-python 2.6.1 / openai-node 6.7.0
+# A production-grade FastAPI relay that mirrors OpenAI’s API behavior.
+# Features:
+#   • /v1/* passthrough for all official endpoints
+#   • Local health + root routes (for Render + Uptime)
+#   • Ground truth request validation + middleware orchestration
+#   • SDK-aligned JSON error schemas and streaming
 # ================================================================
 
 import os
@@ -11,9 +15,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
 
-# ✅ Correct imports
+# --- App internal imports ---
 from app.routes.register_routes import register_routes
 from app.api.passthrough_proxy import router as passthrough_router
 from app.api.forward_openai import forward_to_openai
@@ -22,43 +25,37 @@ from app.middleware.validation import validate_request
 from app.utils.logger import setup_logger
 
 # ================================================================
-# Logging Configuration
+# Logging Setup
 # ================================================================
 setup_logger()
 logger = logging.getLogger("relay")
 
 # ================================================================
-# FastAPI App Initialization
+# FastAPI Application Setup
 # ================================================================
 app = FastAPI(
     title="ChatGPT Team Relay API",
-    version="2.0",
-    description=(
-        "OpenAI-compatible relay API with ground-truth validation.\n"
-        "Implements SDK v2.6.1 (Python) and v6.7.0 (Node) endpoints.\n"
-        "Supports Responses, Realtime, Files, Vector Stores, Tools, and Conversations."
-    ),
+    version="1.7",
+    description="OpenAI-compatible proxy API — Ground Truth aligned for SDK 2.6.1",
 )
 
 # ================================================================
-# Static File Mounts for Plugin + Schema Discovery
+# Static File Mounts (for ChatGPT Actions / Plugin Manifest)
 # ================================================================
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 schemas_dir = os.path.join(os.path.dirname(__file__), "schemas")
 
-# Public .well-known folder for ChatGPT Actions
 well_known_path = os.path.join(static_dir, ".well-known")
 if os.path.exists(well_known_path):
     app.mount("/.well-known", StaticFiles(directory=well_known_path), name="well-known")
     logger.info("📘 Mounted /.well-known for plugin manifest")
 
-# OpenAPI schema served directly for ChatGPT Actions
 if os.path.exists(schemas_dir):
     app.mount("/schemas", StaticFiles(directory=schemas_dir), name="schemas")
     logger.info("📘 Mounted /schemas for OpenAPI schema access")
 
 # ================================================================
-# CORS Configuration (Required for ChatGPT Actions)
+# CORS Configuration
 # ================================================================
 allowed_origins = os.getenv(
     "CORS_ALLOW_ORIGINS",
@@ -67,7 +64,7 @@ allowed_origins = os.getenv(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in allowed_origins],
+    allow_origins=[o.strip() for o in allowed_origins],
     allow_credentials=True,
     allow_methods=os.getenv(
         "CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS"
@@ -78,10 +75,8 @@ app.add_middleware(
 # ================================================================
 # Middleware Integration
 # ================================================================
-# ✅ Request lifecycle orchestrator
 app.add_middleware(P4OrchestratorMiddleware)
 
-# ✅ Schema validator middleware (async hook)
 @app.middleware("http")
 async def schema_validation_middleware(request: Request, call_next):
     validation_response = await validate_request(request)
@@ -90,51 +85,65 @@ async def schema_validation_middleware(request: Request, call_next):
     return await call_next(request)
 
 # ================================================================
-# Register All Explicit Routes (OpenAI-Compatible)
+# Root and Health Routes (must be declared BEFORE passthrough)
+# ================================================================
+@app.get("/", tags=["meta"])
+async def root():
+    """Root endpoint for Render + uptime monitoring."""
+    return {
+        "object": "relay",
+        "status": "ok",
+        "message": "ChatGPT Team Relay active and healthy",
+        "docs": "https://platform.openai.com/docs/api-reference"
+    }
+
+@app.get("/health", tags=["meta"])
+async def health():
+    """Simple health check endpoint."""
+    return {"status": "ok", "uptime": "good"}
+
+# ================================================================
+# Register Core OpenAI-Compatible Route Modules
 # ================================================================
 register_routes(app)
 
 # ================================================================
-# Universal Passthrough for Any /v1/* Endpoint
+# Universal Passthrough for /v1/* Endpoints
 # ================================================================
 @app.api_route("/v1/{endpoint:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def universal_passthrough(request: Request, endpoint: str):
-    """
-    Automatically forwards any unrecognized /v1/* endpoint to OpenAI.
-    Keeps the relay compatible with all current and future OpenAI APIs
-    (e.g., /v1/assistants, /v1/fine_tuning/jobs, /v1/batches, etc.)
-    without code updates.
-    """
+    """Forward any unrecognized /v1/* endpoint to OpenAI upstream."""
     logger.info(f"🔄 Universal passthrough triggered for /v1/{endpoint}")
     upstream_path = f"/v1/{endpoint}"
 
     resp = await forward_to_openai(request, upstream_path)
 
-    # Handle streaming (SSE) responses
-    content_type = resp.headers.get("content-type", "")
+    content_type = getattr(resp, "headers", {}).get("content-type", "")
     if "text/event-stream" in content_type:
-        async def stream_generator():
+        async def stream():
             async for chunk in resp.aiter_bytes():
                 yield chunk
-        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+        return StreamingResponse(stream(), media_type="text/event-stream")
 
-    # Return JSON or fallback safely
-    try:
-        return JSONResponse(resp.json(), status_code=resp.status_code)
-    except Exception:
-        return JSONResponse(
-            {
-                "object": "proxy_response",
-                "path": upstream_path,
-                "status": resp.status_code,
-                "content_type": content_type,
-                "body": resp.text[:2000],
-            },
-            status_code=resp.status_code,
-        )
+    if hasattr(resp, "json"):
+        try:
+            return JSONResponse(resp.json(), status_code=resp.status_code)
+        except Exception:
+            pass
+
+    return JSONResponse(
+        {
+            "object": "proxy_response",
+            "path": upstream_path,
+            "status": getattr(resp, "status_code", 500),
+            "content_type": content_type,
+            "body": getattr(resp, "text", "")[:2000],
+        },
+        status_code=getattr(resp, "status_code", 500),
+    )
 
 # ================================================================
-# Fallback Proxy for Legacy or Non-/v1 Routes
+# Additional Passthrough Router for non-/v1 paths
 # ================================================================
 app.include_router(passthrough_router)
 
@@ -150,7 +159,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # ================================================================
-# Startup Message
+# Startup Logging
 # ================================================================
 @app.on_event("startup")
 async def on_startup():
