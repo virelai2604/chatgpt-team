@@ -1,106 +1,142 @@
 # ================================================================
-# responses.py — Hybrid Responses + Tool Invocation Relay
+# main.py — ChatGPT Team Relay (OpenAI-Compatible)
 # ================================================================
-# Compatible with OpenAI SDK v2.6.1 and ChatGPT Actions.
-# Supports both passthrough to OpenAI and internal tool execution.
+# Entry point for the ChatGPT Team Relay running on Render.com
+# Version: 2.0  |  API Parity: openai-python 2.6.1 / openai-node 6.7.0
 # ================================================================
 
-import json
+import os
 import logging
-from fastapi import APIRouter, Request
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from app.routes import register_routes
+from app.api.passthrough_proxy import router as passthrough_router
 from app.api.forward_openai import forward_to_openai
-from app.tools import (
-    file_search,
-    file_upload,
-    image_generation,
-    video_generation,
-    vector_store_retrieval,
-    web_search,
-    computer_use,
-    code_interpreter,
-)
+from app.utils.logger import setup_logger
 
+# ================================================================
+# Logging Configuration
+# ================================================================
+setup_logger()
 logger = logging.getLogger("relay")
 
-router = APIRouter(tags=["responses"])
+# ================================================================
+# FastAPI App Initialization
+# ================================================================
+app = FastAPI(
+    title="ChatGPT Team Relay API",
+    version="2.0",
+    description=(
+        "OpenAI-compatible relay API with ground-truth validation.\n"
+        "Implements SDK v2.6.1 (Python) and v6.7.0 (Node) endpoints.\n"
+        "Supports Responses, Realtime, Files, Vector Stores, Tools, and Conversations."
+    ),
+)
 
-# Alias router for /responses (non-versioned)
-responses_router = APIRouter(tags=["responses"])
+# ================================================================
+# Static File Mounts for Plugin + Schema Discovery
+# ================================================================
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+schemas_dir = os.path.join(os.path.dirname(__file__), "schemas")
 
-# Mapping of tool names to internal handlers
-TOOL_MAP = {
-    "file_search": file_search,
-    "file_upload": file_upload,
-    "image_generation": image_generation,
-    "video_generation": video_generation,
-    "vector_store_retrieval": vector_store_retrieval,
-    "web_search": web_search,
-    "computer_use": computer_use,
-    "code_interpreter": code_interpreter,
-}
+# Public .well-known folder for ChatGPT Actions
+well_known_path = os.path.join(static_dir, ".well-known")
+if os.path.exists(well_known_path):
+    app.mount("/.well-known", StaticFiles(directory=well_known_path), name="well-known")
+    logger.info("📘 Mounted /.well-known for plugin manifest")
 
+# OpenAPI schema served directly for ChatGPT Actions
+if os.path.exists(schemas_dir):
+    app.mount("/schemas", StaticFiles(directory=schemas_dir), name="schemas")
+    logger.info("📘 Mounted /schemas for OpenAPI schema access")
 
-async def handle_tool_invocations(body: dict):
-    """Executes internal tools listed in a Responses request."""
-    results = []
-    for tool in body.get("tools", []):
-        tool_type = tool.get("type")
-        tool_args = tool.get("args", {})
-        handler = TOOL_MAP.get(tool_type)
+# ================================================================
+# CORS Configuration (Required for ChatGPT Actions)
+# ================================================================
+allowed_origins = os.getenv(
+    "CORS_ALLOW_ORIGINS",
+    "https://chat.openai.com,https://platform.openai.com"
+).split(",")
 
-        if not handler:
-            results.append({
-                "tool": tool_type,
-                "status": "error",
-                "output": {"message": f"Unknown tool: {tool_type}"}
-            })
-            continue
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip() for origin in allowed_origins],
+    allow_credentials=True,
+    allow_methods=os.getenv(
+        "CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    ).split(","),
+    allow_headers=os.getenv("CORS_ALLOW_HEADERS", "*").split(","),
+)
 
-        try:
-            # All tools implement `run(args: dict)` → dict output
-            output = handler.run(tool_args)
-            results.append({"tool": tool_type, "status": "success", "output": output})
-        except Exception as e:
-            results.append({"tool": tool_type, "status": "error", "output": {"error": str(e)}})
-    return results
+# ================================================================
+# Register All Explicit Routes
+# ================================================================
+register_routes(app)
 
+# ================================================================
+# Universal Passthrough for Any /v1/* Endpoint
+# ================================================================
+@app.api_route("/v1/{endpoint:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def universal_passthrough(request: Request, endpoint: str):
+    """
+    Automatically forwards any unrecognized /v1/* endpoint to OpenAI.
+    This keeps the relay compatible with all current and future OpenAI APIs
+    (e.g., /v1/assistants, /v1/fine_tuning/jobs, /v1/batches, etc.)
+    without code updates.
+    """
+    logger.info(f"🔄 Universal passthrough triggered for /v1/{endpoint}")
+    upstream_path = f"/v1/{endpoint}"
 
-@router.post("/v1/responses")
-async def create_response(request: Request):
-    """Primary endpoint for generating responses with tool integration."""
-    body = await request.json()
-    tool_outputs = []
+    resp = await forward_to_openai(request, upstream_path)
 
-    # Handle tool invocations (local)
-    if "tools" in body:
-        tool_outputs = await handle_tool_invocations(body)
+    # Handle streaming (SSE) responses
+    content_type = resp.headers.get("content-type", "")
+    if "text/event-stream" in content_type:
+        async def stream_generator():
+            async for chunk in resp.aiter_bytes():
+                yield chunk
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
-    # Forward to OpenAI if passthrough is desired
-    resp = await forward_to_openai(request, "/v1/responses")
+    # Return JSON or fallback safely
     try:
-        json_body = resp.json()
+        return JSONResponse(resp.json(), status_code=resp.status_code)
     except Exception:
-        json_body = {"object": "response", "status": "error", "message": resp.text}
+        return JSONResponse(
+            {
+                "object": "proxy_response",
+                "path": upstream_path,
+                "status": resp.status_code,
+                "content_type": content_type,
+                "body": resp.text[:2000],
+            },
+            status_code=resp.status_code,
+        )
 
-    # Merge results
-    json_body["tool_outputs"] = tool_outputs
-    return JSONResponse(json_body, status_code=resp.status_code)
+# ================================================================
+# Fallback Proxy for Legacy or Non-/v1 Routes
+# ================================================================
+app.include_router(passthrough_router)
 
+# ================================================================
+# Exception Handling
+# ================================================================
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        {"object": "error", "message": str(exc), "path": str(request.url)},
+        status_code=500,
+    )
 
-@router.post("/v1/responses:stream")
-async def stream_response(request: Request):
-    """Simulates streamed responses (SSE passthrough)."""
-    resp = await forward_to_openai(request, "/v1/responses:stream")
-    return StreamingResponse(resp.aiter_bytes(), media_type="text/event-stream")
-
-
-# --- Aliases for SDK backwards-compatibility ---
-
-@responses_router.post("/responses")
-async def create_response_alias(request: Request):
-    return await create_response(request)
-
-@responses_router.post("/responses:stream")
-async def stream_response_alias(request: Request):
-    return await stream_response(request)
+# ================================================================
+# Startup Message
+# ================================================================
+@app.on_event("startup")
+async def on_startup():
+    logger.info("🚀 ChatGPT Team Relay startup complete.")
+    logger.info("   - OpenAI passthrough active")
+    logger.info("   - Universal /v1 passthrough enabled")
+    logger.info("   - Routes and tools registered successfully")
+    logger.info("   - Ready for ChatGPT Actions integration")
