@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from app.routes import register_routes
+from app.routes.register_routes import register_routes
 from app.api.passthrough_proxy import router as passthrough_router
 from app.api.forward_openai import forward_to_openai
 from app.utils.logger import setup_logger
