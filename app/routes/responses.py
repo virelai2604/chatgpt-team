@@ -1,131 +1,106 @@
 # ================================================================
-# responses.py — Unified Responses Endpoint
+# responses.py — Hybrid Responses + Tool Invocation Relay
 # ================================================================
-# Emulates OpenAI’s /v1/responses, /responses, and /v1/responses:stream.
-# Handles:
-#   - Background responses (status="queued")
-#   - Streaming SSE responses
-#   - Synchronous tool invocations
-# Ground truth aligned with OpenAI SDK 2.6.1
+# Compatible with OpenAI SDK v2.6.1 and ChatGPT Actions.
+# Supports both passthrough to OpenAI and internal tool execution.
 # ================================================================
 
+import json
+import logging
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-import time, uuid, asyncio, json
+from app.api.forward_openai import forward_to_openai
+from app.tools import (
+    file_search,
+    file_upload,
+    image_generation,
+    video_generation,
+    vector_store_retrieval,
+    web_search,
+    computer_use,
+    code_interpreter,
+)
+
+logger = logging.getLogger("relay")
 
 router = APIRouter(tags=["responses"])
 
+# Alias router for /responses (non-versioned)
+responses_router = APIRouter(tags=["responses"])
+
+# Mapping of tool names to internal handlers
+TOOL_MAP = {
+    "file_search": file_search,
+    "file_upload": file_upload,
+    "image_generation": image_generation,
+    "video_generation": video_generation,
+    "vector_store_retrieval": vector_store_retrieval,
+    "web_search": web_search,
+    "computer_use": computer_use,
+    "code_interpreter": code_interpreter,
+}
+
+
+async def handle_tool_invocations(body: dict):
+    """Executes internal tools listed in a Responses request."""
+    results = []
+    for tool in body.get("tools", []):
+        tool_type = tool.get("type")
+        tool_args = tool.get("args", {})
+        handler = TOOL_MAP.get(tool_type)
+
+        if not handler:
+            results.append({
+                "tool": tool_type,
+                "status": "error",
+                "output": {"message": f"Unknown tool: {tool_type}"}
+            })
+            continue
+
+        try:
+            # All tools implement `run(args: dict)` → dict output
+            output = handler.run(tool_args)
+            results.append({"tool": tool_type, "status": "success", "output": output})
+        except Exception as e:
+            results.append({"tool": tool_type, "status": "error", "output": {"error": str(e)}})
+    return results
+
+
 @router.post("/v1/responses")
-async def create_response(req: Request):
-    """
-    Handles all variants: streaming, background, and synchronous responses.
-    """
-    body = await req.json()
+async def create_response(request: Request):
+    """Primary endpoint for generating responses with tool integration."""
+    body = await request.json()
+    tool_outputs = []
 
-    # Validation
-    if not body.get("model") or not body.get("input"):
-        return JSONResponse({
-            "error": {
-                "message": "Invalid request: 'model' and 'input' are required.",
-                "type": "invalid_request_error"
-            }
-        }, status_code=400)
+    # Handle tool invocations (local)
+    if "tools" in body:
+        tool_outputs = await handle_tool_invocations(body)
 
-    # Background response path
-    if body.get("background", False):
-        return JSONResponse({
-            "object": "response",
-            "id": f"resp_{uuid.uuid4().hex[:8]}",
-            "status": "queued"
-        })
+    # Forward to OpenAI if passthrough is desired
+    resp = await forward_to_openai(request, "/v1/responses")
+    try:
+        json_body = resp.json()
+    except Exception:
+        json_body = {"object": "response", "status": "error", "message": resp.text}
 
-    # Streaming response path
-    if body.get("stream", False):
-        resp_id = f"resp_{uuid.uuid4().hex[:8]}"
-
-        async def event_stream():
-            # Create event
-            yield f'data: {json.dumps({\
-                "type": "response.created",\
-                "response": {\
-                    "id": resp_id,\
-                    "object": "response",\
-                    "model": "gpt-5",\
-                    "status": "in_progress",\
-                    "output": [{\
-                        "type": "message",\
-                        "role": "assistant",\
-                        "content": [{"type": "output_text", "text": ""}]\
-                    }]\
-                }\
-            })}\n\n'
-
-            yield f'data: {json.dumps({"type": "response.started", "id": resp_id, "object": "response"})}\n\n'
-            yield f'data: {json.dumps({"type": "response.output_item.added", "item": {"type": "message", "role": "assistant", "content": []}})}\n\n'
-            yield f'data: {json.dumps({"type": "response.content_part.added", "output_index": 0, "part": {"type": "output_text", "text": ""}})}\n\n'
-
-            for chunk in ["Hello from stream ", "chunk 1 ", "chunk 2"]:
-                await asyncio.sleep(0.05)
-                yield f'data: {json.dumps({"type": "response.output_text.delta", "output_index": 0, "content_index": 0, "delta": chunk})}\n\n'
-                yield f'data: {json.dumps({"type": "message.delta", "delta": {"role": "assistant", "content": [{"type": "output_text", "text": chunk}]}})}\n\n'
-
-            yield f'data: {json.dumps({\
-                "type": "response.completed",\
-                "response": {\
-                    "id": resp_id,\
-                    "object": "response",\
-                    "model": "gpt-5",\
-                    "status": "completed",\
-                    "output": [{\
-                        "type": "message",\
-                        "role": "assistant",\
-                        "content": [{"type": "output_text", "text": "stream complete"}]\
-                    }]\
-                }\
-            })}\n\n'
-
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-    # Default synchronous response path
-    tool_name = None
-    if body.get("tools"):
-        t = body["tools"][0]
-        tool_name = t.get("type")
-
-    output_text = f"Executed tool {tool_name or 'none'} successfully."
-
-    return JSONResponse({
-        "object": "response",
-        "id": f"resp_{uuid.uuid4().hex[:8]}",
-        "model": body["model"],
-        "output": [{
-            "type": "message",
-            "role": "assistant",
-            "content": [{"type": "output_text", "text": output_text}]
-        }],
-        "tool_outputs": [{
-            "tool": tool_name or "mock_tool",
-            "status": "success",
-            "output": {"result": "ok"}
-        }],
-        "usage": {"total_tokens": 5},
-        "status": "completed"
-    })
-
-
-@router.post("/responses")
-async def create_response_alias(req: Request):
-    """Alias to /v1/responses for SDK backward compatibility."""
-    return await create_response(req)
+    # Merge results
+    json_body["tool_outputs"] = tool_outputs
+    return JSONResponse(json_body, status_code=resp.status_code)
 
 
 @router.post("/v1/responses:stream")
-async def create_response_stream(req: Request):
-    """Alias for OpenAI SDK's streaming endpoint."""
-    return await create_response(req)
+async def stream_response(request: Request):
+    """Simulates streamed responses (SSE passthrough)."""
+    resp = await forward_to_openai(request, "/v1/responses:stream")
+    return StreamingResponse(resp.aiter_bytes(), media_type="text/event-stream")
 
 
-@router.post("/responses:stream")
-async def create_response_stream_alias(req: Request):
-    """Alias to /v1/responses:stream for compatibility."""
-    return await create_response(req)
+# --- Aliases for SDK backwards-compatibility ---
+
+@responses_router.post("/responses")
+async def create_response_alias(request: Request):
+    return await create_response(request)
+
+@responses_router.post("/responses:stream")
+async def stream_response_alias(request: Request):
+    return await stream_response(request)

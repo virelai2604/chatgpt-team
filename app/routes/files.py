@@ -1,38 +1,24 @@
 # ================================================================
-# embeddings.py — Embedding Generation Mock
+# files.py — Handles file operations via OpenAI API
 # ================================================================
-# Compatible with OpenAI SDK 2.6.1's /v1/embeddings interface.
-# Produces deterministic 128-dim vectors suitable for offline tests.
-# ================================================================
-
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-import time, random
+from app.api.forward_openai import forward_to_openai
 
-router = APIRouter(prefix="/v1/embeddings", tags=["embeddings"])
+router = APIRouter(prefix="/v1/files", tags=["files"])
 
 @router.post("")
-async def create_embedding(req: Request):
-    """
-    Mock endpoint for /v1/embeddings.
-    """
-    body = await req.json()
-    text = str(body.get("input", ""))
-    seed = sum(ord(c) for c in text) % 10000
-    random.seed(seed)
+async def upload_file(request: Request):
+    resp = await forward_to_openai(request, "/v1/files")
+    return JSONResponse(resp.json(), status_code=resp.status_code)
 
-    # Generate reproducible 128-dim embedding
-    embedding = [random.random() for _ in range(128)]
+@router.get("/{file_id}")
+async def retrieve_file(file_id: str, request: Request):
+    resp = await forward_to_openai(request, f"/v1/files/{file_id}")
+    return JSONResponse(resp.json(), status_code=resp.status_code)
 
-    return JSONResponse({
-        "object": "embedding",
-        "data": [
-            {"embedding": embedding, "index": 0}
-        ],
-        "model": "mock-embedding",
-        "usage": {
-            "prompt_tokens": len(text),
-            "total_tokens": len(text)
-        },
-        "created": int(time.time())
-    })
+@router.get("/{file_id}/content")
+async def retrieve_file_content(file_id: str, request: Request):
+    resp = await forward_to_openai(request, f"/v1/files/{file_id}/content")
+    # For file content, return text not JSON
+    return JSONResponse(resp.json() if "application/json" in resp.headers.get("content-type", "") else {"content": resp.text})
