@@ -12,8 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from routes.register_routes import register_routes
-from utils.logger import setup_logger
+from app.routes.register_routes import register_routes
+from app.utils.logger import setup_logger
+
 
 # ============================================================
 # Environment Configuration
