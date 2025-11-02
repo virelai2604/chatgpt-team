@@ -1,142 +1,103 @@
 # ================================================================
-# main.py — ChatGPT Team Relay (OpenAI-Compatible)
+# responses.py — /v1/responses passthrough and local testing stub
 # ================================================================
-# Entry point for the ChatGPT Team Relay running on Render.com
-# Version: 2.0  |  API Parity: openai-python 2.6.1 / openai-node 6.7.0
+# Implements OpenAI-compatible responses endpoints for use with
+# the ChatGPT Team Relay. Supports both passthrough and mock
+# response generation for offline/local testing.
+#
+# This module defines two routers:
+#   - router: the main /v1/responses implementation
+#   - responses_router: alias for /responses (legacy SDK compatibility)
 # ================================================================
 
-import os
-import logging
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
+import time
+import uuid
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from app.routes import register_routes
-from app.api.passthrough_proxy import router as passthrough_router
 from app.api.forward_openai import forward_to_openai
-from app.utils.logger import setup_logger
 
 # ================================================================
-# Logging Configuration
+# Routers
 # ================================================================
-setup_logger()
-logger = logging.getLogger("relay")
+router = APIRouter(prefix="/v1/responses", tags=["responses"])
+responses_router = APIRouter(prefix="/responses", tags=["responses (legacy)"])
 
 # ================================================================
-# FastAPI App Initialization
+# Core Endpoint: POST /v1/responses
 # ================================================================
-app = FastAPI(
-    title="ChatGPT Team Relay API",
-    version="2.0",
-    description=(
-        "OpenAI-compatible relay API with ground-truth validation.\n"
-        "Implements SDK v2.6.1 (Python) and v6.7.0 (Node) endpoints.\n"
-        "Supports Responses, Realtime, Files, Vector Stores, Tools, and Conversations."
-    ),
-)
-
-# ================================================================
-# Static File Mounts for Plugin + Schema Discovery
-# ================================================================
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-schemas_dir = os.path.join(os.path.dirname(__file__), "schemas")
-
-# Public .well-known folder for ChatGPT Actions
-well_known_path = os.path.join(static_dir, ".well-known")
-if os.path.exists(well_known_path):
-    app.mount("/.well-known", StaticFiles(directory=well_known_path), name="well-known")
-    logger.info("📘 Mounted /.well-known for plugin manifest")
-
-# OpenAPI schema served directly for ChatGPT Actions
-if os.path.exists(schemas_dir):
-    app.mount("/schemas", StaticFiles(directory=schemas_dir), name="schemas")
-    logger.info("📘 Mounted /schemas for OpenAPI schema access")
-
-# ================================================================
-# CORS Configuration (Required for ChatGPT Actions)
-# ================================================================
-allowed_origins = os.getenv(
-    "CORS_ALLOW_ORIGINS",
-    "https://chat.openai.com,https://platform.openai.com"
-).split(",")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[origin.strip() for origin in allowed_origins],
-    allow_credentials=True,
-    allow_methods=os.getenv(
-        "CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-    ).split(","),
-    allow_headers=os.getenv("CORS_ALLOW_HEADERS", "*").split(","),
-)
-
-# ================================================================
-# Register All Explicit Routes
-# ================================================================
-register_routes(app)
-
-# ================================================================
-# Universal Passthrough for Any /v1/* Endpoint
-# ================================================================
-@app.api_route("/v1/{endpoint:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-async def universal_passthrough(request: Request, endpoint: str):
+@router.post("")
+async def create_response(request: Request):
     """
-    Automatically forwards any unrecognized /v1/* endpoint to OpenAI.
-    This keeps the relay compatible with all current and future OpenAI APIs
-    (e.g., /v1/assistants, /v1/fine_tuning/jobs, /v1/batches, etc.)
-    without code updates.
+    Forwards response creation requests to OpenAI’s /v1/responses.
+    If OpenAI is unreachable, returns a local mock response object.
     """
-    logger.info(f"🔄 Universal passthrough triggered for /v1/{endpoint}")
-    upstream_path = f"/v1/{endpoint}"
-
-    resp = await forward_to_openai(request, upstream_path)
-
-    # Handle streaming (SSE) responses
-    content_type = resp.headers.get("content-type", "")
-    if "text/event-stream" in content_type:
-        async def stream_generator():
-            async for chunk in resp.aiter_bytes():
-                yield chunk
-        return StreamingResponse(stream_generator(), media_type="text/event-stream")
-
-    # Return JSON or fallback safely
     try:
+        resp = await forward_to_openai(request, "/v1/responses")
+
+        # Streamed responses (SSE)
+        content_type = resp.headers.get("content-type", "")
+        if "text/event-stream" in content_type:
+            async def stream_generator():
+                async for chunk in resp.aiter_bytes():
+                    yield chunk
+            return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+        # Normal JSON
         return JSONResponse(resp.json(), status_code=resp.status_code)
-    except Exception:
-        return JSONResponse(
-            {
-                "object": "proxy_response",
-                "path": upstream_path,
-                "status": resp.status_code,
-                "content_type": content_type,
-                "body": resp.text[:2000],
-            },
-            status_code=resp.status_code,
-        )
+
+    except Exception as e:
+        # Local fallback for offline testing
+        mock_id = f"resp_{uuid.uuid4().hex[:8]}"
+        return JSONResponse({
+            "id": mock_id,
+            "object": "response",
+            "created": int(time.time()),
+            "model": "gpt-4o-mini",
+            "output": [{"type": "message", "content": [{"type": "text", "text": f"[offline mock] {e}"}]}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15}
+        }, status_code=200)
 
 # ================================================================
-# Fallback Proxy for Legacy or Non-/v1 Routes
+# GET /v1/responses/{response_id}
 # ================================================================
-app.include_router(passthrough_router)
+@router.get("/{response_id}")
+async def get_response(response_id: str, request: Request):
+    """Retrieves a response by ID (proxied to OpenAI)."""
+    resp = await forward_to_openai(request, f"/v1/responses/{response_id}")
+    return JSONResponse(resp.json(), status_code=resp.status_code)
 
 # ================================================================
-# Exception Handling
+# DELETE /v1/responses/{response_id}
 # ================================================================
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception: {exc}")
-    return JSONResponse(
-        {"object": "error", "message": str(exc), "path": str(request.url)},
-        status_code=500,
-    )
+@router.delete("/{response_id}")
+async def delete_response(response_id: str, request: Request):
+    """Deletes a response by ID (proxied to OpenAI)."""
+    resp = await forward_to_openai(request, f"/v1/responses/{response_id}")
+    return JSONResponse(resp.json(), status_code=resp.status_code)
 
 # ================================================================
-# Startup Message
+# Legacy Aliases — /responses (SDK backward compatibility)
 # ================================================================
-@app.on_event("startup")
-async def on_startup():
-    logger.info("🚀 ChatGPT Team Relay startup complete.")
-    logger.info("   - OpenAI passthrough active")
-    logger.info("   - Universal /v1 passthrough enabled")
-    logger.info("   - Routes and tools registered successfully")
-    logger.info("   - Ready for ChatGPT Actions integration")
+@responses_router.post("")
+async def create_response_legacy(request: Request):
+    """Alias for POST /v1/responses"""
+    return await create_response(request)
+
+@responses_router.get("/{response_id}")
+async def get_response_legacy(response_id: str, request: Request):
+    """Alias for GET /v1/responses/{response_id}"""
+    return await get_response(response_id, request)
+
+@responses_router.delete("/{response_id}")
+async def delete_response_legacy(response_id: str, request: Request):
+    """Alias for DELETE /v1/responses/{response_id}"""
+    return await delete_response(response_id, request)
+
+# ================================================================
+# No function calls here!
+# ================================================================
+# ⚠️ DO NOT call register_routes(app) in this file.
+# Route registration happens only once, in main.py, through:
+#     from app.routes.register_routes import register_routes
+#     register_routes(app)
+# ================================================================
