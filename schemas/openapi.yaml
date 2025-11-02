@@ -6,13 +6,33 @@ info:
     Ground-truth-validated OpenAI-compatible relay API.
     Implements the full set of active endpoints defined by SDK v2.6.1 (Python) and v6.7.0 (Node),
     including models, embeddings, responses, realtime, files, vector stores, and tool execution.
+
 servers:
   - url: https://chatgpt-team-relay.onrender.com
 
+tags:
+  - name: models
+    description: List and inspect available models
+  - name: embeddings
+    description: Generate text embeddings
+  - name: files
+    description: File upload, retrieval, and content access
+  - name: vector_stores
+    description: Manage vector storage and retrieval
+  - name: realtime
+    description: Create and manage realtime sessions and events
+  - name: responses
+    description: Generate text or tool-augmented responses
+  - name: conversations
+    description: Manage persistent conversation records
+  - name: passthrough
+    description: Catch-all passthrough proxy for unsupported routes
 
 paths:
+
   /v1/models:
     get:
+      tags: [models]
       summary: List available models
       operationId: listModels
       responses:
@@ -22,9 +42,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ModelList"
+              examples:
+                success:
+                  value:
+                    object: list
+                    data:
+                      - id: gpt-4o-mini
+                        object: model
 
   /models:
     get:
+      tags: [models]
       summary: Alias for /v1/models
       operationId: listModelsAlias
       responses:
@@ -37,6 +65,7 @@ paths:
 
   /v1/embeddings:
     post:
+      tags: [embeddings]
       summary: Generate deterministic embeddings
       operationId: createEmbedding
       requestBody:
@@ -55,6 +84,7 @@ paths:
 
   /v1/files:
     post:
+      tags: [files]
       summary: Upload a file (mock)
       operationId: uploadFile
       responses:
@@ -67,13 +97,15 @@ paths:
 
   /v1/files/{file_id}:
     get:
+      tags: [files]
       summary: Retrieve file metadata
       operationId: retrieveFile
       parameters:
         - name: file_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
         "200":
           description: File metadata
@@ -84,13 +116,15 @@ paths:
 
   /v1/files/{file_id}/content:
     get:
+      tags: [files]
       summary: Retrieve file contents
       operationId: getFileContent
       parameters:
         - name: file_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
         "200":
           description: File content
@@ -101,6 +135,7 @@ paths:
 
   /v1/vector_stores:
     post:
+      tags: [vector_stores]
       summary: Create vector store
       operationId: createVectorStore
       responses:
@@ -113,13 +148,15 @@ paths:
 
   /v1/vector_stores/{vector_id}:
     get:
+      tags: [vector_stores]
       summary: Retrieve vector store
       operationId: retrieveVectorStore
       parameters:
         - name: vector_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
         "200":
           description: Vector store details
@@ -128,13 +165,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/VectorStore"
     delete:
+      tags: [vector_stores]
       summary: Delete vector store
       operationId: deleteVectorStore
       parameters:
         - name: vector_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
         "200":
           description: Deletion confirmation
@@ -145,6 +184,7 @@ paths:
 
   /v1/realtime/sessions:
     post:
+      tags: [realtime]
       summary: Create realtime session
       operationId: createRealtimeSession
       responses:
@@ -157,6 +197,7 @@ paths:
 
   /v1/realtime/events:
     post:
+      tags: [realtime]
       summary: Create realtime event
       operationId: createRealtimeEvent
       responses:
@@ -169,13 +210,15 @@ paths:
 
   /v1/realtime/sessions/{session_id}/events:
     get:
+      tags: [realtime]
       summary: List realtime session events
       operationId: listRealtimeEvents
       parameters:
         - name: session_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
         "200":
           description: Event list
@@ -186,22 +229,26 @@ paths:
 
   /v1/realtime/sessions/{session_id}/stream:
     get:
+      tags: [realtime]
       summary: Stream realtime session events (SSE)
       operationId: streamRealtimeEvents
       parameters:
         - name: session_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
         "200":
           description: Streamed events
           content:
             text/event-stream:
-              schema: { type: string }
+              schema:
+                type: string
 
   /v1/responses:
     post:
+      tags: [responses]
       summary: Create a text or tool-based response
       operationId: createResponse
       requestBody:
@@ -226,6 +273,7 @@ paths:
 
   /v1/responses:stream:
     post:
+      tags: [responses]
       summary: Stream response creation (SSE)
       operationId: streamResponse
       responses:
@@ -233,10 +281,12 @@ paths:
           description: Streamed response
           content:
             text/event-stream:
-              schema: { type: string }
+              schema:
+                type: string
 
   /responses:
     post:
+      tags: [responses]
       summary: Alias for /v1/responses
       operationId: createResponseAlias
       responses:
@@ -249,6 +299,7 @@ paths:
 
   /responses:stream:
     post:
+      tags: [responses]
       summary: Alias for /v1/responses:stream
       operationId: streamResponseAlias
       responses:
@@ -256,17 +307,51 @@ paths:
           description: Stream alias
           content:
             text/event-stream:
-              schema: { type: string }
+              schema:
+                type: string
+
+  /v1/conversations:
+    get:
+      tags: [conversations]
+      summary: List all conversations
+      operationId: listConversations
+      responses:
+        "200":
+          description: Conversation list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object: { type: string }
+                  data: { type: array, items: { type: object } }
+    post:
+      tags: [conversations]
+      summary: Create a new conversation
+      operationId: createConversation
+      responses:
+        "200":
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object: { type: string }
+                  id: { type: string }
 
   /{path}:
     get:
+      tags: [passthrough]
       summary: Fallback passthrough
       operationId: fallbackPassthrough
+      x-internal: true
       parameters:
         - name: path
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
         "200":
           description: Generic passthrough

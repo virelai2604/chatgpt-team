@@ -1,141 +1,99 @@
-"""
-app/main.py — ChatGPT Team Relay
-Render.com Production Deployment
-Ground Truth API v1.7 / SDK 2.6.1
-"""
+# ================================================================
+# main.py — ChatGPT Team Relay (OpenAI-Compatible)
+# ================================================================
+# Entry point for the ChatGPT Team Relay running on Render.com
+# Version: 2.0  |  API Parity: openai-python 2.6.1 / openai-node 6.7.0
+# ================================================================
 
 import os
-import time
 import logging
+import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-
-from app.routes.register_routes import register_routes
+from app.routes import register_routes
+from app.api.passthrough_proxy import router as passthrough_router
 from app.utils.logger import setup_logger
 
-
-# ============================================================
-# Environment Configuration
-# ============================================================
-
-APP_MODE = os.getenv("APP_MODE", "production")
-APP_VERSION = os.getenv("BIFL_VERSION", "v2.3.4-fp")
-SDK_TARGET = "openai-python 2.6.1"
-
-RELAY_NAME = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
-ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
-PORT = int(os.getenv("PORT", "8080"))
-
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
-
-DISABLE_PASSTHROUGH = os.getenv("DISABLE_PASSTHROUGH", "false").lower() == "true"
-MOCK_MODE = os.getenv("MOCK_MODE", "false").lower() == "true"
-
-CORS_ALLOW_ORIGINS = os.getenv("CORS_ALLOW_ORIGINS", "*").split(",")
-CORS_ALLOW_METHODS = os.getenv("CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS").split(",")
-CORS_ALLOW_HEADERS = os.getenv("CORS_ALLOW_HEADERS", "*").split(",")
-
+# ================================================================
+# Logging Configuration
+# ================================================================
 setup_logger()
 logger = logging.getLogger("relay")
 
-# ============================================================
-# Initialize FastAPI App
-# ============================================================
-
+# ================================================================
+# FastAPI App Initialization
+# ================================================================
 app = FastAPI(
-    title=RELAY_NAME,
-    version=APP_VERSION,
-    description="OpenAI-compatible relay deployed on Render.com, aligned with Ground Truth API v1.7."
+    title="ChatGPT Team Relay API",
+    version="2.0",
+    description=(
+        "Ground-truth-validated OpenAI-compatible relay API.\n"
+        "Implements SDK v2.6.1 (Python) and v6.7.0 (Node) endpoints.\n"
+        "Supports Responses, Realtime, Files, Vector Stores, and Tools."
+    ),
 )
 
-# ============================================================
-# Middleware: CORS
-# ============================================================
+# ================================================================
+# CORS Configuration
+# ================================================================
+allowed_origins = os.getenv(
+    "CORS_ALLOW_ORIGINS",
+    "https://chat.openai.com,https://platform.openai.com"
+).split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_origins=[origin.strip() for origin in allowed_origins],
     allow_credentials=True,
-    allow_methods=CORS_ALLOW_METHODS,
-    allow_headers=CORS_ALLOW_HEADERS,
+    allow_methods=os.getenv(
+        "CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    ).split(","),
+    allow_headers=os.getenv("CORS_ALLOW_HEADERS", "*").split(","),
 )
 
-# ============================================================
-# Mount /schemas for OpenAPI YAML
-# ============================================================
-
-if os.path.isdir("schemas"):
-    app.mount("/schemas", StaticFiles(directory="schemas"), name="schemas")
-    logger.info("📘 /schemas mounted for OpenAPI schema access")
-
-# ============================================================
-# Register all route modules
-# ============================================================
-
-register_routes(app)
-logger.info("✅ Core route groups registered: models, embeddings, files, vector_stores, realtime, responses")
-
-# ============================================================
-# Root Endpoint — Relay Info
-# ============================================================
-
-@app.get("/")
-async def root():
-    """Render.com Root Route — Shows Relay Metadata"""
+# ================================================================
+# Health Endpoint
+# ================================================================
+@app.get("/v1/health")
+async def health_check():
+    """Return relay health and metadata."""
     return {
-        "object": "relay",
+        "object": "health",
         "status": "ok",
-        "relay_name": RELAY_NAME,
-        "version": APP_VERSION,
-        "sdk_target": SDK_TARGET,
-        "environment": ENVIRONMENT,
-        "port": PORT,
-        "mock_mode": MOCK_MODE,
-        "passthrough_enabled": not DISABLE_PASSTHROUGH,
-        "default_model": DEFAULT_MODEL,
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        "version": "2.0",
+        "sdk_target": "openai-python 2.6.1",
+        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "passthrough_enabled": True,
     }
 
-# ============================================================
-# Fallback Passthrough
-# ============================================================
+# ================================================================
+# Register Routes
+# ================================================================
+register_routes(app)
 
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-async def fallback_passthrough(path: str, request: Request):
-    """
-    Catch-all passthrough handler.
-    Mirrors upstream OpenAI API or returns fallback when passthrough is disabled.
-    """
-    logger.warning(f"⚠️ Unhandled path requested: /{path}")
-    return JSONResponse({
-        "object": "fallback",
-        "path": path,
-        "status": "ok",
-        "passthrough": not DISABLE_PASSTHROUGH
-    })
+# ================================================================
+# Fallback Proxy for Unrecognized Routes
+# ================================================================
+app.include_router(passthrough_router)
 
-# ============================================================
-# Lifecycle Events
-# ============================================================
+# ================================================================
+# Exception Handling
+# ================================================================
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        {"object": "error", "message": str(exc), "path": str(request.url)},
+        status_code=500,
+    )
 
+# ================================================================
+# Startup Message
+# ================================================================
 @app.on_event("startup")
 async def on_startup():
-    logger.info(f"🚀 {RELAY_NAME} starting up")
-    logger.info(f"Version {APP_VERSION} | Env: {ENVIRONMENT} | SDK: {SDK_TARGET}")
-    logger.info(f"Passthrough: {not DISABLE_PASSTHROUGH} | Mock mode: {MOCK_MODE}")
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    logger.info("🛑 Relay shutdown complete")
-
-# ============================================================
-# Local Dev Entry (Render uses uvicorn via startCommand)
-# ============================================================
-
-if __name__ == "__main__":
-    import uvicorn
-    logger.info(f"🏗️ Starting {RELAY_NAME} on 0.0.0.0:{PORT}")
-    uvicorn.run("app.main:app", host="0.0.0.0", port=PORT, reload=(ENVIRONMENT != "production"))
+    logger.info("🚀 ChatGPT Team Relay startup complete.")
+    logger.info("   - OpenAI API passthrough enabled")
+    logger.info("   - Routes registered successfully")
+    logger.info("   - Ready for SDK + Actions integration")
