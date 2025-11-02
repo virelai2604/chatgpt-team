@@ -12,8 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-# Import the register_routes *function*, not the module
+# ✅ Correct import: pull the *function* directly, not the module
 from app.routes.register_routes import register_routes
+
 from app.api.passthrough_proxy import router as passthrough_router
 from app.api.forward_openai import forward_to_openai
 from app.utils.logger import setup_logger
@@ -73,7 +74,7 @@ app.add_middleware(
 )
 
 # ================================================================
-# Register All Explicit Routes (OpenAI-compatible)
+# Register All Explicit Routes (OpenAI-Compatible)
 # ================================================================
 register_routes(app)
 
