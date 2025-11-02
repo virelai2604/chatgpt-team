@@ -3,61 +3,33 @@ info:
   title: ChatGPT Team Relay API
   version: "2.0"
   description: >
-    Ground-truth-validated OpenAI-compatible relay API.
-    Implements the full set of active endpoints defined by SDK v2.6.1 (Python) and v6.7.0 (Node),
-    including models, embeddings, responses, realtime, files, vector stores, and tool execution.
-
+    OpenAI-compatible relay API that mirrors the official /v1 routes.
+    Implements SDK v2.6.1 (Python) and v6.7.0 (Node) endpoints,
+    including models, embeddings, files, vector stores, realtime, and responses with tool execution.
 servers:
   - url: https://chatgpt-team-relay.onrender.com
+    description: Production Render deployment
 
 tags:
   - name: models
-    description: List and inspect available models
   - name: embeddings
-    description: Generate text embeddings
   - name: files
-    description: File upload, retrieval, and content access
   - name: vector_stores
-    description: Manage vector storage and retrieval
   - name: realtime
-    description: Create and manage realtime sessions and events
   - name: responses
-    description: Generate text or tool-augmented responses
   - name: conversations
-    description: Manage persistent conversation records
   - name: passthrough
-    description: Catch-all passthrough proxy for unsupported routes
 
 paths:
 
   /v1/models:
     get:
       tags: [models]
-      summary: List available models
+      summary: List all available OpenAI models
       operationId: listModels
       responses:
         "200":
-          description: Model list
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ModelList"
-              examples:
-                success:
-                  value:
-                    object: list
-                    data:
-                      - id: gpt-4o-mini
-                        object: model
-
-  /models:
-    get:
-      tags: [models]
-      summary: Alias for /v1/models
-      operationId: listModelsAlias
-      responses:
-        "200":
-          description: Model list
+          description: List of models available to the configured API key
           content:
             application/json:
               schema:
@@ -66,7 +38,7 @@ paths:
   /v1/embeddings:
     post:
       tags: [embeddings]
-      summary: Generate deterministic embeddings
+      summary: Generate text embeddings
       operationId: createEmbedding
       requestBody:
         required: true
@@ -76,7 +48,7 @@ paths:
               $ref: "#/components/schemas/EmbeddingRequest"
       responses:
         "200":
-          description: Embedding vector
+          description: Embedding response
           content:
             application/json:
               schema:
@@ -85,11 +57,21 @@ paths:
   /v1/files:
     post:
       tags: [files]
-      summary: Upload a file (mock)
+      summary: Upload a file
       operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
       responses:
         "200":
-          description: File created
+          description: Uploaded file object
           content:
             application/json:
               schema:
@@ -104,11 +86,10 @@ paths:
         - name: file_id
           in: path
           required: true
-          schema:
-            type: string
+          schema: { type: string }
       responses:
         "200":
-          description: File metadata
+          description: File object
           content:
             application/json:
               schema:
@@ -118,25 +99,23 @@ paths:
     get:
       tags: [files]
       summary: Retrieve file contents
-      operationId: getFileContent
+      operationId: retrieveFileContent
       parameters:
         - name: file_id
           in: path
           required: true
-          schema:
-            type: string
+          schema: { type: string }
       responses:
         "200":
           description: File content
           content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/FileContent"
+            application/octet-stream:
+              schema: { type: string, format: binary }
 
   /v1/vector_stores:
     post:
       tags: [vector_stores]
-      summary: Create vector store
+      summary: Create a new vector store
       operationId: createVectorStore
       responses:
         "200":
@@ -149,31 +128,29 @@ paths:
   /v1/vector_stores/{vector_id}:
     get:
       tags: [vector_stores]
-      summary: Retrieve vector store
+      summary: Retrieve a vector store
       operationId: retrieveVectorStore
       parameters:
         - name: vector_id
           in: path
           required: true
-          schema:
-            type: string
+          schema: { type: string }
       responses:
         "200":
-          description: Vector store details
+          description: Vector store object
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/VectorStore"
     delete:
       tags: [vector_stores]
-      summary: Delete vector store
+      summary: Delete a vector store
       operationId: deleteVectorStore
       parameters:
         - name: vector_id
           in: path
           required: true
-          schema:
-            type: string
+          schema: { type: string }
       responses:
         "200":
           description: Deletion confirmation
@@ -185,11 +162,11 @@ paths:
   /v1/realtime/sessions:
     post:
       tags: [realtime]
-      summary: Create realtime session
+      summary: Create a realtime session
       operationId: createRealtimeSession
       responses:
         "200":
-          description: Realtime session object
+          description: Realtime session created
           content:
             application/json:
               schema:
@@ -198,58 +175,20 @@ paths:
   /v1/realtime/events:
     post:
       tags: [realtime]
-      summary: Create realtime event
+      summary: Create a realtime event
       operationId: createRealtimeEvent
       responses:
         "200":
-          description: Event queued
+          description: Event object
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/RealtimeEvent"
 
-  /v1/realtime/sessions/{session_id}/events:
-    get:
-      tags: [realtime]
-      summary: List realtime session events
-      operationId: listRealtimeEvents
-      parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Event list
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RealtimeEventList"
-
-  /v1/realtime/sessions/{session_id}/stream:
-    get:
-      tags: [realtime]
-      summary: Stream realtime session events (SSE)
-      operationId: streamRealtimeEvents
-      parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Streamed events
-          content:
-            text/event-stream:
-              schema:
-                type: string
-
   /v1/responses:
     post:
       tags: [responses]
-      summary: Create a text or tool-based response
+      summary: Generate a text or tool-based response
       operationId: createResponse
       requestBody:
         required: true
@@ -259,56 +198,23 @@ paths:
               $ref: "#/components/schemas/ResponseRequest"
       responses:
         "200":
-          description: Completed response
+          description: Text or tool response
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Response"
-        "400":
-          description: Invalid schema
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
 
   /v1/responses:stream:
     post:
       tags: [responses]
-      summary: Stream response creation (SSE)
+      summary: Stream a response via SSE
       operationId: streamResponse
       responses:
         "200":
           description: Streamed response
           content:
             text/event-stream:
-              schema:
-                type: string
-
-  /responses:
-    post:
-      tags: [responses]
-      summary: Alias for /v1/responses
-      operationId: createResponseAlias
-      responses:
-        "200":
-          description: Response alias
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Response"
-
-  /responses:stream:
-    post:
-      tags: [responses]
-      summary: Alias for /v1/responses:stream
-      operationId: streamResponseAlias
-      responses:
-        "200":
-          description: Stream alias
-          content:
-            text/event-stream:
-              schema:
-                type: string
+              schema: { type: string }
 
   /v1/conversations:
     get:
@@ -324,37 +230,38 @@ paths:
                 type: object
                 properties:
                   object: { type: string }
-                  data: { type: array, items: { type: object } }
+                  data: { type: array, items: { $ref: "#/components/schemas/Conversation" } }
     post:
       tags: [conversations]
       summary: Create a new conversation
       operationId: createConversation
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Conversation"
       responses:
         "200":
           description: Conversation created
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  object: { type: string }
-                  id: { type: string }
+                $ref: "#/components/schemas/Conversation"
 
   /{path}:
     get:
       tags: [passthrough]
-      summary: Fallback passthrough
+      summary: Fallback passthrough for unrecognized routes
       operationId: fallbackPassthrough
-      x-internal: true
       parameters:
         - name: path
           in: path
           required: true
-          schema:
-            type: string
+          schema: { type: string }
       responses:
         "200":
-          description: Generic passthrough
+          description: Fallback response from OpenAI
           content:
             application/json:
               schema:
@@ -376,9 +283,9 @@ components:
 
     EmbeddingRequest:
       type: object
-      required: [input]
       properties:
         input: { type: string }
+        model: { type: string }
 
     EmbeddingResponse:
       type: object
@@ -393,112 +300,52 @@ components:
                 type: array
                 items: { type: number }
               index: { type: integer }
-        model: { type: string }
-        usage:
-          type: object
-          properties:
-            prompt_tokens: { type: integer }
-            total_tokens: { type: integer }
 
     File:
       type: object
       properties:
-        object: { type: string }
         id: { type: string }
+        object: { type: string }
         filename: { type: string }
-        purpose: { type: string }
         created: { type: integer }
-
-    FileContent:
-      type: object
-      properties:
-        object: { type: string }
-        id: { type: string }
-        content: { type: string }
+        purpose: { type: string }
 
     VectorStore:
       type: object
       properties:
-        object: { type: string }
         id: { type: string }
+        object: { type: string }
         status: { type: string }
         created_at: { type: integer }
-        metadata: { type: object }
 
     VectorStoreDeleted:
       type: object
       properties:
-        object: { type: string }
         id: { type: string }
         deleted: { type: boolean }
 
     RealtimeSession:
       type: object
       properties:
-        object: { type: string }
         id: { type: string }
+        object: { type: string }
         model: { type: string }
-        modalities:
-          type: array
-          items: { type: string }
-        voice: { type: string }
-        status: { type: string }
-        created_at: { type: integer }
-        expires_in: { type: integer }
+        modalities: { type: array, items: { type: string } }
 
     RealtimeEvent:
       type: object
       properties:
-        object: { type: string }
         id: { type: string }
+        object: { type: string }
         session_id: { type: string }
         type: { type: string }
         status: { type: string }
-        data: { type: object }
-        created_at: { type: integer }
-
-    RealtimeEventList:
-      type: object
-      properties:
-        object: { type: string }
-        data:
-          type: array
-          items:
-            $ref: "#/components/schemas/RealtimeEvent"
-
-    Tool:
-      type: object
-      description: A callable tool definition.
-      properties:
-        type:
-          type: string
-          enum:
-            - file_search
-            - file_upload
-            - image_generation
-            - video_generation
-            - vector_store_retrieval
-            - web_search
-            - computer_use
-            - code_interpreter
-        args:
-          type: object
-          description: Arguments passed to the tool.
-
-    ToolOutput:
-      type: object
-      properties:
-        tool: { type: string }
-        status: { type: string, enum: [success, error] }
-        output: { type: object }
 
     ResponseRequest:
       type: object
       properties:
         model: { type: string }
         input: { type: string }
-        background: { type: boolean }
-        stream: { type: boolean }
         tools:
           type: array
           items:
@@ -507,33 +354,42 @@ components:
     Response:
       type: object
       properties:
-        object: { type: string }
         id: { type: string }
+        object: { type: string }
         model: { type: string }
-        output:
-          type: array
-          items: { type: object }
+        output: { type: array, items: { type: object } }
         tool_outputs:
           type: array
-          items:
-            $ref: "#/components/schemas/ToolOutput"
-        usage: { type: object }
+          items: { $ref: "#/components/schemas/ToolOutput" }
         status: { type: string }
+
+    Tool:
+      type: object
+      properties:
+        type: { type: string }
+        args: { type: object }
+
+    ToolOutput:
+      type: object
+      properties:
+        tool: { type: string }
+        status: { type: string }
+        output: { type: object }
+
+    Conversation:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string }
+        title: { type: string }
+        created: { type: integer }
+        messages:
+          type: array
+          items: { type: object }
 
     Fallback:
       type: object
       properties:
         object: { type: string }
-        path: { type: string }
-        status: { type: string }
+        status: { type: integer }
         passthrough: { type: boolean }
-
-    Error:
-      type: object
-      properties:
-        error:
-          type: object
-          properties:
-            message: { type: string }
-            type: { type: string }
-            code: { type: string }
