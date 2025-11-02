@@ -1,70 +1,61 @@
 # ================================================================
-# register_routes.py — Centralized Route Registration
+# register_routes.py — Route Registration Hub
 # ================================================================
-# Loads and attaches all core route modules to the FastAPI app.
-# Supports OpenAI-compatible endpoints across the relay:
-#   /v1/models, /v1/embeddings, /v1/files,
-#   /v1/vector_stores, /v1/realtime, /v1/responses,
-#   /responses (aliases), and /v1/conversations.
+# Collects and mounts all endpoint routers for the ChatGPT Team Relay.
+# This file ensures clean route registration, avoiding circular imports.
+#
+# Compatible with:
+#   - openai-python SDK v2.6.1
+#   - openai-node SDK v6.7.0
 # ================================================================
 
 from fastapi import FastAPI
-import logging
 
-# Import all route modules
+# Import each route module directly (no self-import)
 from app.routes import (
-    models,
+    conversations,
     embeddings,
     files,
-    vector_stores,
+    models,
     realtime,
     responses,
-    conversations,
+    vector_stores
 )
 
-logger = logging.getLogger("relay")
-
+# ================================================================
+# Route Registration Function
+# ================================================================
 def register_routes(app: FastAPI):
     """
-    Registers all API route modules to the FastAPI app instance.
-    Ensures OpenAI SDK endpoint compatibility.
+    Attach all primary API routers to the FastAPI application instance.
+    Each router corresponds to an OpenAI-compatible endpoint family.
     """
 
-    try:
-        # ------------------------------------------------------------
-        # Core OpenAI API Families
-        # ------------------------------------------------------------
-        app.include_router(models.router)
-        app.include_router(embeddings.router)
-        app.include_router(files.router)
-        app.include_router(vector_stores.router)
-        app.include_router(realtime.router)
+    # --- Core OpenAI-compatible endpoints ---
+    app.include_router(models.router, prefix="", tags=["models"])
+    app.include_router(embeddings.router, prefix="", tags=["embeddings"])
+    app.include_router(files.router, prefix="", tags=["files"])
+    app.include_router(vector_stores.router, prefix="", tags=["vector_stores"])
+    app.include_router(realtime.router, prefix="", tags=["realtime"])
+    app.include_router(responses.router, prefix="", tags=["responses"])
+    app.include_router(conversations.router, prefix="", tags=["conversations"])
 
-        # ------------------------------------------------------------
-        # Responses API (with aliases)
-        # ------------------------------------------------------------
-        app.include_router(responses.router)
-        if hasattr(responses, "responses_router"):
-            app.include_router(responses.responses_router)
+    # --- Response aliases (for SDK compatibility) ---
+    # These mirror /v1/responses → /responses for legacy clients
+    app.include_router(responses.responses_router, prefix="", tags=["responses"])
 
-        # ------------------------------------------------------------
-        # Conversations Mock API
-        # ------------------------------------------------------------
-        app.include_router(conversations.router)
+    # --- Startup confirmation ---
+    print("✅ All route modules successfully registered with FastAPI.")
 
-        # ------------------------------------------------------------
-        # Log registration success
-        # ------------------------------------------------------------
-        logger.info("✅ Route registration complete:")
-        logger.info("   → /v1/models")
-        logger.info("   → /v1/embeddings")
-        logger.info("   → /v1/files")
-        logger.info("   → /v1/vector_stores")
-        logger.info("   → /v1/realtime")
-        logger.info("   → /v1/responses (+ /responses)")
-        logger.info("   → /v1/conversations")
-        logger.info("--------------------------------------------------------")
-
-    except Exception as e:
-        logger.error(f"❌ Route registration failed: {e}")
-        raise e
+# ================================================================
+# Notes
+# ================================================================
+# 1. This module intentionally avoids importing `register_routes` itself.
+#    Doing so would create a circular import between main.py and this file.
+#
+# 2. Each route module (e.g. models.py, responses.py) defines its own
+#    FastAPI APIRouter instance named `router`.
+#
+# 3. The inclusion order matters only for fallback and universal passthrough
+#    behavior, which are handled in main.py after this function is called.
+# ================================================================
