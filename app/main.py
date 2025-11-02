@@ -7,10 +7,10 @@
 
 import os
 import logging
-import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from app.routes import register_routes
 from app.api.passthrough_proxy import router as passthrough_router
 from app.utils.logger import setup_logger
@@ -28,14 +28,31 @@ app = FastAPI(
     title="ChatGPT Team Relay API",
     version="2.0",
     description=(
-        "Ground-truth-validated OpenAI-compatible relay API.\n"
+        "OpenAI-compatible relay API with ground-truth validation.\n"
         "Implements SDK v2.6.1 (Python) and v6.7.0 (Node) endpoints.\n"
-        "Supports Responses, Realtime, Files, Vector Stores, and Tools."
+        "Supports Responses, Realtime, Files, Vector Stores, Tools, and Conversations."
     ),
 )
 
 # ================================================================
-# CORS Configuration
+# Static File Mounts for Plugin + Schema Discovery
+# ================================================================
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+schemas_dir = os.path.join(os.path.dirname(__file__), "schemas")
+
+# Public .well-known folder for ChatGPT Actions
+well_known_path = os.path.join(static_dir, ".well-known")
+if os.path.exists(well_known_path):
+    app.mount("/.well-known", StaticFiles(directory=well_known_path), name="well-known")
+    logger.info("📘 Mounted /.well-known for plugin manifest")
+
+# OpenAPI schema served directly for ChatGPT Actions
+if os.path.exists(schemas_dir):
+    app.mount("/schemas", StaticFiles(directory=schemas_dir), name="schemas")
+    logger.info("📘 Mounted /schemas for OpenAPI schema access")
+
+# ================================================================
+# CORS Configuration (Required for ChatGPT Actions)
 # ================================================================
 allowed_origins = os.getenv(
     "CORS_ALLOW_ORIGINS",
@@ -53,22 +70,7 @@ app.add_middleware(
 )
 
 # ================================================================
-# Health Endpoint
-# ================================================================
-@app.get("/v1/health")
-async def health_check():
-    """Return relay health and metadata."""
-    return {
-        "object": "health",
-        "status": "ok",
-        "version": "2.0",
-        "sdk_target": "openai-python 2.6.1",
-        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "passthrough_enabled": True,
-    }
-
-# ================================================================
-# Register Routes
+# Register All Routes
 # ================================================================
 register_routes(app)
 
@@ -94,6 +96,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.on_event("startup")
 async def on_startup():
     logger.info("🚀 ChatGPT Team Relay startup complete.")
-    logger.info("   - OpenAI API passthrough enabled")
-    logger.info("   - Routes registered successfully")
-    logger.info("   - Ready for SDK + Actions integration")
+    logger.info("   - OpenAI passthrough active")
+    logger.info("   - Routes and tools registered successfully")
+    logger.info("   - Ready for ChatGPT Actions integration")
