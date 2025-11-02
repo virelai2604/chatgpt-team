@@ -1,5 +1,5 @@
 # ================================================================
-# forward_openai.py — Production-Grade Passthrough Proxy
+# forward_openai.py — Production-Grade Passthrough Proxy (Fixed)
 # ================================================================
 # Forwards all HTTP requests to OpenAI’s upstream API.
 # Supports:
@@ -13,12 +13,15 @@ import os
 import time
 import httpx
 import logging
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from fastapi import Request
 from fastapi.responses import StreamingResponse, JSONResponse
 
 logger = logging.getLogger("relay")
 
+# ================================================================
+# Environment Configuration
+# ================================================================
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
@@ -26,10 +29,11 @@ RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", 120))
 
 
 def _build_headers(original: Dict[str, str]) -> Dict[str, str]:
-    """Clone incoming headers, override auth + host."""
+    """Clone incoming headers, override auth, remove duplicates."""
     headers = dict(original)
     headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
-    headers["Host"] = "api.openai.com"
+    # Do NOT manually set "Host" — httpx does this automatically
+    headers.pop("Host", None)
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
     return headers
@@ -45,16 +49,15 @@ async def forward_to_openai(request: Request, path: str) -> Any:
       • Returns JSONResponse or StreamingResponse
     """
     method = request.method.lower()
-    target_url = f"{OPENAI_API_BASE}/{path.lstrip('/')}"
+    target_url = f"{OPENAI_API_BASE.rstrip('/')}/{path.lstrip('/')}"
     headers = _build_headers(request.headers)
 
     # --- Prepare body or form data ---
     content_type = headers.get("content-type", "")
-    body = None
-    files = None
+    send_kwargs = {}
 
     if "multipart/form-data" in content_type.lower():
-        # Read multipart form manually
+        # Parse form data manually
         form = await request.form()
         files = []
         data = {}
@@ -65,7 +68,7 @@ async def forward_to_openai(request: Request, path: str) -> Any:
                 data[field] = value
         send_kwargs = {"data": data, "files": files}
     else:
-        # Raw body (JSON or plain)
+        # Pass through raw JSON or binary
         body = await request.body()
         send_kwargs = {"content": body}
 
@@ -78,32 +81,36 @@ async def forward_to_openai(request: Request, path: str) -> Any:
         except httpx.RequestError as e:
             logger.error(f"❌ Network error contacting OpenAI: {e}")
             return JSONResponse(
-                {"object": "error", "message": f"Request failed: {e}", "path": path},
+                {
+                    "object": "error",
+                    "message": f"Request to OpenAI failed: {str(e)}",
+                    "path": path,
+                },
                 status_code=502,
             )
 
     elapsed = (time.perf_counter() - start_time) * 1000
     logger.info(f"✅ {response.status_code} from OpenAI in {elapsed:.1f} ms")
 
-    # --- Handle Streaming Responses (SSE) ---
+    # --- Handle Streaming (SSE) ---
     content_type = response.headers.get("content-type", "")
     if "text/event-stream" in content_type:
-        def event_generator():
-            for chunk in response.iter_bytes():
+        async def stream_generator():
+            async for chunk in response.aiter_bytes():
                 yield chunk
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
-    # --- Normal JSON or binary responses ---
+    # --- Handle JSON or binary fallback ---
     try:
-        return JSONResponse(response.json(), status_code=response.status_code)
+        data = response.json()
+        return JSONResponse(data, status_code=response.status_code)
     except Exception:
-        # Non-JSON responses (e.g., file downloads)
         return JSONResponse(
             {
                 "object": "proxy_response",
                 "status": response.status_code,
                 "content_type": content_type,
-                "body": response.text[:2000],  # truncate for safety
+                "body": response.text[:2000],  # truncate safely
             },
             status_code=response.status_code,
         )
