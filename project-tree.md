@@ -65,6 +65,7 @@
       📄 openai_models_categorized.json
     📁 uploads
       📄 attachments.db
+      📄 file_9aa498e1dbb0
     📁 usage
       📄 usage.db
     📁 vector_stores
