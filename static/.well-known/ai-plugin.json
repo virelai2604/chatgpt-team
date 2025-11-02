@@ -2,21 +2,25 @@
   "schema_version": "v1",
   "name_for_human": "ChatGPT Team Relay",
   "name_for_model": "chatgpt_team_relay",
-  "description_for_human": "A relay service that mirrors the OpenAI API and supports tool invocation, file handling, and streaming responses.",
-  "description_for_model": "Relay endpoint compatible with OpenAI Responses, Models, Files, and Realtime APIs.",
-  "auth": { "type": "none" },
+  "description_for_human": "An OpenAI-compatible relay that mirrors the Responses, Models, Files, Vector Stores, and Realtime APIs — including tool execution, file handling, and streaming responses.",
+  "description_for_model": "Use this API to generate responses, create embeddings, upload files, interact with vector stores, and handle realtime sessions. The relay behaves identically to the OpenAI API but runs on a self-hosted Render instance.",
+  "auth": {
+    "type": "none"
+  },
   "api": {
     "type": "openapi",
-    "url": "https://chatgpt-team-relay.onrender.com/v1/openapi.yaml"
+    "url": "https://chatgpt-team-relay.onrender.com/schemas/openapi.yaml"
   },
   "logo_url": "https://chatgpt-team-relay.onrender.com/static/logo.png",
-  "contact_email": "support@example.com",
+  "contact_email": "support@chatgpt-team-relay.com",
   "legal_info_url": "https://chatgpt-team-relay.onrender.com/legal",
   "endpoints": {
     "responses": "/v1/responses",
     "models": "/v1/models",
     "files": "/v1/files",
-    "tools_list": "/v1/responses/tools"
+    "embeddings": "/v1/embeddings",
+    "realtime": "/v1/realtime/sessions",
+    "vector_stores": "/v1/vector_stores"
   },
   "supported_models": [
     "gpt-4.1",
@@ -28,6 +32,8 @@
     "relay",
     "fastapi",
     "openai",
-    "plugin"
+    "plugin",
+    "chatgpt-actions",
+    "sdk-aligned"
   ]
 }
