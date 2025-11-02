@@ -11,12 +11,14 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
-# ✅ Correct import: pull the *function* directly, not the module
+# ✅ Correct imports
 from app.routes.register_routes import register_routes
-
 from app.api.passthrough_proxy import router as passthrough_router
 from app.api.forward_openai import forward_to_openai
+from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
+from app.middleware.validation import validate_request
 from app.utils.logger import setup_logger
 
 # ================================================================
@@ -72,6 +74,20 @@ app.add_middleware(
     ).split(","),
     allow_headers=os.getenv("CORS_ALLOW_HEADERS", "*").split(","),
 )
+
+# ================================================================
+# Middleware Integration
+# ================================================================
+# ✅ Request lifecycle orchestrator
+app.add_middleware(P4OrchestratorMiddleware)
+
+# ✅ Schema validator middleware (async hook)
+@app.middleware("http")
+async def schema_validation_middleware(request: Request, call_next):
+    validation_response = await validate_request(request)
+    if validation_response:
+        return validation_response
+    return await call_next(request)
 
 # ================================================================
 # Register All Explicit Routes (OpenAI-Compatible)
@@ -141,5 +157,6 @@ async def on_startup():
     logger.info("🚀 ChatGPT Team Relay startup complete.")
     logger.info("   - OpenAI passthrough active")
     logger.info("   - Universal /v1 passthrough enabled")
+    logger.info("   - Schema validation middleware active")
     logger.info("   - Routes and tools registered successfully")
     logger.info("   - Ready for ChatGPT Actions integration")
