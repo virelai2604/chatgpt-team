@@ -1,8 +1,8 @@
 # ================================================================
-# models.py — Model Metadata Routes (with upstream passthrough)
+# models.py — Model Metadata Routes (Upstream-Aware)
 # ================================================================
-# Provides mock implementations of the OpenAI /v1/models endpoints.
-# Falls back to real OpenAI API when an API key is provided.
+# Returns local models when offline, or real OpenAI model list when
+# OPENAI_API_KEY is configured.
 # ================================================================
 
 import os
@@ -21,22 +21,17 @@ MODELS = [
 
 @router.get("/v1/models")
 async def list_models(request: Request):
-    """
-    Returns available model metadata.
-    Falls back to real OpenAI API if API key is configured.
-    """
-    openai_key = os.getenv("OPENAI_API_KEY")
-    if openai_key:
+    """Return available models — tries upstream, falls back local."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if api_key:
         try:
             resp = await forward_to_openai(request, "/v1/models")
-            return JSONResponse(resp.json(), status_code=resp.status_code)
+            # forward_to_openai already returns JSONResponse
+            return resp
         except Exception:
-            pass  # fallback to local mock if network fails
+            pass  # fallback if network error
 
-    return JSONResponse({
-        "object": "list",
-        "data": MODELS
-    })
+    return JSONResponse({"object": "list", "data": MODELS})
 
 
 @router.get("/models")
