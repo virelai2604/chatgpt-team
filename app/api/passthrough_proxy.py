@@ -1,5 +1,5 @@
 # ================================================================
-# passthrough_proxy.py — Universal catch-all proxy to OpenAI
+# passthrough_proxy.py — Universal /v1/* Proxy
 # ================================================================
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -10,27 +10,40 @@ router = APIRouter(tags=["passthrough"])
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def passthrough(path: str, request: Request):
-    """Forward any unrecognized /v1/* path directly to OpenAI."""
-    resp = await forward_to_openai(request, f"/{path}")
+    """Forward any unknown /v1/* endpoint to OpenAI, SDK-aligned."""
+    result = await forward_to_openai(request, f"/{path}")
 
-    # --- Handle FastAPI vs HTTPX responses safely ---
-    if isinstance(resp, JSONResponse):
-        # forward_to_openai() already handled it (e.g., error JSON)
-        return resp
+    # FastAPI JSONResponse returned → already ready
+    if isinstance(result, JSONResponse):
+        return result
 
-    if isinstance(resp, httpx.Response):
-        try:
-            return JSONResponse(resp.json(), status_code=resp.status_code)
-        except Exception:
-            return JSONResponse({
+    # Raw httpx.Response returned (shouldn’t happen, but guard anyway)
+    if isinstance(result, httpx.Response):
+        ctype = result.headers.get("content-type", "")
+        if ctype.startswith("application/json"):
+            try:
+                return JSONResponse(result.json(), status_code=result.status_code)
+            except Exception:
+                pass
+        return JSONResponse(
+            {
                 "object": "passthrough",
-                "status": resp.status_code,
-                "body": resp.text[:1000]  # safe truncate
-            }, status_code=resp.status_code)
+                "status": result.status_code,
+                "content_type": ctype,
+                "body": getattr(result, "text", "")[:1000],
+            },
+            status_code=result.status_code,
+        )
 
-    # Unexpected fallback
-    return JSONResponse({
-        "object": "error",
-        "message": "Unexpected response type from forward_to_openai.",
-        "type": str(type(resp))
-    }, status_code=500)
+    # Unexpected type
+    return JSONResponse(
+        {
+            "error": {
+                "message": f"Unexpected passthrough type: {type(result)}",
+                "type": "relay_error",
+                "param": None,
+                "code": "unexpected_response_type"
+            }
+        },
+        status_code=500,
+    )
