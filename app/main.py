@@ -9,10 +9,11 @@ import os
 import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from app.routes import register_routes
 from app.api.passthrough_proxy import router as passthrough_router
+from app.api.forward_openai import forward_to_openai
 from app.utils.logger import setup_logger
 
 # ================================================================
@@ -75,7 +76,45 @@ app.add_middleware(
 register_routes(app)
 
 # ================================================================
-# Fallback Proxy for Unrecognized Routes
+# Universal Passthrough for Future /v1/* Endpoints
+# ================================================================
+@app.api_route("/v1/{endpoint:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def universal_passthrough(request: Request, endpoint: str):
+    """
+    Automatically forwards any unknown /v1/* endpoint to OpenAI.
+    Example: /v1/assistants, /v1/fine_tuning/jobs, /v1/batches
+    Future-proofs the relay as the OpenAI API evolves.
+    """
+    upstream_path = f"/v1/{endpoint}"
+    logger.info(f"🔄 Universal passthrough triggered for {upstream_path}")
+
+    resp = await forward_to_openai(request, upstream_path)
+    content_type = resp.headers.get("content-type", "")
+
+    # Handle streaming responses (SSE)
+    if "text/event-stream" in content_type:
+        async def stream_generator():
+            async for chunk in resp.aiter_bytes():
+                yield chunk
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+    # Handle JSON or plain text
+    try:
+        return JSONResponse(resp.json(), status_code=resp.status_code)
+    except Exception:
+        return JSONResponse(
+            {
+                "object": "proxy_response",
+                "path": upstream_path,
+                "status": resp.status_code,
+                "content_type": content_type,
+                "body": resp.text[:2000],
+            },
+            status_code=resp.status_code,
+        )
+
+# ================================================================
+# Fallback Proxy for Truly Unrecognized Routes
 # ================================================================
 app.include_router(passthrough_router)
 
@@ -97,5 +136,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def on_startup():
     logger.info("🚀 ChatGPT Team Relay startup complete.")
     logger.info("   - OpenAI passthrough active")
+    logger.info("   - Universal passthrough enabled for /v1/*")
     logger.info("   - Routes and tools registered successfully")
     logger.info("   - Ready for ChatGPT Actions integration")
