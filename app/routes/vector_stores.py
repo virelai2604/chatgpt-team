@@ -45,7 +45,12 @@ def build_headers(extra: dict | None = None) -> dict:
 async def forward(client: httpx.AsyncClient, method: str, endpoint: str, **kwargs):
     """Shared forwarding helper with SDK-style error schema."""
     try:
-        resp = await client.request(method, f"{OPENAI_API_BASE}{endpoint}", headers=build_headers(), **kwargs)
+        resp = await client.request(
+            method,
+            f"{OPENAI_API_BASE}{endpoint}",
+            headers=build_headers(),
+            **kwargs,
+        )
         return JSONResponse(resp.json(), status_code=resp.status_code)
     except httpx.RequestError as e:
         log.error(f"[VectorStores] Network error: {e}")
@@ -106,6 +111,46 @@ async def attach_files_to_vector_store(vector_id: str, request: Request):
                         files.append((key, (val.filename, val.file, val.content_type)))
                     else:
                         data[key] = val
+
                 resp = await client.post(
                     f"{OPENAI_API_BASE}/vector_stores/{vector_id}/files",
-                    headers=build_headers({"Conte_
+                    headers=build_headers({"Content-Type": content_type}),
+                    files=files,
+                    data=data,
+                )
+            else:
+                body = await request.body()
+                resp = await client.post(
+                    f"{OPENAI_API_BASE}/vector_stores/{vector_id}/files",
+                    headers=build_headers({"Content-Type": "application/json"}),
+                    content=body,
+                )
+
+            return JSONResponse(resp.json(), status_code=resp.status_code)
+        except httpx.RequestError as e:
+            log.error(f"[VectorStores] File attach failed: {e}")
+            return JSONResponse(
+                {"error": {"message": str(e), "type": "network_error"}},
+                status_code=502,
+            )
+
+
+# ------------------------------------------------------------
+# DELETE /v1/vector_stores/{id}  → Delete
+# ------------------------------------------------------------
+@router.delete("/{vector_id}")
+async def delete_vector_store(vector_id: str):
+    """Delete a vector store."""
+    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
+        try:
+            resp = await client.delete(
+                f"{OPENAI_API_BASE}/vector_stores/{vector_id}",
+                headers=build_headers(),
+            )
+            return JSONResponse(resp.json(), status_code=resp.status_code)
+        except httpx.RequestError as e:
+            log.error(f"[VectorStores] Delete failed: {e}")
+            return JSONResponse(
+                {"error": {"message": str(e), "type": "network_error"}},
+                status_code=502,
+            )
