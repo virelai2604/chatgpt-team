@@ -10,7 +10,6 @@
   📄 relay_response.json
   📄 render.yaml
   📄 requirements.txt
-  📄 test_client.py
   📁 app
     📄 __init__.py
     📄 main.py
@@ -89,5 +88,6 @@
     📄 __init__.py
     📄 client.py
     📄 sora.py
+    📄 test_full_openai_relay_suite.py
     📄 test_groundtruth_all.py
     📁 downloads

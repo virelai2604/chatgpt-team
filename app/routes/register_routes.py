@@ -1,39 +1,56 @@
 """
-register_routes.py — Centralized router registration for all /v1 relay endpoints.
+register_routes.py — Unified Router Registration
+────────────────────────────────────────────────────────────
+Automatically registers all /v1/* route modules in the relay.
+
+Aligned with:
+  • openai-python SDK v2.61
+  • openai-node SDK v6.7.0
+  • OpenAI API Reference (2025-10)
+
+Ensures all REST routes from app/routes and app/api are available:
+  /v1/responses
+  /v1/embeddings
+  /v1/models
+  /v1/files
+  /v1/vector_stores
+  /v1/conversations
+  /v1/realtime/sessions/events
+  /v1/tools/*
 """
-from rich.console import Console
 
-# ✅ Direct submodule imports (avoids __init__.py dependencies)
-from app.routes import responses
-from app.routes import embeddings
-from app.routes import models
-from app.routes import vector_stores
-from app.routes import realtime
+from fastapi import FastAPI
+from app.routes import (
+    responses,
+    embeddings,
+    models,
+    files,
+    vector_stores,
+    conversations,
+    realtime,
+)
+from app.api import tools_api
 
-# Optional: only import tools if the file exists
-try:
-    from app.routes import tools
-except ImportError:
-    tools = None
+# ------------------------------------------------------------
+# Register all routers
+# ------------------------------------------------------------
+def register_all_routes(app: FastAPI):
+    """Attach all routers to the FastAPI instance."""
+    app.include_router(responses.router)
+    app.include_router(embeddings.router)
+    app.include_router(models.router)
+    app.include_router(files.router)
+    app.include_router(vector_stores.router)
+    app.include_router(conversations.router)
+    app.include_router(realtime.router)
+    app.include_router(tools_api.router)
 
-console = Console()
+    # Health check endpoint
+    @app.get("/health")
+    async def health_check():
+        return {"status": "ok"}
 
-def register_routes(app):
-    """Registers all route modules with the FastAPI relay app."""
-    try:
-        app.include_router(responses.router)
-        app.include_router(embeddings.router)
-        app.include_router(models.router)
-        app.include_router(vector_stores.router)
-        app.include_router(realtime.router)
-        if tools:
-            app.include_router(tools.router)
-
-        console.print("[bold green]✅ All route modules successfully registered with FastAPI.[/bold green]")
-        console.print("   - Core /v1 routes active")
-        console.print("   - Tool orchestration active")
-        console.print("   - Realtime streaming endpoints active")
-
-    except Exception as e:
-        console.print(f"[bold red]❌ Route registration failed:[/bold red] {e}")
-        raise
+    # Root redirect (for SDK discovery)
+    @app.get("/")
+    async def root():
+        return {"object": "relay", "version": "2025-10", "status": "online"}

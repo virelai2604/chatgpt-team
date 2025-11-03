@@ -1,46 +1,75 @@
-# app/utils/logger.py
-from rich.console import Console
-from rich.theme import Theme
+"""
+logger.py — Structured JSON Logger for ChatGPT Team Relay
+────────────────────────────────────────────────────────────
+Provides unified logging for all subsystems (middleware, proxy,
+routes, tools). Emits machine-readable JSON and human-friendly
+console output simultaneously.
+
+Features:
+  • JSON + colorized console logging
+  • Supports levels: DEBUG, INFO, WARNING, ERROR
+  • Includes request ID, timestamp, module, and message
+"""
+
+import json
 import logging
+import sys
+import time
+from typing import Any, Dict
 
-_custom_theme = Theme({
-    "info": "cyan",
-    "warning": "yellow",
-    "error": "bold red",
-    "success": "green"
-})
+# ------------------------------------------------------------
+# Log Configuration
+# ------------------------------------------------------------
+class JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload: Dict[str, Any] = {
+            "ts": round(time.time(), 3),
+            "level": record.levelname,
+            "module": record.module,
+            "message": record.getMessage(),
+        }
 
-console = Console(theme=_custom_theme)
+        # Attach exception info if present
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
 
-
-def setup_logger(name: str = "relay"):
-    """Initialize and return a colorized logger using Rich + standard logging."""
-    logger = logging.getLogger(name)
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            "[%(asctime)s] %(levelname)s — %(message)s", "%H:%M:%S"
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-
-    # Also show a banner at startup
-    console.print("🪶 Logger initialized — Rich console active.", style="success")
-    return logger
+        return json.dumps(payload, ensure_ascii=False)
 
 
-# Global instance used by middleware and startup events
-log = setup_logger("app")
+# Create main logger
+log = logging.getLogger("relay")
+log.setLevel(logging.INFO)
 
-def info(message: str):
-    console.print(f"[INFO] {message}", style="info")
-    log.info(message)
+# StreamHandler for console output
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
 
-def warn(message: str):
-    console.print(f"[WARN] {message}", style="warning")
-    log.warning(message)
+# Dual-format: human + JSON for easy tailing
+class DualFormatter(logging.Formatter):
+    COLORS = {
+        "INFO": "\033[92m",     # green
+        "WARNING": "\033[93m",  # yellow
+        "ERROR": "\033[91m",    # red
+        "DEBUG": "\033[94m",    # blue
+    }
 
-def error(message: str):
-    console.print(f"[ERROR] {message}", style="error")
-    log.error(message)
+    def format(self, record):
+        color = self.COLORS.get(record.levelname, "")
+        reset = "\033[0m"
+        msg = f"{color}[{record.levelname}] {record.module}: {record.getMessage()}{reset}"
+        return msg
+
+console_handler.setFormatter(DualFormatter())
+
+# File handler (optional JSON structured logs)
+file_handler = logging.FileHandler("relay.log", encoding="utf-8")
+file_handler.setFormatter(JSONFormatter())
+file_handler.setLevel(logging.INFO)
+
+# Prevent duplication
+if not log.handlers:
+    log.addHandler(console_handler)
+    log.addHandler(file_handler)
+
+# Convenience aliases
+logger = log

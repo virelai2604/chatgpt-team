@@ -1,64 +1,216 @@
 openapi: 3.1.0
 info:
   title: ChatGPT Team Relay API
-  version: "2.0"
-  description: >
-    OpenAI-compatible relay API that mirrors the official /v1 routes.
-    Implements SDK v2.6.1 (Python) and v6.7.0 (Node) endpoints,
-    including models, embeddings, files, vector stores, realtime, and responses with tool execution.
+  version: "1.7"
+  description: |
+    OpenAI-compatible API relay implementing all `/v1/*` routes.
+    Fully aligned with OpenAI Python SDK v2.61, Node SDK v6.7.0,
+    and the Ground Truth API Reference (2025-10).
+
 servers:
   - url: https://chatgpt-team-relay.onrender.com
-    description: Production Render deployment
+    description: Production Relay Endpoint
+  - url: http://127.0.0.1:10000
+    description: Local development
 
 tags:
-  - name: models
-  - name: embeddings
-  - name: files
-  - name: vector_stores
-  - name: realtime
   - name: responses
+    description: Create and stream text or tool responses.
+  - name: embeddings
+    description: Create text embeddings.
+  - name: models
+    description: List or retrieve model information.
+  - name: files
+    description: Upload and manage files.
+  - name: vector_stores
+    description: Manage vector stores and attached files.
   - name: conversations
-  - name: passthrough
+    description: Create and persist multi-turn conversations.
+  - name: realtime
+    description: Realtime sessions and SSE event streaming.
+  - name: tools
+    description: Manifest-based function and tool execution.
 
 paths:
-
-  /v1/models:
-    get:
-      tags: [models]
-      summary: List all available OpenAI models
-      operationId: listModels
-      responses:
-        "200":
-          description: List of models available to the configured API key
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ModelList"
-
-  /v1/embeddings:
+  /v1/responses:
     post:
-      tags: [embeddings]
-      summary: Generate text embeddings
-      operationId: createEmbedding
+      tags: [responses]
+      summary: Create a new model response.
+      description: Generates a text, tool, or streamed response using a specified model.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EmbeddingRequest"
+              type: object
+              properties:
+                model:
+                  type: string
+                  example: gpt-4o-mini
+                input:
+                  type: string
+                  example: Explain what a relay does.
+                stream:
+                  type: boolean
+                  default: false
+                tools:
+                  type: array
+                  description: Optional list of tools to be called.
+              required: [model, input]
       responses:
         "200":
-          description: Embedding response
+          description: Response object created successfully.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EmbeddingResponse"
+                $ref: "#/components/schemas/CreateResponseResponse"
+        "202":
+          description: Streaming response accepted.
+        "400":
+          description: Invalid request format.
+        "500":
+          description: Internal relay error.
+
+  /v1/responses/chain/{response_id}:
+    post:
+      tags: [responses]
+      summary: Chain a follow-up response.
+      parameters:
+        - name: response_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateResponseRequest"
+      responses:
+        "200":
+          description: Chained response created.
+
+  /v1/embeddings:
+    post:
+      tags: [embeddings]
+      summary: Create an embedding for text input.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEmbeddingRequest"
+      responses:
+        "200":
+          description: Embedding generated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateEmbeddingResponse"
+
+  /v1/models:
+    get:
+      tags: [models]
+      summary: List available models.
+      responses:
+        "200":
+          description: List of models.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListModelsResponse"
+
+  /v1/models/{model_id}:
+    get:
+      tags: [models]
+      summary: Retrieve model details.
+      parameters:
+        - name: model_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Model object retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelObject"
 
   /v1/files:
+    get:
+      tags: [files]
+      summary: List uploaded files.
+      responses:
+        "200":
+          description: List of uploaded files.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListFilesResponse"
     post:
       tags: [files]
-      summary: Upload a file
-      operationId: uploadFile
+      summary: Upload a new file.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                purpose:
+                  type: string
+      responses:
+        "200":
+          description: File uploaded successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileObject"
+
+  /v1/vector_stores:
+    get:
+      tags: [vector_stores]
+      summary: List all vector stores.
+      responses:
+        "200":
+          description: Vector store list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListVectorStoresResponse"
+    post:
+      tags: [vector_stores]
+      summary: Create a vector store.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVectorStoreRequest"
+      responses:
+        "201":
+          description: Vector store created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VectorStoreObject"
+
+  /v1/vector_stores/{vector_store_id}/files:
+    post:
+      tags: [vector_stores]
+      summary: Attach files to an existing vector store.
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -71,325 +223,221 @@ paths:
                   format: binary
       responses:
         "200":
-          description: Uploaded file object
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/File"
+          description: Files attached successfully.
 
-  /v1/files/{file_id}:
+  /v1/conversations:
     get:
-      tags: [files]
-      summary: Retrieve file metadata
-      operationId: retrieveFile
-      parameters:
-        - name: file_id
-          in: path
-          required: true
-          schema: { type: string }
+      tags: [conversations]
+      summary: List stored conversations.
       responses:
         "200":
-          description: File object
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/File"
-
-  /v1/files/{file_id}/content:
-    get:
-      tags: [files]
-      summary: Retrieve file contents
-      operationId: retrieveFileContent
-      parameters:
-        - name: file_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: File content
-          content:
-            application/octet-stream:
-              schema: { type: string, format: binary }
-
-  /v1/vector_stores:
+          description: List of conversations.
     post:
-      tags: [vector_stores]
-      summary: Create a new vector store
-      operationId: createVectorStore
-      responses:
-        "200":
-          description: Vector store metadata
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VectorStore"
-
-  /v1/vector_stores/{vector_id}:
-    get:
-      tags: [vector_stores]
-      summary: Retrieve a vector store
-      operationId: retrieveVectorStore
-      parameters:
-        - name: vector_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Vector store object
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VectorStore"
-    delete:
-      tags: [vector_stores]
-      summary: Delete a vector store
-      operationId: deleteVectorStore
-      parameters:
-        - name: vector_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Deletion confirmation
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VectorStoreDeleted"
-
-  /v1/realtime/sessions:
-    post:
-      tags: [realtime]
-      summary: Create a realtime session
-      operationId: createRealtimeSession
-      responses:
-        "200":
-          description: Realtime session created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RealtimeSession"
-
-  /v1/realtime/events:
-    post:
-      tags: [realtime]
-      summary: Create a realtime event
-      operationId: createRealtimeEvent
-      responses:
-        "200":
-          description: Event object
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RealtimeEvent"
-
-  /v1/responses:
-    post:
-      tags: [responses]
-      summary: Generate a text or tool-based response
-      operationId: createResponse
+      tags: [conversations]
+      summary: Create a new conversation.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ResponseRequest"
+              type: object
+              properties:
+                title: { type: string }
+                messages: { type: array, items: { type: object } }
       responses:
-        "200":
-          description: Text or tool response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Response"
+        "201":
+          description: Conversation created.
 
-  /v1/responses:stream:
-    post:
-      tags: [responses]
-      summary: Stream a response via SSE
-      operationId: streamResponse
-      responses:
-        "200":
-          description: Streamed response
-          content:
-            text/event-stream:
-              schema: { type: string }
-
-  /v1/conversations:
+  /v1/conversations/{conversation_id}:
     get:
       tags: [conversations]
-      summary: List all conversations
-      operationId: listConversations
+      summary: Retrieve a conversation by ID.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         "200":
-          description: Conversation list
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object: { type: string }
-                  data: { type: array, items: { $ref: "#/components/schemas/Conversation" } }
+          description: Conversation retrieved.
+
+  /v1/conversations/{conversation_id}/messages:
     post:
       tags: [conversations]
-      summary: Create a new conversation
-      operationId: createConversation
+      summary: Append a message to an existing conversation.
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Conversation"
+              type: object
+              properties:
+                role: { type: string, example: user }
+                content: { type: string }
       responses:
         "200":
-          description: Conversation created
+          description: Message added.
+
+  /v1/realtime/sessions/events:
+    get:
+      tags: [realtime]
+      summary: Stream realtime events.
+      responses:
+        "200":
+          description: Server-Sent Events stream.
+          content:
+            text/event-stream: {}
+    post:
+      tags: [realtime]
+      summary: Send a client event to the realtime session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Event acknowledged.
+
+  /v1/tools:
+    get:
+      tags: [tools]
+      summary: List available tools.
+      responses:
+        "200":
+          description: List of tools.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Conversation"
+                $ref: "#/components/schemas/ToolList"
 
-  /{path}:
+  /v1/tools/{tool_id}:
     get:
-      tags: [passthrough]
-      summary: Fallback passthrough for unrecognized routes
-      operationId: fallbackPassthrough
+      tags: [tools]
+      summary: Retrieve tool metadata.
       parameters:
-        - name: path
+        - name: tool_id
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
         "200":
-          description: Fallback response from OpenAI
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Fallback"
+          description: Tool details.
+
+  /v1/tools/execute:
+    post:
+      tags: [tools]
+      summary: Execute a registered tool.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolExecuteRequest"
+      responses:
+        "200":
+          description: Tool executed successfully.
 
 components:
   schemas:
-    ModelList:
-      type: object
-      properties:
-        object: { type: string }
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id: { type: string }
-              object: { type: string }
-
-    EmbeddingRequest:
-      type: object
-      properties:
-        input: { type: string }
-        model: { type: string }
-
-    EmbeddingResponse:
-      type: object
-      properties:
-        object: { type: string }
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              embedding:
-                type: array
-                items: { type: number }
-              index: { type: integer }
-
-    File:
-      type: object
-      properties:
-        id: { type: string }
-        object: { type: string }
-        filename: { type: string }
-        created: { type: integer }
-        purpose: { type: string }
-
-    VectorStore:
-      type: object
-      properties:
-        id: { type: string }
-        object: { type: string }
-        status: { type: string }
-        created_at: { type: integer }
-
-    VectorStoreDeleted:
-      type: object
-      properties:
-        id: { type: string }
-        deleted: { type: boolean }
-
-    RealtimeSession:
-      type: object
-      properties:
-        id: { type: string }
-        object: { type: string }
-        model: { type: string }
-        modalities: { type: array, items: { type: string } }
-
-    RealtimeEvent:
-      type: object
-      properties:
-        id: { type: string }
-        object: { type: string }
-        session_id: { type: string }
-        type: { type: string }
-        status: { type: string }
-
-    ResponseRequest:
+    CreateResponseRequest:
       type: object
       properties:
         model: { type: string }
         input: { type: string }
         tools:
           type: array
+          items: { type: object }
+    CreateResponseResponse:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string, example: "response" }
+        model: { type: string }
+        output_text: { type: string }
+        metadata: { type: object }
+        created: { type: integer }
+    CreateEmbeddingRequest:
+      type: object
+      properties:
+        model: { type: string }
+        input: { type: string }
+    CreateEmbeddingResponse:
+      type: object
+      properties:
+        object: { type: string }
+        data:
+          type: array
           items:
-            $ref: "#/components/schemas/Tool"
-
-    Response:
+            type: object
+            properties:
+              embedding: { type: array, items: { type: number } }
+              index: { type: integer }
+    ModelObject:
       type: object
       properties:
         id: { type: string }
         object: { type: string }
-        model: { type: string }
-        output: { type: array, items: { type: object } }
-        tool_outputs:
-          type: array
-          items: { $ref: "#/components/schemas/ToolOutput" }
-        status: { type: string }
-
-    Tool:
+        created: { type: integer }
+        owned_by: { type: string }
+    ListModelsResponse:
       type: object
       properties:
-        type: { type: string }
-        args: { type: object }
-
-    ToolOutput:
+        object: { type: string }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ModelObject" }
+    FileObject:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string }
+        filename: { type: string }
+        bytes: { type: integer }
+        created_at: { type: integer }
+        purpose: { type: string }
+    ListFilesResponse:
+      type: object
+      properties:
+        object: { type: string }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/FileObject" }
+    VectorStoreObject:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        created_at: { type: integer }
+        metadata: { type: object }
+    ListVectorStoresResponse:
+      type: object
+      properties:
+        object: { type: string }
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/VectorStoreObject" }
+    CreateVectorStoreRequest:
+      type: object
+      properties:
+        name: { type: string }
+        metadata: { type: object }
+    ToolList:
+      type: object
+      properties:
+        tools:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              description: { type: string }
+              parameters: { type: object }
+    ToolExecuteRequest:
       type: object
       properties:
         tool: { type: string }
-        status: { type: string }
-        output: { type: object }
-
-    Conversation:
-      type: object
-      properties:
-        id: { type: string }
-        object: { type: string }
-        title: { type: string }
-        created: { type: integer }
-        messages:
-          type: array
-          items: { type: object }
-
-    Fallback:
-      type: object
-      properties:
-        object: { type: string }
-        status: { type: integer }
-        passthrough: { type: boolean }
+        parameters: { type: object }
