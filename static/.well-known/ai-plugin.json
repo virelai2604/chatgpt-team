@@ -2,39 +2,32 @@
   "schema_version": "v1",
   "name_for_human": "ChatGPT Team Relay",
   "name_for_model": "chatgpt_team_relay",
-  "description_for_human": "An OpenAI-compatible relay that mirrors the Responses, Models, Files, Vector Stores, and Realtime APIs — including tool execution, file handling, and streaming responses.",
-  "description_for_model": "Use this API to generate responses, create embeddings, upload files, interact with vector stores, and handle realtime sessions. The relay behaves identically to the OpenAI API but runs on a self-hosted Render instance.",
+  "description_for_human": "A fully OpenAI-compatible API relay with support for /v1/responses, /v1/files, /v1/embeddings, and ChatGPT Actions integration.",
+  "description_for_model": "Relay API for ChatGPT Team: enables passthrough for OpenAI endpoints and registered custom tools.",
   "auth": {
     "type": "none"
   },
   "api": {
     "type": "openapi",
+    "is_user_authenticated": false,
     "url": "https://chatgpt-team-relay.onrender.com/schemas/openapi.yaml"
   },
   "logo_url": "https://chatgpt-team-relay.onrender.com/static/logo.png",
   "contact_email": "support@chatgpt-team-relay.com",
   "legal_info_url": "https://chatgpt-team-relay.onrender.com/legal",
-  "endpoints": {
-    "responses": "/v1/responses",
-    "models": "/v1/models",
-    "files": "/v1/files",
-    "embeddings": "/v1/embeddings",
-    "realtime": "/v1/realtime/sessions",
-    "vector_stores": "/v1/vector_stores"
-  },
+  "terms_of_service_url": "https://chatgpt-team-relay.onrender.com/terms",
+  "endpoints": [
+    "/v1/responses",
+    "/v1/models",
+    "/v1/files",
+    "/v1/embeddings",
+    "/v1/vector_stores",
+    "/v1/realtime/sessions"
+  ],
   "supported_models": [
-    "gpt-5",
     "gpt-4o",
     "gpt-4o-mini",
-    "text-embedding-3-large",
-    "text-embedding-3-small"
+    "gpt-5"
   ],
-  "tags": [
-    "relay",
-    "openai",
-    "fastapi",
-    "chatgpt-actions",
-    "sdk-aligned",
-    "passthrough"
-  ]
+  "tags": ["relay", "openai-compatible", "fastapi", "chatgpt", "plugin"]
 }

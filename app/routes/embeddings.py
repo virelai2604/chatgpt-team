@@ -9,11 +9,12 @@ router = APIRouter(prefix="/v1/embeddings", tags=["embeddings"])
 
 @router.post("")
 async def create_embedding(request: Request):
-    """Generate embeddings via OpenAI."""
+    """Generate text embeddings via OpenAI API."""
     try:
         resp = await forward_to_openai(request, "/v1/embeddings")
         return JSONResponse(resp.json(), status_code=resp.status_code)
     except Exception as e:
+        # Local fallback response if upstream unavailable
         return JSONResponse({
             "object": "embedding",
             "data": [{
