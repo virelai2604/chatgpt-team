@@ -1,14 +1,15 @@
-# ================================================================
-# forward_openai.py — Ground Truth Passthrough Proxy (v2.1)
-# ================================================================
-# OpenAI-SDK-aligned proxy forwarder for ChatGPT Team Relay.
-# Features:
-#   • Matches official OpenAI SDK (v1.57.x) header + request pattern
-#   • Handles multipart, JSON, SSE streaming, and error fallbacks
-#   • Retries transient 5xx/429 responses
-#   • Structured JSON logging for observability
-#   • Clean shutdown hook
-# ================================================================
+"""
+forward_openai.py — Canonical OpenAI Passthrough Transport (v3.0)
+─────────────────────────────────────────────────────────────────
+Implements the same request pipeline used by openai-python v2.61.
+
+Features:
+  • JSON + multipart/form-data support
+  • Full retry logic (429, 5xx)
+  • Streaming (SSE) with async disconnect guard
+  • Structured error propagation (OpenAI error schema)
+  • Detailed telemetry logging
+"""
 
 import os
 import time
@@ -16,99 +17,85 @@ import json
 import asyncio
 import httpx
 import logging
-from typing import Dict, Any
 from fastapi import Request
 from fastapi.responses import StreamingResponse, JSONResponse
 
-logger = logging.getLogger("relay")
+log = logging.getLogger("relay")
 
-# ================================================================
-# Environment Variables
-# ================================================================
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+# ------------------------------------------------------------
+# Environment
+# ------------------------------------------------------------
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1").rstrip("/")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
 RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", 120))
+MAX_RETRIES = 3
 
-# ================================================================
-# Strict SDK-style Header Builder
-# ================================================================
-def _build_headers(method: str = "get") -> Dict[str, str]:
-    """
-    Construct headers exactly like the OpenAI Python SDK does.
-    Avoids Cloudflare 400s by using a minimal, safe header set.
-    """
+
+# ------------------------------------------------------------
+# Header builder (matches openai-python)
+# ------------------------------------------------------------
+def build_headers(method: str = "get") -> dict:
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "User-Agent": "openai-python/2.61.0",
         "Accept": "application/json",
-        "User-Agent": "openai-python/1.57.0",
     }
-
-    # Org header only if provided
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
-
-    # Only attach Content-Type for write operations
     if method.lower() in {"post", "put", "patch"}:
         headers["Content-Type"] = "application/json"
-
     return headers
 
 
-# ================================================================
-# Core Forwarder
-# ================================================================
-async def forward_to_openai(request: Request, path: str) -> Any:
+# ------------------------------------------------------------
+# Core request forwarder
+# ------------------------------------------------------------
+async def forward_to_openai(request: Request, path: str):
     """
-    Forward a request to the OpenAI API, exactly matching SDK semantics.
+    Forwards any /v1/* call to the configured OpenAI API base.
+    Returns FastAPI response objects for both JSON and SSE.
     """
-
     method = request.method.lower()
-    headers = _build_headers(method)
+    headers = build_headers(method)
+    url = f"{OPENAI_API_BASE.rstrip('/')}/{path.lstrip('/')}"
+    send_kwargs = {}
 
-    # --- Normalize URL (avoid /v1/v1 duplication) ---
-    base = OPENAI_API_BASE.rstrip("/")
-    path = path.lstrip("/")
-    if base.endswith("/v1") and path.startswith("v1/"):
-        target_url = f"{base}/{path[3:].lstrip('/')}"
-    else:
-        target_url = f"{base}/{path}"
-
-    # --- Prepare request body ---
-    send_kwargs: Dict[str, Any] = {}
+    # Prepare body
     if method in {"post", "put", "patch"}:
-        content_type = request.headers.get("content-type", "").lower()
-
-        if "multipart/form-data" in content_type:
+        ctype = request.headers.get("content-type", "").lower()
+        if "multipart/form-data" in ctype:
             form = await request.form()
             data, files = {}, []
-            for field, value in form.multi_items():
-                if getattr(value, "filename", None):
-                    files.append((field, (value.filename, value.file, value.content_type)))
+            for key, val in form.multi_items():
+                if getattr(val, "filename", None):
+                    files.append((key, (val.filename, val.file, val.content_type)))
                 else:
-                    data[field] = value
+                    data[key] = val
             send_kwargs = {"data": data, "files": files}
         else:
             body = await request.body()
             if body:
-                send_kwargs = {"content": body}
+                send_kwargs["content"] = body
 
-    # --- Send request with retries ---
+    # Execute with retry
     start = time.perf_counter()
     async with httpx.AsyncClient(timeout=RELAY_TIMEOUT, follow_redirects=True) as client:
-        for attempt in range(3):
+        resp = None
+        for attempt in range(1, MAX_RETRIES + 1):
             try:
-                resp = await client.request(method, target_url, headers=headers, **send_kwargs)
-                if resp.status_code not in {502, 503, 504, 429}:
+                resp = await client.request(method, url, headers=headers, **send_kwargs)
+                if resp.status_code not in {429, 500, 502, 503, 504}:
                     break
-                await asyncio.sleep(0.5 * (attempt + 1))
+                log.warning(f"[Forward] Retry {attempt} for {url} ({resp.status_code})")
+                await asyncio.sleep(0.5 * attempt)
             except httpx.RequestError as e:
-                if attempt == 2:
-                    logger.error(f"❌ Network error contacting OpenAI: {e}")
+                if attempt == MAX_RETRIES:
+                    log.error(f"❌ Network error: {e}")
                     return JSONResponse(
                         {
                             "error": {
-                                "message": f"Request failed after retries: {e}",
+                                "message": str(e),
                                 "type": "network_error",
                                 "code": "request_failed",
                             }
@@ -117,46 +104,35 @@ async def forward_to_openai(request: Request, path: str) -> Any:
                     )
 
     elapsed = (time.perf_counter() - start) * 1000
-    logger.info(json.dumps({
-        "event": "relay_response",
-        "method": method.upper(),
-        "url": target_url,
-        "status": resp.status_code,
-        "elapsed_ms": round(elapsed, 2)
-    }))
+    log.info(json.dumps({"method": method.upper(), "url": url, "status": resp.status_code, "elapsed_ms": round(elapsed, 2)}))
 
-    # --- Streaming (SSE) ---
-    content_type = resp.headers.get("content-type", "")
-    if "text/event-stream" in content_type:
+    # Handle SSE streaming
+    if "text/event-stream" in resp.headers.get("content-type", ""):
         async def event_stream():
-            async for chunk in resp.aiter_bytes():
-                yield chunk
+            try:
+                async for chunk in resp.aiter_bytes():
+                    if await request.is_disconnected():
+                        log.info("🔌 client disconnected")
+                        break
+                    yield chunk
+            except asyncio.TimeoutError:
+                yield b"event: error\ndata: {\"message\": \"stream timeout\"}\n\n"
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
-    # --- JSON responses ---
-    if content_type.startswith("application/json"):
+    # Handle JSON
+    if "application/json" in resp.headers.get("content-type", ""):
         try:
             return JSONResponse(resp.json(), status_code=resp.status_code)
         except Exception:
             pass
 
-    # --- Fallback for non-JSON responses ---
+    # Fallback (non-JSON)
     return JSONResponse(
         {
             "object": "proxy_response",
             "status": resp.status_code,
-            "content_type": content_type,
+            "content_type": resp.headers.get("content-type"),
             "body": getattr(resp, "text", "")[:1000],
         },
         status_code=resp.status_code,
     )
-
-
-# ================================================================
-# Graceful Shutdown Hook
-# ================================================================
-import atexit
-
-@atexit.register
-def on_shutdown():
-    logger.info("🛑 Relay process exiting cleanly")

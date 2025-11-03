@@ -1,89 +1,115 @@
 """
-responses.py — Core OpenAI-compatible /v1/responses route handler
-with streaming and chain continuation support.
+responses.py — OpenAI-Compatible /v1/responses Endpoint
+────────────────────────────────────────────────────────────
+Implements the full /v1/responses relay for the ChatGPT Team Relay.
+Conforms to:
+  • openai-python SDK v2.61
+  • OpenAI API Reference (2025-10)
+Supports:
+  • sync + streaming (SSE)
+  • chain continuation
+  • structured error output
 """
 
 import os
 import json
 import httpx
+import asyncio
 from fastapi import APIRouter, Request
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from app.utils.logger import log
 
-router = APIRouter()
+router = APIRouter(prefix="/v1", tags=["responses"])
 
+# ------------------------------------------------------------
+# Environment
+# ------------------------------------------------------------
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", 120))
+USER_AGENT = "openai-python/2.61.0"
 
-# ─────────────────────────────────────────────
-# Streaming relay: forward SSE directly to client
-# ─────────────────────────────────────────────
-@router.post("/v1/responses")
-async def relay_responses(request: Request):
-    """Relay POST /v1/responses requests to OpenAI, supporting stream=True."""
+# ------------------------------------------------------------
+# POST /v1/responses
+# ------------------------------------------------------------
+@router.post("/responses")
+async def create_response(request: Request):
+    """Relay synchronous and streaming response creation to OpenAI."""
     try:
-        payload = await request.json()
+        body = await request.json()
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
-    stream = payload.get("stream", False)
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "User-Agent": USER_AGENT,
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=None) as client:
-        if stream:
-            # Stream the response directly (SSE passthrough)
-            upstream_resp = await client.post(
-                f"{OPENAI_API_BASE}/responses",
-                headers=headers,
-                json=payload,
-                timeout=None,
+    stream = bool(body.get("stream"))
+    url = f"{OPENAI_API_BASE}/responses"
+
+    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
+        try:
+            resp = await client.post(url, headers=headers, json=body)
+        except httpx.RequestError as e:
+            log.error(f"Network error contacting OpenAI: {e}")
+            return JSONResponse(
+                {"error": {"message": str(e), "type": "network_error"}},
+                status_code=502,
             )
 
-            async def event_generator():
-                async for chunk in upstream_resp.aiter_text():
-                    yield chunk
+        # --- Streaming (SSE) ---
+        if stream and "text/event-stream" in resp.headers.get("content-type", ""):
+            async def sse_stream():
+                try:
+                    async for chunk in resp.aiter_text():
+                        if await request.is_disconnected():
+                            log.info("🔌 client disconnected mid-stream")
+                            break
+                        yield chunk
+                except asyncio.TimeoutError:
+                    yield "event: error\ndata: {\"message\": \"Stream timeout\"}\n\n"
+            log.info("✅ streaming relay established")
+            return StreamingResponse(sse_stream(), media_type="text/event-stream")
 
-            return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-        else:
-            # Non-streaming mode: proxy full JSON
-            resp = await client.post(
-                f"{OPENAI_API_BASE}/responses",
-                headers=headers,
-                json=payload,
-                timeout=None,
-            )
+        # --- Non-streaming JSON ---
+        try:
             return JSONResponse(resp.json(), status_code=resp.status_code)
+        except Exception:
+            return JSONResponse(
+                {
+                    "error": "Invalid JSON from upstream",
+                    "raw": resp.text[:500],
+                    "status": resp.status_code,
+                },
+                status_code=resp.status_code,
+            )
 
-# ─────────────────────────────────────────────
-# Chain continuation: reuse previous response.id
-# ─────────────────────────────────────────────
-@router.post("/v1/responses/chain/{previous_id}")
-async def relay_chain(previous_id: str, request: Request):
-    """
-    Chain a response using a previous /v1/responses result.
-    Automatically reuses context or metadata from the last call.
-    """
+# ------------------------------------------------------------
+# POST /v1/responses/chain/{previous_id}
+# ------------------------------------------------------------
+@router.post("/responses/chain/{previous_id}")
+async def chain_response(previous_id: str, request: Request):
+    """Chain a new response from a previous response (context continuation)."""
     try:
-        payload = await request.json()
+        body = await request.json()
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
+    body["previous_response_id"] = previous_id
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "User-Agent": USER_AGENT,
         "Content-Type": "application/json",
     }
 
-    # Insert the previous response ID to maintain chain continuity
-    payload["previous_response_id"] = previous_id
-
-    async with httpx.AsyncClient(timeout=None) as client:
-        resp = await client.post(
-            f"{OPENAI_API_BASE}/responses",
-            headers=headers,
-            json=payload,
-            timeout=None,
-        )
-        return JSONResponse(resp.json(), status_code=resp.status_code)
+    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
+        try:
+            resp = await client.post(f"{OPENAI_API_BASE}/responses", headers=headers, json=body)
+            return JSONResponse(resp.json(), status_code=resp.status_code)
+        except httpx.RequestError as e:
+            return JSONResponse(
+                {"error": {"message": str(e), "type": "network_error"}},
+                status_code=502,
+            )
