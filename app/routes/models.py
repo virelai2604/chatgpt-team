@@ -10,31 +10,36 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from app.api.forward_openai import forward_to_openai
 
-router = APIRouter(tags=["models"])
+router = APIRouter(prefix="/v1/models", tags=["models"])
 
-MODELS = [
-    {"id": "gpt-5", "object": "model"},
-    {"id": "gpt-4o", "object": "model"},
-    {"id": "gpt-4o-mini", "object": "model"},
+# Local fallback model list for offline/relay-only operation
+LOCAL_MODELS = [
+    {"id": "gpt-5", "object": "model", "owned_by": "system"},
+    {"id": "gpt-4o", "object": "model", "owned_by": "system"},
+    {"id": "gpt-4o-mini", "object": "model", "owned_by": "system"},
 ]
 
-
-@router.get("/v1/models")
+@router.get("")
 async def list_models(request: Request):
-    """Return available models — tries upstream, falls back local."""
+    """List available models — uses upstream if API key present, otherwise fallback."""
     api_key = os.getenv("OPENAI_API_KEY")
     if api_key:
         try:
             resp = await forward_to_openai(request, "/v1/models")
-            # forward_to_openai already returns JSONResponse
-            return resp
+            return JSONResponse(resp.json(), status_code=resp.status_code)
         except Exception:
-            pass  # fallback if network error
+            pass  # fallback to local list if OpenAI unavailable
+    return JSONResponse({"object": "list", "data": LOCAL_MODELS})
 
-    return JSONResponse({"object": "list", "data": MODELS})
-
-
-@router.get("/models")
-async def list_models_alias(request: Request):
-    """Legacy alias for /v1/models."""
-    return await list_models(request)
+@router.get("/{model_id}")
+async def get_model(model_id: str, request: Request):
+    """Retrieve metadata for a single model."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if api_key:
+        try:
+            resp = await forward_to_openai(request, f"/v1/models/{model_id}")
+            return JSONResponse(resp.json(), status_code=resp.status_code)
+        except Exception:
+            pass
+    model = next((m for m in LOCAL_MODELS if m["id"] == model_id), None)
+    return JSONResponse(model or {"error": f"Model '{model_id}' not found"})

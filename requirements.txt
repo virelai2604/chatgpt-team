@@ -15,7 +15,9 @@ aiosqlite>=0.20.0
 sqlalchemy>=2.0.34
 rich>=13.8.1
 loguru>=0.7.2
-sse-starlette
+sse-starlettepip 
+openai>=2.6.2
+
 
 
 # ======================================================

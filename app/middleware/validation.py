@@ -1,46 +1,90 @@
 # ================================================================
-# validation.py — Schema Validation Middleware
+# validation.py — Schema Validation Middleware for ChatGPT Team Relay
 # ================================================================
-# This layer ensures all requests follow OpenAI-compatible schema.
-# It runs lightweight checks on required fields, disallowing malformed
-# payloads that could otherwise propagate into downstream APIs.
+# Validates inbound /v1/responses and outbound responses
+# against the OpenAI-compatible JSON schema.
+#
+# Features:
+#   • Applies to /v1/responses requests
+#   • Ensures well-formed JSON payloads
+#   • Logs validation results and warnings
+#   • Does not block traffic on soft failures (for dev flexibility)
 # ================================================================
+
+import json
+from typing import Any, Dict
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from jsonschema import validate, ValidationError
 
-REQUIRED_FIELDS = {
-    "/v1/responses": ["model", "input"],
-    "/v1/embeddings": ["input"],
+from app.utils.logger import logger
+
+
+# ================================================================
+# Schema Definition (Simplified OpenAI /v1/responses)
+# ================================================================
+RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "id": {"type": "string"},
+        "object": {"type": "string"},
+        "created_at": {"type": "number"},
+        "model": {"type": "string"},
+        "status": {"type": "string"},
+        "output": {"type": "array"},
+    },
+    "required": ["id", "object", "model", "status"],
 }
 
-async def validate_request(req: Request):
+
+# ================================================================
+# Middleware Class
+# ================================================================
+class SchemaValidationMiddleware(BaseHTTPMiddleware):
     """
-    Validates that required fields exist in incoming payloads
-    for known OpenAI endpoints.
+    Middleware that validates /v1/responses payloads against
+    the OpenAI-compatible schema before and after relay processing.
     """
-    path = req.url.path
-    if req.method != "POST" or path not in REQUIRED_FIELDS:
-        return None  # Skip validation for non-target endpoints
 
-    try:
-        body = await req.json()
-    except Exception:
-        return JSONResponse({
-            "error": {
-                "message": "Malformed JSON body.",
-                "type": "json_error",
-            }
-        }, status_code=400)
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint):
+        path = request.url.path
+        method = request.method.upper()
 
-    missing = [k for k in REQUIRED_FIELDS[path] if k not in body]
-    if missing:
-        return JSONResponse({
-            "error": {
-                "message": f"Missing required fields: {', '.join(missing)}",
-                "type": "validation_error",
-                "code": "schema_violation"
-            }
-        }, status_code=400)
+        # Only validate /v1/responses
+        if not (path.endswith("/v1/responses") and method == "POST"):
+            return await call_next(request)
 
-    return None
+        try:
+            raw_body = await request.body()
+            data = json.loads(raw_body)
+        except Exception as e:
+            logger.warning(f"⚠️ Invalid JSON in incoming request: {e}")
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Malformed JSON payload"},
+            )
+
+        # Validate incoming payload
+        try:
+            validate(instance=data, schema=RESPONSE_SCHEMA)
+            logger.info("✅ Incoming /v1/responses payload validated successfully.")
+        except ValidationError as e:
+            logger.warning(f"⚠️ Incoming /v1/responses schema mismatch: {e.message}")
+
+        # Continue processing
+        response = await call_next(request)
+
+        # Validate outgoing payload (if JSON)
+        try:
+            body = b"".join([chunk async for chunk in response.body_iterator])
+            response.body_iterator = iter([body])
+
+            payload = json.loads(body)
+            validate(instance=payload, schema=RESPONSE_SCHEMA)
+            logger.info("✅ Outgoing /v1/responses validated successfully.")
+        except (json.JSONDecodeError, ValidationError):
+            logger.warning("⚠️ Outgoing response did not match schema.")
+
+        return response

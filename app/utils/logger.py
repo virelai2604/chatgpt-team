@@ -1,66 +1,46 @@
-# ================================================================
-# logger.py — Unified Application Logger (Render-compatible)
-# ================================================================
-# Simple, human-readable logging utility with timestamps and colors.
-# Includes setup_logger() for FastAPI / Render initialization.
-# ================================================================
+# app/utils/logger.py
+from rich.console import Console
+from rich.theme import Theme
+import logging
 
-import sys, time, os, logging
+_custom_theme = Theme({
+    "info": "cyan",
+    "warning": "yellow",
+    "error": "bold red",
+    "success": "green"
+})
 
-COLORS = {
-    "reset": "\033[0m",
-    "green": "\033[92m",
-    "yellow": "\033[93m",
-    "red": "\033[91m",
-    "blue": "\033[94m"
-}
-
-def log(message: str, level: str = "info"):
-    """
-    Prints a formatted log line to stdout with timestamp and color.
-    """
-    ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    color = COLORS.get("reset")
-    if level == "info":
-        color = COLORS["blue"]
-    elif level == "warn":
-        color = COLORS["yellow"]
-    elif level == "error":
-        color = COLORS["red"]
-    elif level == "success":
-        color = COLORS["green"]
-
-    formatted = f"{color}[{ts}] [{level.upper()}] {message}{COLORS['reset']}"
-    print(formatted, file=sys.stdout, flush=True)
+console = Console(theme=_custom_theme)
 
 
-def setup_logger():
-    """
-    Creates and configures a Python logging.Logger instance for Render.
-    Uses environment variables for LOG_LEVEL and LOG_FORMAT.
-    """
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-    log_format = os.getenv("LOG_FORMAT", "text").lower()
-    log_color = os.getenv("LOG_COLOR", "false").lower() == "true"
-
-    logger = logging.getLogger("relay")
-
+def setup_logger(name: str = "relay"):
+    """Initialize and return a colorized logger using Rich + standard logging."""
+    logger = logging.getLogger(name)
     if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        if log_format == "json":
-            formatter = logging.Formatter(
-                '{"time":"%(asctime)s","level":"%(levelname)s","message":"%(message)s"}'
-            )
-        else:
-            color_prefix = COLORS["green"] if log_color else ""
-            color_reset = COLORS["reset"] if log_color else ""
-            formatter = logging.Formatter(
-                f"{color_prefix}[%(asctime)s] [%(levelname)s] %(message)s{color_reset}",
-                datefmt="%Y-%m-%d %H:%M:%S"
-            )
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            "[%(asctime)s] %(levelname)s — %(message)s", "%H:%M:%S"
+        )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-        logger.setLevel(log_level)
+        logger.setLevel(logging.INFO)
 
-    # Return it so app.main can use it
+    # Also show a banner at startup
+    console.print("🪶 Logger initialized — Rich console active.", style="success")
     return logger
+
+
+# Global instance used by middleware and startup events
+log = setup_logger("app")
+
+def info(message: str):
+    console.print(f"[INFO] {message}", style="info")
+    log.info(message)
+
+def warn(message: str):
+    console.print(f"[WARN] {message}", style="warning")
+    log.warning(message)
+
+def error(message: str):
+    console.print(f"[ERROR] {message}", style="error")
+    log.error(message)

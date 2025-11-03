@@ -1,60 +1,96 @@
 {
-  "$schema": "https://openai.com/ground-truth/tools-manifest-v1.7.json",
-  "version": "1.7",
+  "schema_version": "v1.2",
+  "updated_at": "2025-11-02T22:45:00Z",
+  "description": "Manifest of all enabled tools for ChatGPT Team Relay. Each tool is declared with its entrypoint and configuration for execution via /v1/tools/* routes or /v1/responses tool calls.",
   "tools": [
     {
-      "tool_name": "code_interpreter",
-      "entrypoint": "app.tools.code_interpreter.run_code",
+      "tool_name": "multiply",
       "enabled": true,
-      "description": "Executes Python code and returns structured outputs."
-    },
-    {
-      "tool_name": "file_upload",
-      "entrypoint": "app.tools.file_upload.upload_file",
-      "enabled": true,
-      "description": "Uploads a file to the relay and returns its metadata."
-    },
-    {
-      "tool_name": "file_download",
-      "entrypoint": "app.tools.file_download.download_file",
-      "enabled": true,
-      "description": "Downloads file content by ID."
+      "version": "1.0",
+      "description": "Multiply two numbers and return the result.",
+      "entrypoint": "app.tools.math_tools.multiply",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "a": { "type": "number", "description": "First number" },
+          "b": { "type": "number", "description": "Second number" }
+        },
+        "required": ["a", "b"]
+      }
     },
     {
       "tool_name": "file_search",
-      "entrypoint": "app.tools.file_search.search_files",
       "enabled": true,
-      "description": "Searches within uploaded files using keywords or embeddings."
-    },
-    {
-      "tool_name": "vector_store_retrieval",
-      "entrypoint": "app.tools.vector_store_retrieval.retrieve_vectors",
-      "enabled": true,
-      "description": "Retrieves documents from a vector store via embeddings."
+      "version": "1.0",
+      "description": "Search uploaded files by keyword using vector similarity.",
+      "entrypoint": "app.api.tools.file_search.run",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Search query text" },
+          "limit": { "type": "integer", "default": 5 }
+        },
+        "required": ["query"]
+      }
     },
     {
       "tool_name": "image_generation",
-      "entrypoint": "app.tools.image_generation.generate_image",
       "enabled": true,
-      "description": "Generates images from text prompts."
-    },
-    {
-      "tool_name": "video_generation",
-      "entrypoint": "app.tools.video_generation.generate_video",
-      "enabled": true,
-      "description": "Generates video content from text descriptions."
+      "version": "1.0",
+      "description": "Generate an image from text using DALL·E-compatible generation.",
+      "entrypoint": "app.api.tools.image_generation.create",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string" },
+          "size": { "type": "string", "enum": ["256x256", "512x512", "1024x1024"], "default": "512x512" }
+        },
+        "required": ["prompt"]
+      }
     },
     {
       "tool_name": "web_search",
-      "entrypoint": "app.tools.web_search.perform_search",
       "enabled": true,
-      "description": "Performs external web searches and returns summarized results."
+      "version": "1.0",
+      "description": "Perform a live web search via relay web_search tool.",
+      "entrypoint": "app.api.tools.web_search.query",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Text query" },
+          "region": { "type": "string", "description": "Region bias", "default": "us" }
+        },
+        "required": ["query"]
+      }
     },
     {
-      "tool_name": "computer_use",
-      "entrypoint": "app.tools.computer_use.perform_action",
+      "tool_name": "vector_store_retrieval",
       "enabled": true,
-      "description": "Executes system-level operations in a sandboxed environment."
+      "version": "1.0",
+      "description": "Retrieve content from a vector store by similarity search.",
+      "entrypoint": "app.api.tools.vector_store_retrieval.retrieve",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "top_k": { "type": "integer", "default": 3 }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "tool_name": "code_interpreter",
+      "enabled": true,
+      "version": "1.0",
+      "description": "Run Python snippets in a sandboxed environment.",
+      "entrypoint": "app.api.tools.code_interpreter.execute",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "description": "Python code to execute" }
+        },
+        "required": ["code"]
+      }
     }
   ]
 }
