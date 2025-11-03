@@ -1,14 +1,8 @@
 """
-forward_openai.py — Canonical OpenAI Passthrough Transport (v3.0)
+forward_openai.py — Canonical OpenAI Passthrough Transport (v3.1)
 ─────────────────────────────────────────────────────────────────
-Implements the same request pipeline used by openai-python v2.61.
-
-Features:
-  • JSON + multipart/form-data support
-  • Full retry logic (429, 5xx)
-  • Streaming (SSE) with async disconnect guard
-  • Structured error propagation (OpenAI error schema)
-  • Detailed telemetry logging
+Implements the same request pipeline used by openai-python v2.61
+and openai-node v6.7.0.
 """
 
 import os
@@ -22,9 +16,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 
 log = logging.getLogger("relay")
 
-# ------------------------------------------------------------
 # Environment
-# ------------------------------------------------------------
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1").rstrip("/")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
@@ -33,13 +25,13 @@ MAX_RETRIES = 3
 
 
 # ------------------------------------------------------------
-# Header builder (matches openai-python)
+# Header builder (matches openai-python v2.61)
 # ------------------------------------------------------------
-def build_headers(method: str = "get") -> dict:
+def build_headers(method: str = "get", stream: bool = False) -> dict:
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "User-Agent": "openai-python/2.61.0",
-        "Accept": "application/json",
+        "Accept": "text/event-stream" if stream else "application/json",
     }
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
@@ -52,16 +44,19 @@ def build_headers(method: str = "get") -> dict:
 # Core request forwarder
 # ------------------------------------------------------------
 async def forward_to_openai(request: Request, path: str):
-    """
-    Forwards any /v1/* call to the configured OpenAI API base.
-    Returns FastAPI response objects for both JSON and SSE.
-    """
+    """Forward /v1/* calls to the configured OpenAI API."""
     method = request.method.lower()
-    headers = build_headers(method)
-    url = f"{OPENAI_API_BASE.rstrip('/')}/{path.lstrip('/')}"
-    send_kwargs = {}
+    # Detect if request body includes stream=True
+    try:
+        body = await request.json()
+        is_stream = body.get("stream", False)
+    except Exception:
+        is_stream = False
 
-    # Prepare body
+    headers = build_headers(method, stream=is_stream)
+    url = f"{OPENAI_API_BASE.rstrip('/')}/{path.lstrip('/')}"
+
+    send_kwargs = {}
     if method in {"post", "put", "patch"}:
         ctype = request.headers.get("content-type", "").lower()
         if "multipart/form-data" in ctype:
@@ -74,59 +69,62 @@ async def forward_to_openai(request: Request, path: str):
                     data[key] = val
             send_kwargs = {"data": data, "files": files}
         else:
-            body = await request.body()
-            if body:
-                send_kwargs["content"] = body
+            raw = await request.body()
+            if raw:
+                send_kwargs["content"] = raw
 
-    # Execute with retry
     start = time.perf_counter()
-    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(RELAY_TIMEOUT, connect=10)) as client:
         resp = None
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 resp = await client.request(method, url, headers=headers, **send_kwargs)
                 if resp.status_code not in {429, 500, 502, 503, 504}:
                     break
-                log.warning(f"[Forward] Retry {attempt} for {url} ({resp.status_code})")
+                log.warning(f"[Forward] Retry {attempt} {resp.status_code} → {url}")
                 await asyncio.sleep(0.5 * attempt)
             except httpx.RequestError as e:
                 if attempt == MAX_RETRIES:
-                    log.error(f"❌ Network error: {e}")
                     return JSONResponse(
-                        {
-                            "error": {
-                                "message": str(e),
-                                "type": "network_error",
-                                "code": "request_failed",
-                            }
-                        },
+                        {"error": {"message": str(e), "type": "network_error", "code": "request_failed"}},
                         status_code=502,
                     )
 
-    elapsed = (time.perf_counter() - start) * 1000
-    log.info(json.dumps({"method": method.upper(), "url": url, "status": resp.status_code, "elapsed_ms": round(elapsed, 2)}))
+    elapsed = round((time.perf_counter() - start) * 1000, 2)
+    log.info(json.dumps({
+        "method": method.upper(),
+        "url": url,
+        "status": resp.status_code,
+        "elapsed_ms": elapsed,
+        "request_id": resp.headers.get("x-request-id")
+    }))
 
-    # Handle SSE streaming
+    # SSE streaming passthrough
     if "text/event-stream" in resp.headers.get("content-type", ""):
-        async def event_stream():
+        async def stream_events():
             try:
                 async for chunk in resp.aiter_bytes():
                     if await request.is_disconnected():
-                        log.info("🔌 client disconnected")
+                        log.info("🔌 Client disconnected mid-stream")
                         break
                     yield chunk
             except asyncio.TimeoutError:
                 yield b"event: error\ndata: {\"message\": \"stream timeout\"}\n\n"
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
 
-    # Handle JSON
+        return StreamingResponse(stream_events(), media_type="text/event-stream")
+
+    # Standard JSON response
     if "application/json" in resp.headers.get("content-type", ""):
         try:
             return JSONResponse(resp.json(), status_code=resp.status_code)
         except Exception:
-            pass
+            try:
+                data = json.loads(resp.text)
+                return JSONResponse(data, status_code=resp.status_code)
+            except Exception:
+                pass
 
-    # Fallback (non-JSON)
+    # Fallback
     return JSONResponse(
         {
             "object": "proxy_response",
