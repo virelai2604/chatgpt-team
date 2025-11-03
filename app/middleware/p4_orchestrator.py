@@ -1,19 +1,8 @@
 """
-p4_orchestrator.py — Primary Orchestration Middleware
+p4_orchestrator.py — Primary Relay Orchestration Middleware
 ────────────────────────────────────────────────────────────
-Intercepts all HTTP traffic and routes API-bound requests
-to the proper relay handler.
-
-Aligned with:
-  • openai-python SDK v2.61
-  • openai-node SDK v6.7.0
-  • OpenAI API Reference (2025-10)
-
-Responsibilities:
-  • Delegate /v1/* endpoints to forward_openai.py
-  • Handle both streaming and non-streaming requests
-  • Provide consistent error schema
-  • Log request lifecycles and latencies
+Manages the control flow between FastAPI routes, middleware,
+and OpenAI request forwarding.
 """
 
 import os
@@ -25,7 +14,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from app.api.forward_openai import forward_to_openai
 from app.utils.logger import log
-
 
 class P4OrchestratorMiddleware(BaseHTTPMiddleware):
     """Middleware orchestrator for OpenAI-compatible relay traffic."""
@@ -39,11 +27,17 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         method = request.method.upper()
         start = time.perf_counter()
 
-        # Local endpoints bypass orchestration
+        # Skip non-API routes
         if not path.startswith("/v1"):
             return await call_next(request)
 
-        # Log intercepted request
+        if await request.is_disconnected():
+            log.warning(f"[P4] Client disconnected before processing {path}")
+            return JSONResponse(
+                {"error": {"message": "Client disconnected", "type": "connection_closed"}},
+                status_code=499,
+            )
+
         log.info(json.dumps({
             "event": "orchestrate_request",
             "method": method,
@@ -52,7 +46,7 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         }))
 
         try:
-            # Delegate directly to OpenAI forwarder for streaming safety
+            # Delegate to OpenAI forwarder (handles streaming + retries)
             response = await forward_to_openai(request, path)
 
             elapsed = round((time.perf_counter() - start) * 1000, 2)
@@ -68,25 +62,13 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         except httpx.RequestError as e:
             log.error(f"[P4] Network error: {e}")
             return JSONResponse(
-                {
-                    "error": {
-                        "message": str(e),
-                        "type": "network_error",
-                        "code": "request_failed",
-                    }
-                },
+                {"error": {"message": str(e), "type": "network_error", "code": "request_failed"}},
                 status_code=502,
             )
 
         except Exception as e:
             log.exception(f"[P4] Internal relay error: {e}")
             return JSONResponse(
-                {
-                    "error": {
-                        "message": f"Relay internal error: {str(e)}",
-                        "type": "internal_error",
-                        "code": "relay_failure",
-                    }
-                },
+                {"error": {"message": f"Relay internal error: {str(e)}", "type": "internal_error", "code": "relay_failure"}},
                 status_code=500,
             )
