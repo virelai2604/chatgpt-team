@@ -7,8 +7,8 @@ services:
   - type: web
     name: chatgpt-team-relay
     runtime: python
-    repo: https://github.com/<your-username>/chatgpt-team-relay
-    region: oregon
+    repo: https://github.com/virelai2604/chatgpt-team
+    region: singapore
     plan: starter
 
     buildCommand: |
@@ -46,7 +46,7 @@ services:
 
       # --- Upstream OpenAI API ---
       - key: OPENAI_API_BASE
-        value: https://api.openai.com/v1
+        value: https://api.openai.com
       - key: OPENAI_API_KEY
         sync: false   # (Sensitive key - set manually in dashboard)
       - key: OPENAI_ORG_ID
