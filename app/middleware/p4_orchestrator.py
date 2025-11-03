@@ -1,8 +1,9 @@
 """
 p4_orchestrator.py — Primary Relay Orchestration Middleware
 ────────────────────────────────────────────────────────────
-Manages the control flow between FastAPI routes, middleware,
-and OpenAI request forwarding.
+Manages control flow between FastAPI routes, middleware,
+and OpenAI request forwarding. Intercepts all /v1/* requests
+and forwards them upstream unless they are local system routes.
 """
 
 import os
@@ -14,6 +15,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from app.api.forward_openai import forward_to_openai
 from app.utils.logger import log
+
 
 class P4OrchestratorMiddleware(BaseHTTPMiddleware):
     """Middleware orchestrator for OpenAI-compatible relay traffic."""
@@ -27,10 +29,30 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         method = request.method.upper()
         start = time.perf_counter()
 
-        # Skip non-API routes
-        if not path.startswith("/v1"):
+        # ------------------------------------------------------------
+        # Local route filter — Do not forward internal endpoints
+        # ------------------------------------------------------------
+        system_routes = (
+            "/v1/health",
+            "/health",
+            "/v1/tools",
+            "/v1/models",
+            "/schemas/",
+        )
+
+        # Skip non-API and system-local routes
+        if not path.startswith("/v1") or any(path.startswith(r) for r in system_routes):
+            log.info(json.dumps({
+                "event": "local_request",
+                "method": method,
+                "path": path,
+                "client": request.client.host if request.client else None
+            }))
             return await call_next(request)
 
+        # ------------------------------------------------------------
+        # Guard against disconnected clients
+        # ------------------------------------------------------------
         if await request.is_disconnected():
             log.warning(f"[P4] Client disconnected before processing {path}")
             return JSONResponse(
@@ -38,6 +60,9 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
                 status_code=499,
             )
 
+        # ------------------------------------------------------------
+        # Begin orchestration log
+        # ------------------------------------------------------------
         log.info(json.dumps({
             "event": "orchestrate_request",
             "method": method,
@@ -46,7 +71,7 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         }))
 
         try:
-            # Delegate to OpenAI forwarder (handles streaming + retries)
+            # Delegate to OpenAI forwarder (handles SSE, retries, multipart)
             response = await forward_to_openai(request, path)
 
             elapsed = round((time.perf_counter() - start) * 1000, 2)
@@ -69,6 +94,12 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             log.exception(f"[P4] Internal relay error: {e}")
             return JSONResponse(
-                {"error": {"message": f"Relay internal error: {str(e)}", "type": "internal_error", "code": "relay_failure"}},
+                {
+                    "error": {
+                        "message": f"Relay internal error: {str(e)}",
+                        "type": "internal_error",
+                        "code": "relay_failure"
+                    }
+                },
                 status_code=500,
             )
