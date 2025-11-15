@@ -64,7 +64,6 @@ async def universal_passthrough(request: Request, full_path: str):
             log.error(f"[Passthrough] Network error: {e}")
             return JSONResponse({"error": {"message": str(e), "type": "network_error"}}, status_code=502)
 
-        # SSE passthrough
         if "text/event-stream" in resp.headers.get("content-type", ""):
             async def sse_stream():
                 async for chunk in resp.aiter_bytes():
@@ -74,7 +73,6 @@ async def universal_passthrough(request: Request, full_path: str):
                     yield chunk
             return StreamingResponse(sse_stream(), media_type="text/event-stream")
 
-        # JSON / fallback
         try:
             return JSONResponse(resp.json(), status_code=resp.status_code)
         except Exception:

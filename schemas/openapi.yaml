@@ -342,6 +342,12 @@ paths:
           description: Tool executed successfully.
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     CreateResponseRequest:
       type: object
@@ -351,6 +357,7 @@ components:
         tools:
           type: array
           items: { type: object }
+
     CreateResponseResponse:
       type: object
       properties:
@@ -360,11 +367,13 @@ components:
         output_text: { type: string }
         metadata: { type: object }
         created: { type: integer }
+
     CreateEmbeddingRequest:
       type: object
       properties:
         model: { type: string }
         input: { type: string }
+
     CreateEmbeddingResponse:
       type: object
       properties:
@@ -376,6 +385,7 @@ components:
             properties:
               embedding: { type: array, items: { type: number } }
               index: { type: integer }
+
     ModelObject:
       type: object
       properties:
@@ -383,6 +393,7 @@ components:
         object: { type: string }
         created: { type: integer }
         owned_by: { type: string }
+
     ListModelsResponse:
       type: object
       properties:
@@ -390,6 +401,7 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/ModelObject" }
+
     FileObject:
       type: object
       properties:
@@ -399,6 +411,7 @@ components:
         bytes: { type: integer }
         created_at: { type: integer }
         purpose: { type: string }
+
     ListFilesResponse:
       type: object
       properties:
@@ -406,6 +419,7 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/FileObject" }
+
     VectorStoreObject:
       type: object
       properties:
@@ -413,6 +427,7 @@ components:
         name: { type: string }
         created_at: { type: integer }
         metadata: { type: object }
+
     ListVectorStoresResponse:
       type: object
       properties:
@@ -420,11 +435,13 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/VectorStoreObject" }
+
     CreateVectorStoreRequest:
       type: object
       properties:
         name: { type: string }
         metadata: { type: object }
+
     ToolList:
       type: object
       properties:
@@ -436,8 +453,12 @@ components:
               name: { type: string }
               description: { type: string }
               parameters: { type: object }
+
     ToolExecuteRequest:
       type: object
       properties:
         tool: { type: string }
         parameters: { type: object }
+
+security:
+  - BearerAuth: []

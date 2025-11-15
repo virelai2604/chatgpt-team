@@ -1,75 +1,34 @@
-"""
-logger.py — Structured JSON Logger for ChatGPT Team Relay
-────────────────────────────────────────────────────────────
-Provides unified logging for all subsystems (middleware, proxy,
-routes, tools). Emits machine-readable JSON and human-friendly
-console output simultaneously.
-
-Features:
-  • JSON + colorized console logging
-  • Supports levels: DEBUG, INFO, WARNING, ERROR
-  • Includes request ID, timestamp, module, and message
-"""
-
-import json
 import logging
-import sys
-import time
-from typing import Any, Dict
-
-# ------------------------------------------------------------
-# Log Configuration
-# ------------------------------------------------------------
-class JSONFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        payload: Dict[str, Any] = {
-            "ts": round(time.time(), 3),
-            "level": record.levelname,
-            "module": record.module,
-            "message": record.getMessage(),
-        }
-
-        # Attach exception info if present
-        if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
-
-        return json.dumps(payload, ensure_ascii=False)
+import os
+from datetime import datetime
 
 
-# Create main logger
-log = logging.getLogger("relay")
-log.setLevel(logging.INFO)
+# Ensure logs directory exists
+os.makedirs("logs", exist_ok=True)
 
-# StreamHandler for console output
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.INFO)
+# Create a timestamped log file
+log_file = os.path.join("logs", "relay.log")
 
-# Dual-format: human + JSON for easy tailing
-class DualFormatter(logging.Formatter):
-    COLORS = {
-        "INFO": "\033[92m",     # green
-        "WARNING": "\033[93m",  # yellow
-        "ERROR": "\033[91m",    # red
-        "DEBUG": "\033[94m",    # blue
-    }
+# Basic logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler(log_file, encoding="utf-8"),
+        logging.StreamHandler(),
+    ],
+)
 
-    def format(self, record):
-        color = self.COLORS.get(record.levelname, "")
-        reset = "\033[0m"
-        msg = f"{color}[{record.levelname}] {record.module}: {record.getMessage()}{reset}"
-        return msg
+# Main logger instance
+relay_log = logging.getLogger("relay")
+relay_log.setLevel(logging.INFO)
 
-console_handler.setFormatter(DualFormatter())
 
-# File handler (optional JSON structured logs)
-file_handler = logging.FileHandler("relay.log", encoding="utf-8")
-file_handler.setFormatter(JSONFormatter())
-file_handler.setLevel(logging.INFO)
+def setup_logging():
+    """Initialize structured relay logging."""
+    relay_log.info(f"📜 Logging initialized at {datetime.now()} → {log_file}")
 
-# Prevent duplication
-if not log.handlers:
-    log.addHandler(console_handler)
-    log.addHandler(file_handler)
 
-# Convenience aliases
-logger = log
+# For backward compatibility
+logger = relay_log
+log = relay_log

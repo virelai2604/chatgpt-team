@@ -4,6 +4,7 @@
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.json
   📄 __init__.py
   📄 generate_tree.py
+  📄 openai_models_2025-11.csv
   📄 openai_response.json
   📄 project-tree.md
   📄 pytest.ini
@@ -27,6 +28,7 @@
       📄 validation.py
     📁 routes
       📄 __init__.py
+      📄 actions.py
       📄 conversations.py
       📄 embeddings.py
       📄 files.py
@@ -35,22 +37,12 @@
       📄 register_routes.py
       📄 responses.py
       📄 vector_stores.py
-    📁 tools
-      📄 __init__.py
-      📄 code_interpreter.py
-      📄 computer_use.py
-      📄 file_download.py
-      📄 file_search.py
-      📄 file_upload.py
-      📄 image_generation.py
-      📄 vector_store_retrieval.py
-      📄 video_generation.py
-      📄 web_search.py
     📁 utils
       📄 __init__.py
       📄 error_handler.py
       📄 logger.py
   📁 data
+    📄 conversations.db
     📁 conversations
       📄 conversations.db
     📁 embeddings
@@ -88,6 +80,5 @@
     📄 __init__.py
     📄 client.py
     📄 sora.py
-    📄 test_full_openai_relay_suite.py
-    📄 test_groundtruth_all.py
+    📄 test_relay_endpoints.py
     📁 downloads
