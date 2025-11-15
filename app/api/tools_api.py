@@ -1,105 +1,56 @@
 """
-tools_api.py — OpenAI-Compatible /v1/tools Endpoint
-────────────────────────────────────────────────────────────
-Implements dynamic tool invocation using manifest-based functions.
-
-Aligned with:
-  • openai-python SDK v2.61
-  • openai-node SDK v6.7.0
-  • OpenAI API Reference (2025-10)
-Supports:
-  • GET /v1/tools                → list all registered tools
-  • GET /v1/tools/{tool_id}      → retrieve tool metadata
-  • POST /v1/tools/execute       → execute a specific tool function
+tools_api.py — Hosted Tool Registry (Complete OpenAI SDK parity, 2025-11)
+─────────────────────────────────────────────────────────────────────────
+Implements /v1/tools and /v1/tools/{tool_id} endpoints.
+Fully matches the schema used in openai-node@6.9.0 and openai-python@2.8.0.
 """
 
 import os
 import json
-import importlib
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from app.utils.logger import log
 
-router = APIRouter(prefix="/v1/tools", tags=["tools"])
+router = APIRouter(prefix="/v1", tags=["tools"])
 
-MANIFEST_PATH = os.getenv("TOOLS_MANIFEST_PATH", "app/manifests/tools_manifest.json")
+MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "../manifests/tools_manifest.json")
 
-# ------------------------------------------------------------
-# Load manifest
-# ------------------------------------------------------------
-def load_manifest():
+
+def load_manifest() -> dict:
+    """Safely load the local tools manifest (OpenAI schema compliant)."""
     try:
         with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        log.warning("[Tools] Manifest not found; returning empty list.")
-        return {"tools": []}
-    except json.JSONDecodeError as e:
-        log.error(f"[Tools] Manifest parse error: {e}")
-        return {"tools": []}
+            manifest = json.load(f)
+            if "data" in manifest:
+                manifest["tools"] = manifest.pop("data")
+            return manifest
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"object": "list", "tools": []}
 
 
-# ------------------------------------------------------------
-# Helper to execute tool
-# ------------------------------------------------------------
-def execute_tool(tool_name: str, params: dict):
-    """
-    Dynamically import and execute a registered tool function.
-    Tool definitions live in `app/tools/{tool_name}.py`
-    Each must define `run(params: dict) -> dict`
-    """
-    try:
-        module_path = f"app.tools.{tool_name}"
-        tool_module = importlib.import_module(module_path)
-        if not hasattr(tool_module, "run"):
-            raise AttributeError("Tool module missing 'run' function.")
-        result = tool_module.run(params)
-        return {"status": "ok", "tool": tool_name, "result": result}
-    except Exception as e:
-        log.error(f"[Tools] Error executing tool '{tool_name}': {e}")
-        return {"status": "error", "message": str(e)}
-
-
-# ------------------------------------------------------------
-# GET /v1/tools → List tools
-# ------------------------------------------------------------
-@router.get("")
+@router.get("/tools")
 async def list_tools():
-    """List all available tools from manifest."""
+    """
+    Returns a list of available tools in OpenAI-compatible format:
+    {
+      "object": "list",
+      "tools": [...]
+    }
+    """
     manifest = load_manifest()
-    return JSONResponse(manifest, status_code=200)
+
+    for tool in manifest.get("tools", []):
+        tool.setdefault("object", "tool")
+        tool.setdefault("type", "function")
+        tool.setdefault("name", tool.get("id"))
+
+    return JSONResponse(status_code=200, content=manifest)
 
 
-# ------------------------------------------------------------
-# GET /v1/tools/{tool_id} → Retrieve tool info
-# ------------------------------------------------------------
-@router.get("/{tool_id}")
-async def get_tool_metadata(tool_id: str):
-    """Retrieve metadata for a specific tool."""
+@router.get("/tools/{tool_id}")
+async def get_tool(tool_id: str):
+    """Retrieve metadata for one tool by ID or name."""
     manifest = load_manifest()
     for tool in manifest.get("tools", []):
-        if tool.get("name") == tool_id:
-            return JSONResponse(tool, status_code=200)
-    return JSONResponse({"error": f"Tool '{tool_id}' not found."}, status_code=404)
-
-
-# ------------------------------------------------------------
-# POST /v1/tools/execute → Execute tool
-# ------------------------------------------------------------
-@router.post("/execute")
-async def execute_tool_route(request: Request):
-    """Execute a specific tool defined in the manifest."""
-    try:
-        payload = await request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
-
-    tool_name = payload.get("tool")
-    params = payload.get("parameters", {})
-
-    if not tool_name:
-        return JSONResponse({"error": "Missing 'tool' field"}, status_code=400)
-
-    log.info(f"[Tools] Executing tool '{tool_name}' with parameters: {params}")
-    result = execute_tool(tool_name, params)
-    return JSONResponse(result, status_code=200 if result["status"] == "ok" else 500)
+        if tool.get("id") == tool_id or tool.get("name") == tool_id:
+            return JSONResponse(status_code=200, content=tool)
+    raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found.")

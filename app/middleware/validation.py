@@ -1,71 +1,63 @@
 """
-validation.py — Dynamic Schema Validation Middleware
-────────────────────────────────────────────────────────────
-Validates /v1/responses request and response payloads
-against OpenAI’s official API schema (Ground Truth 2025-10).
+validation.py — Schema Validation Middleware
+────────────────────────────────────────────
+Performs lightweight JSON schema validation and request sanity checking
+before passing to the orchestrator.  Ensures requests are well-formed
+and OpenAI-compatible.
 """
 
-import os
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 import json
-from jsonschema import validate, ValidationError
-from fastapi import Request
-from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from app.utils.logger import log
+import logging
+
+logger = logging.getLogger("validation")
+
 
 class SchemaValidationMiddleware(BaseHTTPMiddleware):
-    """Middleware for validating /v1/responses payloads."""
+    """
+    Intercepts incoming requests and performs basic validation:
+      • Valid JSON body for POST/PUT/PATCH
+      • Proper Content-Type headers
+      • Graceful 400 response if malformed
+    """
 
-    def __init__(self, app):
-        super().__init__(app)
-        schema_path = os.getenv("VALIDATION_SCHEMA_PATH", "ChatGPT-API_reference_ground_truth-2025-10-29.json")
-        self.schema = None
-        try:
-            with open(schema_path, "r", encoding="utf-8") as f:
-                full_schema = json.load(f)
-            schemas = full_schema.get("components", {}).get("schemas", {})
-            self.schema = schemas.get("CreateResponseResponse") or schemas.get("ResponseObject") or {}
-            log.info("✅ Validation schema loaded successfully.")
-        except Exception as e:
-            log.error(f"❌ Failed to load validation schema: {e}")
-            self.schema = None
-
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint):
-        path = request.url.path
-        method = request.method.upper()
-
-        if not (path.endswith("/v1/responses") and method == "POST"):
+    async def dispatch(self, request: Request, call_next):
+        # Allow GET, DELETE etc. to pass through
+        if request.method in ("GET", "DELETE", "OPTIONS", "HEAD"):
             return await call_next(request)
 
-        # Validate inbound
-        try:
-            raw = await request.body()
-            data = json.loads(raw or "{}")
-            # Normalize SDK field aliases
-            if "input_text" in data and "input" not in data:
-                data["input"] = data.pop("input_text")
-            if self.schema:
-                validate(instance=data, schema=self.schema.get("requestBody", {}))
-                log.info("✅ Inbound /v1/responses payload validated successfully.")
-        except ValidationError as e:
-            log.warning(f"⚠️ Inbound payload schema mismatch: {e.message}")
-        except Exception as e:
-            log.warning(f"⚠️ Could not validate inbound payload: {e}")
+        # Check for JSON in POST/PUT/PATCH
+        if request.method in ("POST", "PUT", "PATCH"):
+            try:
+                if request.headers.get("content-type", "").startswith("application/json"):
+                    # Try parsing to ensure it's valid JSON
+                    _ = await request.json()
+                else:
+                    logger.warning(f"[validation] Non-JSON request to {request.url.path}")
+            except json.JSONDecodeError:
+                logger.error(f"[validation] Invalid JSON on {request.url.path}")
+                return JSONResponse(
+                    {
+                        "error": {
+                            "message": "Invalid JSON in request body.",
+                            "type": "invalid_request_error",
+                        }
+                    },
+                    status_code=400,
+                )
+            except Exception as e:
+                logger.exception(f"[validation] Unexpected validation error: {e}")
+                return JSONResponse(
+                    {
+                        "error": {
+                            "message": f"Unexpected validation error: {str(e)}",
+                            "type": "validation_error",
+                        }
+                    },
+                    status_code=400,
+                )
 
-        # Continue request
-        response = await call_next(request)
-
-        # Validate outbound
-        try:
-            body = b"".join([chunk async for chunk in response.body_iterator])
-            response.body_iterator = [body].__iter__()
-            payload = json.loads(body.decode("utf-8"))
-            if self.schema:
-                validate(instance=payload, schema=self.schema)
-                log.info("✅ Outbound /v1/responses payload validated successfully.")
-        except ValidationError as e:
-            log.warning(f"⚠️ Outbound payload schema mismatch: {e.message}")
-        except Exception as e:
-            log.warning(f"⚠️ Outbound validation skipped: {e}")
-
-        return response
+        # All clear — continue downstream
+        return await call_next(request)

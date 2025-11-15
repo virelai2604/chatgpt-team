@@ -1,100 +1,125 @@
 {
-  "schema_version": "v1.2",
-  "updated_at": "2025-11-03T00:00:00Z",
-  "description": "Manifest of all enabled tools for ChatGPT Team Relay. Each tool is declared with its entrypoint and configuration for execution via /v1/tools/* routes or /v1/responses tool calls.",
+  "object": "list",
   "tools": [
     {
-      "name": "multiply",
-      "enabled": true,
-      "version": "1.0",
-      "description": "Multiply two numbers and return the result.",
-      "entrypoint": "app.tools.code_interpreter.run",
+      "id": "web_search",
+      "object": "tool",
+      "type": "function",
+      "description": "Performs real-time web searches for current information.",
       "parameters": {
         "type": "object",
         "properties": {
-          "a": { "type": "number", "description": "First number" },
-          "b": { "type": "number", "description": "Second number" }
-        },
-        "required": ["a", "b"]
-      }
-    },
-    {
-      "name": "file_search",
-      "enabled": true,
-      "version": "1.0",
-      "description": "Search uploaded files by keyword using vector similarity.",
-      "entrypoint": "app.tools.file_search.run",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "query": { "type": "string", "description": "Search query text" },
-          "limit": { "type": "integer", "default": 5 }
+          "query": { "type": "string", "description": "Search text." },
+          "max_results": { "type": "integer", "description": "Maximum number of results.", "default": 5 }
         },
         "required": ["query"]
       }
     },
     {
-      "name": "image_generation",
-      "enabled": true,
-      "version": "1.0",
-      "description": "Generate an image from text using DALL·E-compatible generation.",
-      "entrypoint": "app.tools.image_generation.create",
+      "id": "file_search",
+      "object": "tool",
+      "type": "function",
+      "description": "Searches and retrieves content from uploaded or linked files.",
       "parameters": {
         "type": "object",
         "properties": {
-          "prompt": { "type": "string" },
+          "query": { "type": "string", "description": "Search term to match against file embeddings." },
+          "limit": { "type": "integer", "description": "Number of matched chunks to return.", "default": 3 }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "id": "code_interpreter",
+      "object": "tool",
+      "type": "function",
+      "description": "Executes Python code in a secure sandbox for computation or data analysis.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string", "description": "Python code to execute." },
+          "context": { "type": "string", "description": "Optional description of task context." }
+        },
+        "required": ["code"]
+      }
+    },
+    {
+      "id": "image_generation",
+      "object": "tool",
+      "type": "function",
+      "description": "Generates images from text prompts using DALL·E 3.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string", "description": "Text description of the image to generate." },
           "size": {
             "type": "string",
             "enum": ["256x256", "512x512", "1024x1024"],
             "default": "512x512"
-          }
+          },
+          "n": { "type": "integer", "description": "Number of images to generate.", "default": 1 }
         },
         "required": ["prompt"]
       }
     },
     {
-      "name": "web_search",
-      "enabled": true,
-      "version": "1.0",
-      "description": "Perform a live web search via relay web_search tool.",
-      "entrypoint": "app.tools.web_search.query",
+      "id": "audio_generation",
+      "object": "tool",
+      "type": "function",
+      "description": "Generates speech audio from text using TTS-1 and TTS-1-1106 models.",
       "parameters": {
         "type": "object",
         "properties": {
-          "query": { "type": "string", "description": "Text query" },
-          "region": { "type": "string", "description": "Region bias", "default": "us" }
+          "text": { "type": "string", "description": "Text to convert to speech." },
+          "voice": { "type": "string", "description": "Voice name (e.g., alloy, verse, soft).", "default": "alloy" },
+          "format": { "type": "string", "description": "Audio output format (mp3, wav, etc.).", "default": "mp3" }
         },
-        "required": ["query"]
+        "required": ["text"]
       }
     },
     {
-      "name": "vector_store_retrieval",
-      "enabled": true,
-      "version": "1.0",
-      "description": "Retrieve content from a vector store by similarity search.",
-      "entrypoint": "app.tools.vector_store_retrieval.retrieve",
+      "id": "moderation",
+      "object": "tool",
+      "type": "function",
+      "description": "Evaluates text for content safety and policy compliance.",
       "parameters": {
         "type": "object",
         "properties": {
-          "query": { "type": "string" },
-          "top_k": { "type": "integer", "default": 3 }
+          "input": { "type": "string", "description": "Text to evaluate for policy violations." }
         },
-        "required": ["query"]
+        "required": ["input"]
       }
     },
     {
-      "name": "code_interpreter",
-      "enabled": true,
-      "version": "1.0",
-      "description": "Run Python snippets in a sandboxed environment.",
-      "entrypoint": "app.tools.code_interpreter.execute",
+      "id": "vector_store_retrieval",
+      "object": "tool",
+      "type": "function",
+      "description": "Retrieves context data from a vector store given a query embedding.",
       "parameters": {
         "type": "object",
         "properties": {
-          "code": { "type": "string", "description": "Python code to execute" }
+          "store_id": { "type": "string", "description": "Vector store identifier." },
+          "query": { "type": "string", "description": "Text to search in the store." },
+          "limit": { "type": "integer", "description": "Maximum documents to return.", "default": 3 }
         },
-        "required": ["code"]
-      }
+        "required": ["store_id", "query"]
+      },
+      "beta": true
+    },
+    {
+      "id": "computer_use",
+      "object": "tool",
+      "type": "function",
+      "description": "Performs local environment actions such as opening files or automating tasks (Realtime Beta).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "description": "Action type (e.g., open_file, read_text)." },
+          "target": { "type": "string", "description": "Path or identifier for the action target." }
+        },
+        "required": ["action"]
+      },
+      "beta": true
     }
   ]
 }
