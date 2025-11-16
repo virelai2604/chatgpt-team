@@ -3,8 +3,10 @@
   "name_for_human": "ChatGPT Team Relay",
   "name_for_model": "chatgpt_team_relay",
   "description_for_human": "An OpenAI-compatible API relay that supports /v1/responses, /v1/files, /v1/embeddings, /v1/vector_stores, and registered tool execution via ChatGPT Actions.",
-  "description_for_model": "Relay API for ChatGPT Team: enables passthrough for OpenAI endpoints and registered custom tools. Fully aligned with the OpenAI SDK v2.61 and Node SDK v6.7.0.",
-  "auth": { "type": "none" },
+  "description_for_model": "Relay API for ChatGPT Team. This service mirrors the official OpenAI API surface (including /v1/responses, /v1/models, /v1/files, /v1/embeddings, /v1/vector_stores, /v1/realtime/sessions, and /v1/tools) at https://chatgpt-team-relay.onrender.com. It is designed to be used from ChatGPT Actions and is compatible with the latest OpenAI Python and Node.js SDKs.",
+  "auth": {
+    "type": "none"
+  },
   "api": {
     "type": "openapi",
     "is_user_authenticated": false,
@@ -14,6 +16,7 @@
   "contact_email": "support@chatgpt-team-relay.com",
   "legal_info_url": "https://chatgpt-team-relay.onrender.com/legal",
   "terms_of_service_url": "https://chatgpt-team-relay.onrender.com/terms",
+
   "endpoints": [
     "/v1/responses",
     "/v1/models",
@@ -23,6 +26,21 @@
     "/v1/realtime/sessions",
     "/v1/tools"
   ],
-  "supported_models": ["gpt-4o", "gpt-4o-mini", "gpt-5"],
-  "tags": ["relay", "openai", "openai-compatible", "fastapi", "chatgpt", "plugin"]
+
+  "supported_models": [
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4o",
+    "gpt-5.1",
+    "gpt-5.1-mini"
+  ],
+
+  "tags": [
+    "relay",
+    "openai",
+    "openai-compatible",
+    "fastapi",
+    "chatgpt",
+    "actions"
+  ]
 }
