@@ -3,13 +3,16 @@ main.py — ChatGPT Team Relay Entry Point
 ────────────────────────────────────────
 Unified app bootstrap for the OpenAI-compatible relay.
 
-Features:
-  • Forwards all /v1/* calls to the upstream OpenAI API, except
-    for a small set of local endpoints.
-  • Integrates JSON validation + orchestration middleware.
-  • Registers /v1/tools from the hosted tools manifest.
-  • Serves /schemas/openapi.yaml for ChatGPT Actions / Plugins.
-  • Exposes /v1/health for Render health checks.
+Focus:
+  • Relay-focus surfaces handled locally:
+      - Responses, Conversations, Files, Vector Stores, Embeddings,
+        Realtime, Models, Images, Videos, Actions.
+  • /v1/tools is a local tools registry for introspection.
+  • Everything else under /v1/* is orchestrated and generally forwarded
+    to OpenAI via P4OrchestratorMiddleware → forward_openai_request.
+
+This file is “BIFL”: minimal moving parts, stable paths, and
+behavior aligned with the official OpenAI API reference.
 """
 
 import os
@@ -20,9 +23,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 
-from app.validation import SchemaValidationMiddleware
-from app.p4_orchestrator import P4OrchestratorMiddleware
-from app.tools_api import router as tools_router
+from app.middleware.validation import SchemaValidationMiddleware
+from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
+
+from app.api.tools_api import router as tools_router
+from app.routes import (
+    actions as actions_routes,
+    conversations as conversations_routes,
+    embeddings as embeddings_routes,
+    files as files_routes,
+    images as images_routes,
+    models as models_routes,
+    realtime as realtime_routes,
+    responses as responses_routes,
+    vector_stores as vector_stores_routes,
+    videos as videos_routes,
+)
 
 
 def create_app() -> FastAPI:
@@ -88,7 +104,7 @@ def create_app() -> FastAPI:
     app.add_middleware(P4OrchestratorMiddleware)
 
     # ------------------------------------------------------------
-    # Local routes
+    # Local meta routes
     # ------------------------------------------------------------
 
     @app.get("/")
@@ -137,14 +153,22 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------
     # Routers (local endpoints)
     # ------------------------------------------------------------
-    # /v1/tools and /v1/tools/{tool_id}
+    # /v1/tools and /v1/tools/{tool_id} — hosted tools registry
     app.include_router(tools_router)
 
-    # Note: All other /v1/* routes are handled by the orchestrator
-    #       middleware and forwarded directly to OpenAI using the
-    #       HTTP methods and paths defined in the official API
-    #       reference (responses, models, files, embeddings,
-    #       vector_stores, realtime sessions, conversations, etc.).
+    # Relay-focus /v1/* surfaces — locally handled (may still proxy upstream)
+    app.include_router(responses_routes.router)
+    app.include_router(conversations_routes.router)
+    app.include_router(files_routes.router)
+    app.include_router(vector_stores_routes.router)
+    app.include_router(embeddings_routes.router)
+    app.include_router(realtime_routes.router)
+    app.include_router(models_routes.router)
+    app.include_router(images_routes.router)
+    app.include_router(videos_routes.router)
+    app.include_router(actions_routes.router)
+
+    # All other /v1/* paths fall back to P4Orchestrator + forward_openai_request.
 
     return app
 
