@@ -10,6 +10,7 @@ logger = logging.getLogger("uvicorn")
 
 # Default OpenAI REST API endpoint; can be overridden via env or app.state
 DEFAULT_OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
+DEFAULT_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 
 async def _stream_upstream_response(upstream_response: httpx.Response) -> StreamingResponse:
@@ -38,19 +39,32 @@ async def forward_openai_request(request: Request) -> Response:
     - Preserves Authorization, or injects OPENAI_API_KEY if missing.
     - Supports JSON and multipart/form-data (files).
     - Handles both streaming (SSE) and non-streaming responses.
+    - Preserves query parameters on the URL.
     """
     method = request.method.upper()
+    # Normalize to avoid leading slashes ambiguity
     path = request.url.path.lstrip("/")
+    query = request.url.query
 
     # Allow app-level override (e.g., Azure-compatible or self-hosted base URLs)
     api_base = getattr(request.app.state, "OPENAI_API_BASE", DEFAULT_OPENAI_API_BASE)
-    target_url = f"{api_base.rstrip('/')}/{path}"
+
+    base_url = f"{api_base.rstrip('/')}/{path}"
+    target_url = f"{base_url}?{query}" if query else base_url
 
     headers = dict(request.headers)
-    headers["authorization"] = (
-        headers.get("authorization")
-        or f"Bearer {request.app.state.OPENAI_API_KEY}"
-    )
+
+    # Determine upstream Authorization
+    auth_header = headers.get("authorization")
+    if not auth_header:
+        # Prefer app.state if set, otherwise fallback to env var
+        state_key = getattr(request.app.state, "OPENAI_API_KEY", None)
+        key = state_key or DEFAULT_OPENAI_API_KEY
+        if key:
+            auth_header = f"Bearer {key}"
+    if auth_header:
+        headers["authorization"] = auth_header
+
     # Avoid issues with compressed responses
     headers["accept-encoding"] = "identity"
 
@@ -85,7 +99,7 @@ async def forward_openai_request(request: Request) -> Response:
             content=content if files is None else None,
         )
 
-    # Handle streaming response
+    # Handle streaming response (Responses API, etc.)
     if upstream_response.headers.get("content-type", "").startswith("text/event-stream"):
         logger.info("📡 Streaming OpenAI response back to client")
         return await _stream_upstream_response(upstream_response)
