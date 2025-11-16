@@ -15,7 +15,6 @@
     📁 api
       📄 __init__.py
       📄 forward_openai.py
-      📄 passthrough_proxy.py
       📄 tools_api.py
     📁 manifests
       📄 __init__.py

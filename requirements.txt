@@ -24,7 +24,7 @@ flake8==7.1.1
 types-requests
 types-PyYAML
 types-aiofiles
-types-colorlog
+# types-colorlog  <-- REMOVED: no such package on PyPI
 
 # --- Testing & Coverage ---
 pytest==8.3.3
