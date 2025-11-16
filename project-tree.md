@@ -1,14 +1,12 @@
   📄 .env
   📄 .gitattributes
   📄 .gitignore
-  📄 ChatGPT-API_reference_ground_truth-2025-10-29.json
+  📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
   📄 __init__.py
   📄 generate_tree.py
   📄 openai_models_2025-11.csv
-  📄 openai_response.json
   📄 project-tree.md
   📄 pytest.ini
-  📄 relay_response.json
   📄 render.yaml
   📄 requirements.txt
   📁 app
@@ -69,6 +67,8 @@
   📁 docs
     📄 README.md
   📁 logs
+    📄 test_summary.tx
+    📄 test_summary.txt
   📁 schemas
     📄 __init__.py
     📄 openapi.yaml

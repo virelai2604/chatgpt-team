@@ -23,8 +23,8 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "query": { "type": "string", "description": "Search term to match against file embeddings." },
-          "limit": { "type": "integer", "description": "Number of matched chunks to return.", "default": 3 }
+          "query": { "type": "string", "description": "User query to search within files." },
+          "max_chunks": { "type": "integer", "description": "Maximum number of chunks to retrieve.", "default": 10 }
         },
         "required": ["query"]
       }
@@ -33,12 +33,16 @@
       "id": "code_interpreter",
       "object": "tool",
       "type": "function",
-      "description": "Executes Python code in a secure sandbox for computation or data analysis.",
+      "description": "Executes Python code in a sandboxed environment for data analysis, math, and scripting.",
       "parameters": {
         "type": "object",
         "properties": {
           "code": { "type": "string", "description": "Python code to execute." },
-          "context": { "type": "string", "description": "Optional description of task context." }
+          "files": {
+            "type": "array",
+            "description": "Optional file identifiers to include in the environment.",
+            "items": { "type": "string" }
+          }
         },
         "required": ["code"]
       }
@@ -47,7 +51,7 @@
       "id": "image_generation",
       "object": "tool",
       "type": "function",
-      "description": "Generates images from text prompts using DALL·E 3.",
+      "description": "Generates images from text prompts using DALL·E models.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -66,41 +70,58 @@
       "id": "audio_generation",
       "object": "tool",
       "type": "function",
-      "description": "Generates speech audio from text using TTS-1 and TTS-1-1106 models.",
+      "description": "Generates speech audio from text using TTS models.",
       "parameters": {
         "type": "object",
         "properties": {
           "text": { "type": "string", "description": "Text to convert to speech." },
-          "voice": { "type": "string", "description": "Voice name (e.g., alloy, verse, soft).", "default": "alloy" },
-          "format": { "type": "string", "description": "Audio output format (mp3, wav, etc.).", "default": "mp3" }
+          "voice": {
+            "type": "string",
+            "description": "Voice name (e.g., alloy, verse, soft).",
+            "default": "alloy"
+          },
+          "format": {
+            "type": "string",
+            "description": "Audio output format (mp3, wav, etc.).",
+            "default": "mp3"
+          }
         },
         "required": ["text"]
       }
     },
     {
-      "id": "moderation",
+      "id": "audio_transcription",
       "object": "tool",
       "type": "function",
-      "description": "Evaluates text for content safety and policy compliance.",
+      "description": "Transcribes speech audio to text using Whisper/ASR models.",
       "parameters": {
         "type": "object",
         "properties": {
-          "input": { "type": "string", "description": "Text to evaluate for policy violations." }
+          "file_id": { "type": "string", "description": "Identifier of the uploaded audio file." },
+          "language": {
+            "type": "string",
+            "description": "Optional language code (e.g., en, id, zh).",
+            "default": "auto"
+          }
         },
-        "required": ["input"]
+        "required": ["file_id"]
       }
     },
     {
-      "id": "vector_store_retrieval",
+      "id": "vector_store_search",
       "object": "tool",
       "type": "function",
-      "description": "Retrieves context data from a vector store given a query embedding.",
+      "description": "Searches a vector store for relevant documents (file search / retrieval).",
       "parameters": {
         "type": "object",
         "properties": {
           "store_id": { "type": "string", "description": "Vector store identifier." },
           "query": { "type": "string", "description": "Text to search in the store." },
-          "limit": { "type": "integer", "description": "Maximum documents to return.", "default": 3 }
+          "limit": {
+            "type": "integer",
+            "description": "Maximum documents to return.",
+            "default": 3
+          }
         },
         "required": ["store_id", "query"]
       },
@@ -110,12 +131,18 @@
       "id": "computer_use",
       "object": "tool",
       "type": "function",
-      "description": "Performs local environment actions such as opening files or automating tasks (Realtime Beta).",
+      "description": "Performs local environment actions such as opening files or automating tasks (Realtime / computer-use).",
       "parameters": {
         "type": "object",
         "properties": {
-          "action": { "type": "string", "description": "Action type (e.g., open_file, read_text)." },
-          "target": { "type": "string", "description": "Path or identifier for the action target." }
+          "action": {
+            "type": "string",
+            "description": "Action type (e.g., open_file, read_text, click, type)."
+          },
+          "target": {
+            "type": "string",
+            "description": "Path, selector, or identifier for the action target."
+          }
         },
         "required": ["action"]
       },

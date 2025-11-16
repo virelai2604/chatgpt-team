@@ -1,6 +1,9 @@
 # ==============================================================
 # Render Service Manifest
-# ChatGPT Team Relay — Ground Truth API v1.7 / SDK 2.6.1
+# ChatGPT Team Relay — Ground Truth API v1.7
+# SDK Targets:
+#   - openai-python 2.8.0
+#   - openai-node 6.9.0
 # ==============================================================
 
 services:
@@ -17,7 +20,12 @@ services:
     startCommand: |
       uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
+    env: python
+    branch: main
     autoDeploy: true
+
+    # Render health check uses this path
+    healthCheckPath: /v1/health
 
     envVars:
       # --- Runtime and Metadata ---
@@ -45,12 +53,16 @@ services:
         value: 120
 
       # --- Upstream OpenAI API ---
+      # NOTE: no /v1 suffix; paths like /v1/responses will be appended by the relay.
       - key: OPENAI_API_BASE
         value: https://api.openai.com
+
+      # These are marked sync:false so you can (and should) set them only in the
+      # Render dashboard, not in Git.
       - key: OPENAI_API_KEY
-        sync: false   # (Sensitive key - set manually in dashboard)
+        sync: false          # set real value in Render dashboard
       - key: OPENAI_ORG_ID
-        sync: false   # Optional organization ID
+        sync: false          # optional organization ID
 
       # --- Defaults ---
       - key: DEFAULT_MODEL
@@ -82,11 +94,11 @@ services:
       - key: VALIDATION_SCHEMA_PATH
         value: ChatGPT-API_reference_ground_truth-2025-10-29.json
 
-    healthCheckPath: /v1/health
-    env: python
-
-    autoDeploy: true
-    branch: main
+      # --- ChatGPT Actions Secret (optional but recommended) ---
+      # Set this in the Render dashboard; use the same value in ChatGPT Actions
+      # as an Authorization: Bearer <secret> header.
+      - key: CHATGPT_ACTIONS_SECRET
+        sync: false
 
     buildFilter:
       paths:
@@ -97,11 +109,18 @@ services:
 
 # ==============================================================
 # Notes:
-# - The OpenAI API key and organization ID must be added manually
-#   in the Render Environment dashboard for security reasons.
-# - Health checks and auto-deploy are enabled.
-# - Ground Truth v1.7 endpoint families are fully supported:
-#   /v1/responses, /v1/files, /v1/models, /v1/vector_stores,
-#   /v1/conversations, /v1/realtime, /v1/embeddings.
-# - Fallback passthrough proxy automatically mirrors upstream OpenAI API.
+# - The OpenAI API key and organization ID are set manually in the
+#   Render Environment, not in the repo.
+# - Health checks hit /v1/health on the relay.
+# - The relay exposes the stable OpenAI endpoint families used by the
+#   Python 2.8.0 and Node 6.9.0 SDKs:
+#     /v1/responses
+#     /v1/models
+#     /v1/files
+#     /v1/embeddings
+#     /v1/vector_stores
+#     /v1/realtime/sessions
+#     /v1/tools
+# - Deprecated / legacy endpoints (e.g., classic Chat Completions) are not
+#   specially wrapped; they are simply proxied upstream if an SDK calls them.
 # ==============================================================

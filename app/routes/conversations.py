@@ -2,16 +2,21 @@
 conversations.py — OpenAI-Compatible /v1/conversations Endpoint
 ───────────────────────────────────────────────────────────────
 Implements conversation persistence compatible with:
-  • openai-python SDK v2.61
-  • openai-node SDK v6.7.0
-  • OpenAI API Reference (2025-10)
+  • openai-python SDK v2.8.x
+  • openai-node SDK v6.x
+  • OpenAI API Reference (2025-10+)
 
 Supports:
   • GET /v1/conversations            → list all conversations
   • GET /v1/conversations/{id}       → retrieve a specific conversation
   • POST /v1/conversations           → create new conversation (store or proxy)
   • POST /v1/conversations/{id}/messages → append a new message
+
 Provides hybrid persistence (online-first + local SQLite cache).
+
+NOTE:
+  • If P4OrchestratorMiddleware forwards /v1/conversations directly,
+    these routes will not be invoked and upstream OpenAI will be used instead.
 """
 
 import os
@@ -25,9 +30,9 @@ from app.utils.logger import log
 
 router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
 
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-USER_AGENT = "openai-python/2.61.0"
+USER_AGENT = "openai-python/2.8.x"
 RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", 120))
 DB_PATH = os.getenv("CONVERSATION_DB_PATH", "data/conversations.db")
 
@@ -101,7 +106,7 @@ async def list_conversations():
     headers = build_headers()
     async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
         try:
-            resp = await client.get(f"{OPENAI_API_BASE}/conversations", headers=headers)
+            resp = await client.get(f"{OPENAI_API_BASE.rstrip('/')}/v1/conversations", headers=headers)
             if resp.status_code == 200:
                 return JSONResponse(resp.json(), status_code=200)
         except httpx.RequestError as e:
@@ -117,7 +122,7 @@ async def retrieve_conversation(conv_id: str):
     headers = build_headers()
     async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
         try:
-            resp = await client.get(f"{OPENAI_API_BASE}/conversations/{conv_id}", headers=headers)
+            resp = await client.get(f"{OPENAI_API_BASE.rstrip('/')}/v1/conversations/{conv_id}", headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
                 save_conversation(conv_id, data)
@@ -144,7 +149,7 @@ async def create_conversation(request: Request):
     headers = build_headers()
     async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
         try:
-            resp = await client.post(f"{OPENAI_API_BASE}/conversations", headers=headers, json=body)
+            resp = await client.post(f"{OPENAI_API_BASE.rstrip('/')}/v1/conversations", headers=headers, json=body)
             if resp.status_code in (200, 201):
                 data = resp.json()
                 save_conversation(data.get("id", f"local-{datetime.utcnow().timestamp()}"), data)
@@ -172,7 +177,11 @@ async def append_message(conv_id: str, request: Request):
     headers = build_headers()
     async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
         try:
-            resp = await client.post(f"{OPENAI_API_BASE}/conversations/{conv_id}/messages", headers=headers, json=msg)
+            resp = await client.post(
+                f"{OPENAI_API_BASE.rstrip('/')}/v1/conversations/{conv_id}/messages",
+                headers=headers,
+                json=msg,
+            )
             if resp.status_code in (200, 201):
                 return JSONResponse(resp.json(), status_code=resp.status_code)
         except httpx.RequestError as e:

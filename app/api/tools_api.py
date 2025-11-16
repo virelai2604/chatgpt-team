@@ -1,8 +1,11 @@
 """
-tools_api.py — Hosted Tool Registry (Complete OpenAI SDK parity, 2025-11)
-─────────────────────────────────────────────────────────────────────────
+tools_api.py — Hosted Tool Registry (OpenAI-compatible)
+───────────────────────────────────────────────────────
 Implements /v1/tools and /v1/tools/{tool_id} endpoints.
-Fully matches the schema used in openai-node@6.9.0 and openai-python@2.8.0.
+
+This is optional for openai-python 2.x and openai-node 6.x, since
+the SDKs normally configure tools inline on the request. However,
+it is useful for agents or diagnostics that probe /v1/tools.
 """
 
 import os
@@ -12,16 +15,25 @@ from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/v1", tags=["tools"])
 
-MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "../manifests/tools_manifest.json")
+# Adjust this path to your repo layout; in your project it's app/manifests/tools_manifest.json
+MANIFEST_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "../manifests/tools_manifest.json",
+)
 
 
 def load_manifest() -> dict:
-    """Safely load the local tools manifest (OpenAI schema compliant)."""
+    """Safely load the local tools manifest (OpenAI-style schema)."""
     try:
         with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
             manifest = json.load(f)
-            if "data" in manifest:
+
+            # Normalize older "data" shape to "tools" if needed
+            if "data" in manifest and "tools" not in manifest:
                 manifest["tools"] = manifest.pop("data")
+
+            manifest.setdefault("object", "list")
+            manifest.setdefault("tools", [])
             return manifest
     except (FileNotFoundError, json.JSONDecodeError):
         return {"object": "list", "tools": []}
@@ -31,9 +43,10 @@ def load_manifest() -> dict:
 async def list_tools():
     """
     Returns a list of available tools in OpenAI-compatible format:
+
     {
       "object": "list",
-      "tools": [...]
+      "tools": [ { ... } ]
     }
     """
     manifest = load_manifest()
