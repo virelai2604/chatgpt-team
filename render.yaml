@@ -42,6 +42,11 @@ services:
       - key: BUILD_CHANNEL
         value: stable
 
+      # --- Python Runtime ---
+      # Pin to 3.12.x so pydantic-core has prebuilt wheels
+      - key: PYTHON_VERSION
+        value: 3.12.5
+
       # --- Networking ---
       - key: PORT
         value: 8080
@@ -113,7 +118,7 @@ services:
 #   Render Environment, not in the repo.
 # - Health checks hit /v1/health on the relay.
 # - The relay exposes the stable OpenAI endpoint families used by the
-#   Python 2.8.0 and Node 6.9.0 SDKs:
+#   Python 2.8.0 and Node 6.x SDKs:
 #     /v1/responses
 #     /v1/models
 #     /v1/files
