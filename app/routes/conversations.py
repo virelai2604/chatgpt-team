@@ -1,95 +1,97 @@
 """
-conversations.py — OpenAI-Compatible /v1/conversations Endpoint
-───────────────────────────────────────────────────────────────
-Implements conversation persistence compatible with:
-  • openai-python SDK v2.8.x
-  • openai-node SDK v6.x
-  • OpenAI API Reference (2025-10+)
-
-Supports:
-  • GET /v1/conversations            → list all conversations
-  • GET /v1/conversations/{id}       → retrieve a specific conversation
-  • POST /v1/conversations           → create new conversation (store or proxy)
-  • POST /v1/conversations/{id}/messages → append a new message
-
-Provides hybrid persistence (online-first + local SQLite cache).
-
-NOTE:
-  • If P4OrchestratorMiddleware forwards /v1/conversations directly,
-    these routes will not be invoked and upstream OpenAI will be used instead.
+conversations.py — /v1/conversations (plus local cache)
+────────────────────────────────────────────────────────
+Implements OpenAI Conversations endpoints with an optional local
+SQLite/JSON cache for resilience and offline listing.
 """
 
 import os
 import json
 import sqlite3
-import httpx
 from datetime import datetime
+
+import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from app.utils.logger import log
+
+from app.utils.logger import relay_log as log
 
 router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
 
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-USER_AGENT = "openai-python/2.8.x"
-RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", 120))
-DB_PATH = os.getenv("CONVERSATION_DB_PATH", "data/conversations.db")
+RELAY_TIMEOUT = int(os.getenv("RELAY_TIMEOUT", "60"))
 
-# ------------------------------------------------------------
-# Local persistence helpers
-# ------------------------------------------------------------
+DB_PATH = os.getenv("CONVERSATIONS_DB", "data/conversations.db")
+USER_AGENT = os.getenv("RELAY_USER_AGENT", "chatgpt-team-relay/1.0")
+
+
 def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS conversations (
-            id TEXT PRIMARY KEY,
-            title TEXT,
-            created TIMESTAMP,
-            last_updated TIMESTAMP,
-            data TEXT
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversations (
+                id TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
         )
-    """)
-    conn.close()
+        conn.commit()
+    finally:
+        conn.close()
+
 
 def save_conversation(conv_id: str, data: dict):
     conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "INSERT OR REPLACE INTO conversations (id, title, created, last_updated, data) VALUES (?, ?, ?, ?, ?)",
-        (
-            conv_id,
-            data.get("title", "Untitled"),
-            data.get("created", datetime.utcnow().isoformat()),
-            datetime.utcnow().isoformat(),
-            json.dumps(data),
-        ),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            """
+            INSERT INTO conversations (id, data, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                data=excluded.data,
+                updated_at=excluded.updated_at
+            """,
+            (conv_id, json.dumps(data), datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
 
 def get_conversation(conv_id: str):
     conn = sqlite3.connect(DB_PATH)
-    cur = conn.execute("SELECT data FROM conversations WHERE id = ?", (conv_id,))
-    row = cur.fetchone()
-    conn.close()
-    return json.loads(row[0]) if row else None
+    try:
+        cur = conn.execute(
+            "SELECT data FROM conversations WHERE id = ?",
+            (conv_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return json.loads(row[0])
+        return None
+    finally:
+        conn.close()
 
-def list_conversations_local():
+
+def list_conversations_local(limit: int = 50):
     conn = sqlite3.connect(DB_PATH)
-    cur = conn.execute("SELECT id, title, created, last_updated FROM conversations ORDER BY last_updated DESC")
-    results = [
-        {"id": r[0], "title": r[1], "created": r[2], "last_updated": r[3]}
-        for r in cur.fetchall()
-    ]
-    conn.close()
-    return results
+    try:
+        cur = conn.execute(
+            "SELECT data FROM conversations ORDER BY updated_at DESC LIMIT ?",
+            (limit,),
+        )
+        return [json.loads(r[0]) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
 
 init_db()
 
-# ------------------------------------------------------------
-# Network helper
-# ------------------------------------------------------------
+
 def build_headers():
     return {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -98,31 +100,32 @@ def build_headers():
     }
 
 
-# ------------------------------------------------------------
-# GET /v1/conversations → list conversations
-# ------------------------------------------------------------
 @router.get("")
 async def list_conversations():
     headers = build_headers()
     async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
         try:
-            resp = await client.get(f"{OPENAI_API_BASE.rstrip('/')}/v1/conversations", headers=headers)
+            resp = await client.get(
+                f"{OPENAI_API_BASE.rstrip('/')}/conversations", headers=headers
+            )
             if resp.status_code == 200:
                 return JSONResponse(resp.json(), status_code=200)
         except httpx.RequestError as e:
             log.warning(f"[Conversations] Online list failed: {e}, using local cache.")
-    return JSONResponse({"object": "list", "data": list_conversations_local()}, status_code=200)
+    return JSONResponse(
+        {"object": "list", "data": list_conversations_local()}, status_code=200
+    )
 
 
-# ------------------------------------------------------------
-# GET /v1/conversations/{id} → retrieve conversation
-# ------------------------------------------------------------
 @router.get("/{conv_id}")
 async def retrieve_conversation(conv_id: str):
     headers = build_headers()
     async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
         try:
-            resp = await client.get(f"{OPENAI_API_BASE.rstrip('/')}/v1/conversations/{conv_id}", headers=headers)
+            resp = await client.get(
+                f"{OPENAI_API_BASE.rstrip('/')}/conversations/{conv_id}",
+                headers=headers,
+            )
             if resp.status_code == 200:
                 data = resp.json()
                 save_conversation(conv_id, data)
@@ -135,12 +138,8 @@ async def retrieve_conversation(conv_id: str):
     return JSONResponse({"error": "Conversation not found"}, status_code=404)
 
 
-# ------------------------------------------------------------
-# POST /v1/conversations → create conversation
-# ------------------------------------------------------------
 @router.post("")
 async def create_conversation(request: Request):
-    """Creates a new conversation (upstream or local)."""
     try:
         body = await request.json()
     except Exception:
@@ -149,26 +148,32 @@ async def create_conversation(request: Request):
     headers = build_headers()
     async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
         try:
-            resp = await client.post(f"{OPENAI_API_BASE.rstrip('/')}/v1/conversations", headers=headers, json=body)
+            resp = await client.post(
+                f"{OPENAI_API_BASE.rstrip('/')}/conversations",
+                headers=headers,
+                json=body,
+            )
             if resp.status_code in (200, 201):
                 data = resp.json()
-                save_conversation(data.get("id", f"local-{datetime.utcnow().timestamp()}"), data)
+                save_conversation(
+                    data.get("id", f"local-{datetime.utcnow().timestamp()}"), data
+                )
                 return JSONResponse(data, status_code=resp.status_code)
         except httpx.RequestError as e:
             log.warning(f"[Conversations] Online create failed: {e}, saving locally.")
-    # fallback local save
     conv_id = f"local-{datetime.utcnow().timestamp()}"
-    data = {"id": conv_id, "title": body.get("title", "Untitled"), "messages": [], "created": datetime.utcnow().isoformat()}
+    data = {
+        "id": conv_id,
+        "title": body.get("title", "Untitled"),
+        "messages": [],
+        "created": datetime.utcnow().isoformat(),
+    }
     save_conversation(conv_id, data)
     return JSONResponse(data, status_code=201)
 
 
-# ------------------------------------------------------------
-# POST /v1/conversations/{id}/messages → append message
-# ------------------------------------------------------------
 @router.post("/{conv_id}/messages")
 async def append_message(conv_id: str, request: Request):
-    """Appends a message to a conversation (local + upstream)."""
     try:
         msg = await request.json()
     except Exception:
@@ -178,21 +183,24 @@ async def append_message(conv_id: str, request: Request):
     async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
         try:
             resp = await client.post(
-                f"{OPENAI_API_BASE.rstrip('/')}/v1/conversations/{conv_id}/messages",
+                f"{OPENAI_API_BASE.rstrip('/')}/conversations/{conv_id}/messages",
                 headers=headers,
                 json=msg,
             )
             if resp.status_code in (200, 201):
-                return JSONResponse(resp.json(), status_code=resp.status_code)
+                data = resp.json()
+                existing = get_conversation(conv_id) or {"id": conv_id, "messages": []}
+                messages = existing.get("messages", [])
+                messages.append(msg)
+                existing["messages"] = messages
+                save_conversation(conv_id, existing)
+                return JSONResponse(data, status_code=resp.status_code)
         except httpx.RequestError as e:
-            log.warning(f"[Conversations] Online append failed: {e}, using local.")
+            log.warning(f"[Conversations] Online append failed: {e}, local only.")
 
-    local = get_conversation(conv_id)
-    if local:
-        local.setdefault("messages", []).append(
-            {"role": msg.get("role", "user"), "content": msg.get("content", ""), "timestamp": datetime.utcnow().isoformat()}
-        )
-        save_conversation(conv_id, local)
-        return JSONResponse(local, status_code=200)
-
-    return JSONResponse({"error": "Conversation not found"}, status_code=404)
+    existing = get_conversation(conv_id) or {"id": conv_id, "messages": []}
+    messages = existing.get("messages", [])
+    messages.append(msg)
+    existing["messages"] = messages
+    save_conversation(conv_id, existing)
+    return JSONResponse(existing, status_code=200)

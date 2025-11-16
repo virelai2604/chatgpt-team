@@ -23,7 +23,7 @@ async def _stream_upstream_response(upstream_response: httpx.Response) -> Stream
             if line:
                 # Pass lines through as-is
                 yield f"{line}\n"
-                await asyncio.sleep(0)  # yield control to event loop
+                await asyncio.sleep(0)
 
     return StreamingResponse(
         event_generator(),
@@ -42,13 +42,10 @@ async def forward_openai_request(request: Request) -> Response:
     - Preserves query parameters on the URL.
     """
     method = request.method.upper()
-    # Normalize to avoid leading slashes ambiguity
     path = request.url.path.lstrip("/")
     query = request.url.query
 
-    # Allow app-level override (e.g., Azure-compatible or self-hosted base URLs)
     api_base = getattr(request.app.state, "OPENAI_API_BASE", DEFAULT_OPENAI_API_BASE)
-
     base_url = f"{api_base.rstrip('/')}/{path}"
     target_url = f"{base_url}?{query}" if query else base_url
 
@@ -57,7 +54,6 @@ async def forward_openai_request(request: Request) -> Response:
     # Determine upstream Authorization
     auth_header = headers.get("authorization")
     if not auth_header:
-        # Prefer app.state if set, otherwise fallback to env var
         state_key = getattr(request.app.state, "OPENAI_API_KEY", None)
         key = state_key or DEFAULT_OPENAI_API_KEY
         if key:
@@ -65,7 +61,6 @@ async def forward_openai_request(request: Request) -> Response:
     if auth_header:
         headers["authorization"] = auth_header
 
-    # Avoid issues with compressed responses
     headers["accept-encoding"] = "identity"
 
     # Handle multipart form data (for file uploads)
@@ -99,12 +94,10 @@ async def forward_openai_request(request: Request) -> Response:
             content=content if files is None else None,
         )
 
-    # Handle streaming response (Responses API, etc.)
     if upstream_response.headers.get("content-type", "").startswith("text/event-stream"):
         logger.info("📡 Streaming OpenAI response back to client")
         return await _stream_upstream_response(upstream_response)
 
-    # Handle JSON or binary payloads
     try:
         content_type = upstream_response.headers.get("content-type", "application/json")
         if "application/json" in content_type:
@@ -125,20 +118,3 @@ async def forward_openai_request(request: Request) -> Response:
             )
         },
     )
-
-
-async def forward_json(method: str, path: str, payload: dict, api_key: str) -> dict:
-    """
-    Direct JSON-only forwarder (utility for testing).
-    """
-    url = f"{DEFAULT_OPENAI_API_BASE.rstrip('/')}/{path.lstrip('/')}"
-    headers = {
-        "authorization": f"Bearer {api_key}",
-        "content-type": "application/json",
-    }
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        r = await client.request(method, url, json=payload, headers=headers)
-        try:
-            return r.json()
-        except Exception:
-            return {"status_code": r.status_code, "body": r.text}

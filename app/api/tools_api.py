@@ -6,6 +6,10 @@ Implements /v1/tools and /v1/tools/{tool_id} endpoints.
 This is optional for openai-python 2.x and openai-node 6.x, since
 the SDKs normally configure tools inline on the request. However,
 it is useful for agents or diagnostics that probe /v1/tools.
+
+IMPORTANT:
+  • We do NOT try to auto-sync all official hosted tools here.
+    The canonical tools config stays on the /v1/responses body.
 """
 
 import os
@@ -15,7 +19,6 @@ from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/v1", tags=["tools"])
 
-# Adjust this path to your repo layout; in your project it's app/manifests/tools_manifest.json
 MANIFEST_PATH = os.path.join(
     os.path.dirname(__file__),
     "../manifests/tools_manifest.json",

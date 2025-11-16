@@ -27,7 +27,7 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
           - Logs a warning for non-JSON bodies.
 
     This is intentionally minimal to keep latency low while still protecting
-    the online relay from malformed requests.
+    the relay from malformed requests.
     """
 
     async def dispatch(self, request: Request, call_next):
