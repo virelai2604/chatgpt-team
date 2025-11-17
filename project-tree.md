@@ -9,6 +9,7 @@
   📄 pytest.ini
   📄 render.yaml
   📄 requirements.txt
+  📄 test.txt
   📁 app
     📄 __init__.py
     📄 main.py
@@ -29,11 +30,13 @@
       📄 conversations.py
       📄 embeddings.py
       📄 files.py
+      📄 images.py
       📄 models.py
       📄 realtime.py
       📄 register_routes.py
       📄 responses.py
       📄 vector_stores.py
+      📄 videos.py
     📁 utils
       📄 __init__.py
       📄 error_handler.py
@@ -78,6 +81,11 @@
   📁 tests
     📄 __init__.py
     📄 client.py
+    📄 conftest.py
     📄 sora.py
-    📄 test_relay_endpoints.py
+    📄 test_embeddings_images_videos.py
+    📄 test_files_and_vectorstores.py
+    📄 test_health_and_tools.py
+    📄 test_realtime_and_infra.py
+    📄 test_responses_and_conversations.py
     📁 downloads
