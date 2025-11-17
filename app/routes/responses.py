@@ -3,7 +3,7 @@ import os
 from typing import AsyncGenerator
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
 router = APIRouter(prefix="/v1", tags=["responses"])
@@ -20,6 +20,10 @@ OPENAI_RESPONSES_BETA = os.getenv("OPENAI_RESPONSES_BETA", "")
 
 
 def _base_url(path: str) -> str:
+    """
+    Build a full upstream URL from OPENAI_API_BASE and a path like "/v1/responses".
+    OPENAI_API_BASE must NOT have a trailing /v1; we append it here.
+    """
     return f"{OPENAI_API_BASE.rstrip('/')}{path}"
 
 
@@ -81,8 +85,8 @@ async def _stream_responses(
             yield chunk
 
 
-@router.post("/responses")
-async def create_response(request: Request) -> StreamingResponse | JSONResponse:
+@router.post("/responses", response_model=None)
+async def create_response(request: Request) -> Response:
     """
     Proxy POST /v1/responses with optional streaming support.
 
