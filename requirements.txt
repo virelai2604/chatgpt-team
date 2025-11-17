@@ -11,7 +11,7 @@ openai==2.8.0
 pyyaml==6.0.2
 jsonschema==4.23.0
 typing-extensions>=4.12.2
-python-multipart==0.0.9
+python-multipart>=0.0.7,<1.0.0
 
 # --- Logging / Utils ---
 rich==13.7.1

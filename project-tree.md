@@ -9,7 +9,6 @@
   📄 pytest.ini
   📄 render.yaml
   📄 requirements.txt
-  📄 test.txt
   📁 app
     📄 __init__.py
     📄 main.py
