@@ -97,7 +97,7 @@ services:
 
       # --- Validation Schema ---
       - key: VALIDATION_SCHEMA_PATH
-        value: ChatGPT-API_reference_ground_truth-2025-10-29.json
+        value: ChatGPT-API_reference_ground_truth-2025-10-29.pdf
 
       # --- ChatGPT Actions Secret (optional but recommended) ---
       # Set this in the Render dashboard; use the same value in ChatGPT Actions
