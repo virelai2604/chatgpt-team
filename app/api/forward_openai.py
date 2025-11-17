@@ -8,7 +8,9 @@ from starlette.responses import StreamingResponse
 
 logger = logging.getLogger("uvicorn")
 
-# Default OpenAI REST API endpoint; can be overridden via env or app.state
+# Default OpenAI REST API endpoint; can be overridden via env or app.state.
+# IMPORTANT: Prefer setting OPENAI_API_BASE to "https://api.openai.com"
+# (without /v1). The code below defensively handles both with/without /v1.
 DEFAULT_OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
 DEFAULT_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
@@ -42,11 +44,22 @@ async def forward_openai_request(request: Request) -> Response:
     - Preserves query parameters on the URL.
     """
     method = request.method.upper()
+    # e.g. "/v1/embeddings" → "v1/embeddings"
     path = request.url.path.lstrip("/")
     query = request.url.query
 
+    # Base URL from app.state or environment
     api_base = getattr(request.app.state, "OPENAI_API_BASE", DEFAULT_OPENAI_API_BASE)
-    base_url = f"{api_base.rstrip('/')}/{path}"
+    normalized_base = api_base.rstrip("/")
+
+    # Guard against accidental "/v1" in both base and path (no /v1/v1/*)
+    # If base ends with "/v1" AND path starts with "v1/", strip the leading "v1/".
+    if normalized_base.endswith("/v1") and path.startswith("v1/"):
+        normalized_path = path[len("v1/") :]
+    else:
+        normalized_path = path
+
+    base_url = f"{normalized_base}/{normalized_path}"
     target_url = f"{base_url}?{query}" if query else base_url
 
     headers = dict(request.headers)
@@ -61,6 +74,7 @@ async def forward_openai_request(request: Request) -> Response:
     if auth_header:
         headers["authorization"] = auth_header
 
+    # Disable compression so we can stream / inspect bodies cleanly
     headers["accept-encoding"] = "identity"
 
     # Handle multipart form data (for file uploads)
@@ -94,10 +108,12 @@ async def forward_openai_request(request: Request) -> Response:
             content=content if files is None else None,
         )
 
+    # Streaming responses (e.g., /v1/responses with stream: true)
     if upstream_response.headers.get("content-type", "").startswith("text/event-stream"):
         logger.info("📡 Streaming OpenAI response back to client")
         return await _stream_upstream_response(upstream_response)
 
+    # Non-streaming responses
     try:
         content_type = upstream_response.headers.get("content-type", "application/json")
         if "application/json" in content_type:
