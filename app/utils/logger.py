@@ -1,35 +1,129 @@
 import logging
 import os
 from datetime import datetime
+from typing import Any, Dict
 
-# Read log level from environment (default: INFO)
+
+# ---------------------------------------------------------------------------
+# Environment-driven logging configuration
+# ---------------------------------------------------------------------------
+
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
+LOG_FORMAT = os.getenv("LOG_FORMAT", "plain").lower()  # "plain" | "json"
+LOG_COLOR = os.getenv("LOG_COLOR", "true").lower() == "true"
 
 # Ensure logs directory exists (ephemeral on Render but still useful)
 os.makedirs("logs", exist_ok=True)
 
 # Log file path (ephemeral but fine for debugging)
-log_file = os.path.join("logs", "relay.log")
+LOG_FILE_PATH = os.path.join("logs", "relay.log")
 
-# Basic logging configuration
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.FileHandler(log_file, encoding="utf-8"),
-        logging.StreamHandler(),  # console/stdout (Render captures this)
-    ],
-)
+
+class JsonFormatter(logging.Formatter):
+    """Very small JSON-line formatter for structured logs."""
+
+    def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
+        payload: Dict[str, Any] = {
+            "ts": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+
+        # Optional extras that tests / operators may care about
+        if record.__dict__.get("request_id"):
+            payload["request_id"] = record.__dict__["request_id"]
+        if record.__dict__.get("path"):
+            payload["path"] = record.__dict__["path"]
+
+        if record.exc_info:
+            payload["exc_type"] = record.exc_info[0].__name__  # type: ignore[index]
+        return self._to_json(payload)
+
+    @staticmethod
+    def _to_json(obj: Dict[str, Any]) -> str:
+        # Import inline to avoid mandatory dependency at import time
+        import json
+
+        return json.dumps(obj, ensure_ascii=False)
+
+
+class ColorFormatter(logging.Formatter):
+    """Simple ANSI-colored formatter for console output."""
+
+    COLORS = {
+        "DEBUG": "\033[37m",     # white
+        "INFO": "\033[36m",      # cyan
+        "WARNING": "\033[33m",   # yellow
+        "ERROR": "\033[31m",     # red
+        "CRITICAL": "\033[41m",  # red bg
+    }
+    RESET = "\033[0m"
+
+    def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
+        base = (
+            f"[{datetime.fromtimestamp(record.created).isoformat()}] "
+            f"{record.levelname:8s} {record.name}: {record.getMessage()}"
+        )
+        if LOG_COLOR:
+            color = self.COLORS.get(record.levelname, "")
+            return f"{color}{base}{self.RESET}"
+        return base
+
+
+def _build_formatter_for_handler(is_stream: bool) -> logging.Formatter:
+    """Decide which formatter to use for a handler."""
+    if LOG_FORMAT == "json":
+        return JsonFormatter()
+    if is_stream:
+        return ColorFormatter()
+    # Fallback: plain text for files
+    return logging.Formatter(
+        "[%(asctime)s] %(levelname)s %(name)s: %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
+
+
+def setup_logging() -> logging.Logger:
+    """
+    Initialize structured relay logging.
+
+    Idempotent: safe to call multiple times.
+    """
+    root = logging.getLogger()
+    # Avoid duplicating handlers in reload / tests
+    if getattr(root, "_relay_logging_configured", False):
+        return logging.getLogger("relay")
+
+    root.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+
+    # Clear any default basicConfig handlers
+    for h in list(root.handlers):
+        root.removeHandler(h)
+
+    # File handler
+    file_handler = logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")
+    file_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+    file_handler.setFormatter(_build_formatter_for_handler(is_stream=False))
+    root.addHandler(file_handler)
+
+    # Console handler (stderr)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+    stream_handler.setFormatter(_build_formatter_for_handler(is_stream=True))
+    root.addHandler(stream_handler)
+
+    root._relay_logging_configured = True  # type: ignore[attr-defined]
+
+    relay_logger = logging.getLogger("relay")
+    relay_logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+    relay_logger.info("relay logging initialized", extra={"path": "startup"})
+
+    return relay_logger
+
 
 # Main logger instance for the relay
-relay_log = logging.getLogger("relay")
-relay_log.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-
-
-def setup_logging():
-    """Initialize structured relay logging."""
-    relay_log.info(f"📜 Logging initialized at {datetime.now()} → {log_file}")
-
+relay_log = setup_logging()
 
 # Backward compatibility aliases
 logger = relay_log

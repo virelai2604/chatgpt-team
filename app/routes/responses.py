@@ -1,45 +1,54 @@
 import json
 import os
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Dict, Any
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
+# All local routes in this file live under /v1
 router = APIRouter(prefix="/v1", tags=["responses"])
 
+# IMPORTANT:
+# - OPENAI_API_BASE is the ROOT, WITHOUT /v1
+#   e.g. https://api.openai.com
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
 RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "120"))
 USER_AGENT = os.getenv("RELAY_USER_AGENT", "chatgpt-team-relay/1.0")
 
-# Optional – allow forcing a specific beta flag for responses, but by default
-# there is no beta header required for this family.
-OPENAI_RESPONSES_BETA = os.getenv("OPENAI_RESPONSES_BETA", "")
 
-
-def _base_url(path: str) -> str:
+def _responses_url() -> str:
     """
-    Build a full upstream URL from OPENAI_API_BASE and a path like "/v1/responses".
-    OPENAI_API_BASE must NOT have a trailing /v1; we append it here.
+    Build the upstream URL for the Responses API.
+
+    Ground truth:
+        POST /v1/responses
+        GET  /v1/responses/{id}
     """
-    return f"{OPENAI_API_BASE.rstrip('/')}{path}"
+    base = OPENAI_API_BASE.rstrip("/")
+    return f"{base}/v1/responses"
 
 
-def build_headers(request: Request) -> dict:
+def _build_headers(request: Request) -> Dict[str, str]:
     """
-    Build upstream headers:
+    Build headers for upstream OpenAI calls.
 
-    - Always set Authorization from our relay's OPENAI_API_KEY.
-    - Optionally add OpenAI-Organization from OPENAI_ORG_ID.
-    - Propagate or override OpenAI-Beta, favoring env if set.
-    - Forward Idempotency-Key if present.
+    - Always includes Authorization and User-Agent.
+    - Optionally sets OpenAI-Organization.
+    - Forwards a few relevant headers from the client:
+      OpenAI-Project, OpenAI-Beta, X-Request-Id, Accept (for SSE).
     """
     if not OPENAI_API_KEY:
-        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
+        # This should normally be caught at startup / config level,
+        # but keep a defensive check here as well.
+        raise HTTPException(
+            status_code=500,
+            detail="OPENAI_API_KEY is not configured on the relay.",
+        )
 
-    headers: dict[str, str] = {
+    headers: Dict[str, str] = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "User-Agent": USER_AGENT,
         "Content-Type": "application/json",
@@ -48,56 +57,65 @@ def build_headers(request: Request) -> dict:
     if OPENAI_ORG_ID:
         headers["OpenAI-Organization"] = OPENAI_ORG_ID
 
-    # Merge beta headers: env wins, otherwise propagate client header
-    beta_from_env = OPENAI_RESPONSES_BETA.strip()
-    beta_from_client = request.headers.get("OpenAI-Beta", "").strip()
-    beta_header = beta_from_env or beta_from_client
-    if beta_header:
-        headers["OpenAI-Beta"] = beta_header
-
-    idem = request.headers.get("Idempotency-Key")
-    if idem:
-        headers["Idempotency-Key"] = idem
+    # Forward selected headers from the client
+    # - OpenAI-Project, OpenAI-Beta: project routing / beta flags
+    # - X-Request-Id: observability / tracing
+    # - Accept: allows clients to request SSE explicitly
+    for key in ("OpenAI-Project", "OpenAI-Beta", "X-Request-Id", "Accept"):
+        if key in request.headers:
+            headers[key] = request.headers[key]
 
     return headers
 
 
-async def _stream_responses(
+async def _stream_upstream_sse(
     client: httpx.AsyncClient,
-    request: Request,
-    body: dict,
-) -> AsyncGenerator[bytes, None]:
+    url: str,
+    headers: Dict[str, str],
+    body: Dict[str, Any],
+) -> StreamingResponse:
     """
-    Stream Server-Sent Events (SSE) from OpenAI's /v1/responses endpoint
-    back to the caller unchanged.
+    Open a streaming POST to /v1/responses and forward all raw chunks
+    to the client as-is (SSE or chunked JSON).
     """
-    url = _base_url("/v1/responses")
 
-    async with client.stream(
-        "POST",
-        url,
-        headers=build_headers(request),
-        content=json.dumps(body),
-        timeout=None,  # streaming; let upstream control timeouts
-    ) as upstream:
-        async for chunk in upstream.aiter_bytes():
-            # Pass through raw SSE data
-            yield chunk
+    async def event_source() -> AsyncGenerator[bytes, None]:
+        async with client.stream("POST", url, headers=headers, json=body) as res:
+            # If upstream returns an error HTTP code, surface it quickly.
+            if res.status_code >= 400:
+                text = await res.aread()
+                # We cannot raise HTTPException inside the generator cleanly,
+                # so we yield the error body and let the client handle it.
+                # For most cases, the caller should prefer non-streaming mode
+                # when relying on status codes strictly.
+                yield text
+                return
+
+            async for chunk in res.aiter_raw():
+                if chunk:
+                    yield chunk
+
+    # We cannot know the exact content-type until the first response,
+    # but for SSE we default to text/event-stream. If upstream sets a more
+    # specific header, the client will still receive compliant frames.
+    return StreamingResponse(
+        event_source(),
+        status_code=200,
+        media_type="text/event-stream",
+    )
 
 
-@router.post("/responses", response_model=None)
-async def create_response(request: Request) -> Response:
+@router.post("/responses")
+async def create_response(request: Request):
     """
-    Proxy POST /v1/responses with optional streaming support.
+    POST /v1/responses
 
-    This matches openai-python 2.8 / openai-node 6.9 `responses.create(...)`
-    semantics, including `stream: true` for SSE.
+    This proxies the unified Responses API to OpenAI, supporting both
+    streaming and non-streaming usage.
 
-    Optional micro-tweak:
-    - If the client sends Accept: text/event-stream, we also treat this as a
-      request for streaming, even if the JSON body does not explicitly include
-      "stream": true. This makes the relay friendlier to non-SDK clients that
-      negotiate streaming via the Accept header.
+    Streaming detection:
+      - Primary: body["stream"] == true
+      - Secondary: Accept: text/event-stream
     """
     try:
         body = await request.json()
@@ -114,49 +132,59 @@ async def create_response(request: Request) -> Response:
     # We stream if either condition is true
     should_stream = has_stream_flag or wants_sse
 
+    url = _responses_url()
+    headers = _build_headers(request)
+
     async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
         if should_stream:
-            generator = _stream_responses(client, request, body)
-            return StreamingResponse(
-                generator,
-                media_type="text/event-stream",
-            )
+            # SSE / streaming mode: raw passthrough of upstream chunks
+            return await _stream_upstream_sse(client, url, headers, body)
 
-        url = _base_url("/v1/responses")
-        upstream = await client.post(
-            url,
-            headers=build_headers(request),
-            content=json.dumps(body),
-        )
+        # Non-streaming mode
+        upstream = await client.post(url, headers=headers, json=body)
 
-    if upstream.is_error:
-        # Bubble up OpenAI error payload directly
-        raise HTTPException(
-            status_code=upstream.status_code,
-            detail=upstream.text,
-        )
+    # Surface upstream errors directly
+    if upstream.status_code >= 400:
+        # Try to parse OpenAI-style error JSON; fall back to text if needed.
+        try:
+            detail = upstream.json()
+        except Exception:
+            detail = upstream.text
+        raise HTTPException(status_code=upstream.status_code, detail=detail)
 
-    return JSONResponse(
+    # Successful non-streaming response
+    return Response(
+        content=upstream.content,
         status_code=upstream.status_code,
-        content=upstream.json(),
+        media_type=upstream.headers.get("content-type", "application/json"),
     )
 
 
 @router.get("/responses/{response_id}")
-async def retrieve_response(response_id: str, request: Request) -> JSONResponse:
+async def get_response(response_id: str, request: Request):
     """
-    Proxy GET /v1/responses/{id}.
-    """
-    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
-        url = _base_url(f"/v1/responses/{response_id}")
-        upstream = await client.get(url, headers=build_headers(request))
+    GET /v1/responses/{id}
 
-    if upstream.is_error:
+    Proxy to the OpenAI Responses API to retrieve a previously-created
+    response object by ID.
+    """
+    url = f"{_responses_url()}/{response_id}"
+    headers = _build_headers(request)
+
+    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
+        upstream = await client.get(url, headers=headers)
+
+    if upstream.status_code >= 400:
+        try:
+            detail = upstream.json()
+        except Exception:
+            detail = upstream.text
         raise HTTPException(
             status_code=upstream.status_code,
-            detail=upstream.text,
+            detail=detail,
         )
 
+    # Return the JSON exactly as OpenAI provides it
     return JSONResponse(
         status_code=upstream.status_code,
         content=upstream.json(),
