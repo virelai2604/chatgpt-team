@@ -3,9 +3,10 @@
   "name_for_human": "ChatGPT Team Relay",
   "name_for_model": "chatgpt_team_relay",
   "description_for_human": "An OpenAI-compatible API relay that supports /v1/responses, /v1/files, /v1/embeddings, /v1/vector_stores, and registered tool execution via ChatGPT Actions.",
-  "description_for_model": "Relay API for ChatGPT Team. This service mirrors the official OpenAI API surface (including /v1/responses, /v1/models, /v1/files, /v1/embeddings, /v1/vector_stores, /v1/realtime/sessions, and /v1/tools) at https://chatgpt-team-relay.onrender.com. It is designed to be used from ChatGPT Actions and is compatible with the latest OpenAI Python and Node.js SDKs.",
+  "description_for_model": "Relay API for ChatGPT Team. This service mirrors the official OpenAI API surface (including /v1/responses, /v1/models, /v1/files, /v1/embeddings, /v1/vector_stores, /v1/realtime/sessions, /v1/images/generations, /v1/videos, and /v1/tools) at https://chatgpt-team-relay.onrender.com. It is designed to be used from ChatGPT Actions and is compatible with the latest OpenAI Python and Node.js SDKs.",
   "auth": {
-    "type": "none"
+    "type": "service_http",
+    "authorization_type": "bearer"
   },
   "api": {
     "type": "openapi",
@@ -24,6 +25,8 @@
     "/v1/embeddings",
     "/v1/vector_stores",
     "/v1/realtime/sessions",
+    "/v1/images/generations",
+    "/v1/videos",
     "/v1/tools"
   ],
 

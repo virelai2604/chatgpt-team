@@ -17,6 +17,7 @@ services:
     buildCommand: |
       pip install -r requirements.txt
 
+    # Render injects $PORT automatically; we bind to it with uvicorn.
     startCommand: |
       uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
@@ -41,8 +42,12 @@ services:
         value: 2025-10-29
       - key: BUILD_CHANNEL
         value: stable
+
+      # --- OpenAI Beta Flags ---
       - key: OPENAI_REALTIME_BETA
         value: realtime=v1
+      - key: OPENAI_ASSISTANTS_BETA
+        value: assistants=v2
 
       # --- Python Runtime ---
       # Pin to 3.12.x so pydantic-core has prebuilt wheels
@@ -50,8 +55,7 @@ services:
         value: 3.12.5
 
       # --- Networking ---
-      - key: PORT
-        value: 8080
+      # Render sets $PORT automatically; RELAY_HOST is used only by your own code.
       - key: RELAY_HOST
         value: 0.0.0.0
       - key: RELAY_TIMEOUT
@@ -64,7 +68,7 @@ services:
       - key: OPENAI_API_BASE
         value: https://api.openai.com
 
-      # These are marked sync:false so you can (and should) set them only in the
+      # These are marked sync:false so you set them ONLY in the
       # Render dashboard, not in Git.
       - key: OPENAI_API_KEY
         sync: false          # set real value in Render dashboard
@@ -97,13 +101,13 @@ services:
       - key: LOG_COLOR
         value: false
 
-      # --- Validation Schema ---
+      # --- Validation Schema (API reference PDF) ---
       - key: VALIDATION_SCHEMA_PATH
         value: ChatGPT-API_reference_ground_truth-2025-10-29.pdf
 
       # --- ChatGPT Actions Secret (optional but recommended) ---
       # Set this in the Render dashboard; use the same value in ChatGPT Actions
-      # as an Authorization: Bearer <secret> header.
+      # as an Authorization: Bearer <secret> header when you decide to enforce it.
       - key: CHATGPT_ACTIONS_SECRET
         sync: false
 
@@ -128,6 +132,8 @@ services:
 #     /v1/vector_stores
 #     /v1/realtime/sessions
 #     /v1/tools
-# - Deprecated / legacy endpoints (e.g., classic Chat Completions) are not
-#   specially wrapped; they are simply proxied upstream if an SDK calls them.
+#     /v1/images/generations
+#     /v1/videos
+# - Legacy endpoints (e.g., classic Chat Completions) are not specially
+#   wrapped; they are simply proxied upstream if an SDK calls them.
 # ==============================================================
