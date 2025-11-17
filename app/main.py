@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse, FileResponse
 
 from app.middleware.validation import SchemaValidationMiddleware
 from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
-from app.utils.error_handler import register_error_handlers
+from app.utils.error_handler import register_exception_handlers
 from app.utils.logger import setup_logging
 
 from app.api.tools_api import router as tools_router
@@ -182,7 +182,7 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------
     # Global error handlers
     # ------------------------------------------------------------
-    register_error_handlers(app)
+    register_exception_handlers(app)
 
     return app
 
