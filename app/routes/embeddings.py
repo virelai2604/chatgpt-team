@@ -10,6 +10,7 @@ Design:
 """
 
 from fastapi import APIRouter, Request
+
 from app.utils.logger import relay_log as logger
 from app.api.forward_openai import forward_openai_request
 
@@ -24,19 +25,11 @@ async def create_embedding(request: Request):
     OpenAI-parity endpoint, equivalent to:
       client.embeddings.create({ ... })
 
-    We still log the model for observability, but let the shared
-    forward_openai_request handle:
-      • Authorization header (from request or OPENAI_API_KEY env)
-      • Correct OPENAI_API_BASE (no double /v1)
-      • JSON vs multipart bodies
-      • Error handling
+    We intentionally do NOT read the body here; the shared
+    forward_openai_request will handle it so that:
+      • The JSON body is preserved
+      • Authorization / org headers are injected as needed
+      • Base URL and /v1 path handling stay consistent
     """
-    # lightweight peek for logging only; don't mutate the body
-    try:
-        body = await request.json()
-        model = body.get("model")
-    except Exception:
-        model = None
-
-    logger.info(f"[Embeddings] incoming request model={model!r}")
+    logger.info("[Embeddings] proxied embedding request to OpenAI")
     return await forward_openai_request(request)

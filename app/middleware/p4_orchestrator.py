@@ -38,6 +38,7 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
          • /v1/images/**
          • /v1/videos/**
          • /v1/realtime/**
+         • /v1/models
          • /v1/health, /schemas, /actions
 
     2) Compat / passthrough endpoints — "SDK parity"
@@ -80,6 +81,7 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
             or path.startswith("/v1/images")
             or path.startswith("/v1/videos")
             or path.startswith("/v1/realtime")
+            or path.startswith("/v1/models")
         )
 
         # Guard: avoid accidental double-prefixing like /v1/v1/responses

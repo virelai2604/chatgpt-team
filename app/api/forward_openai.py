@@ -13,6 +13,7 @@ logger = logging.getLogger("uvicorn")
 # (without /v1). The code below defensively handles both with/without /v1.
 DEFAULT_OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
 DEFAULT_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+DEFAULT_OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
 
 
 async def _stream_upstream_response(upstream_response: httpx.Response) -> StreamingResponse:
@@ -39,6 +40,7 @@ async def forward_openai_request(request: Request) -> Response:
     Universal relay function that forwards /v1/* requests to OpenAI’s API.
 
     - Preserves Authorization, or injects OPENAI_API_KEY if missing.
+    - Optionally injects OpenAI-Organization from app.state / env if missing.
     - Supports JSON and multipart/form-data (files).
     - Handles both streaming (SSE) and non-streaming responses.
     - Preserves query parameters on the URL.
@@ -64,7 +66,9 @@ async def forward_openai_request(request: Request) -> Response:
 
     headers = dict(request.headers)
 
-    # Determine upstream Authorization
+    # ------------------------------------------------------------------
+    # Authorization
+    # ------------------------------------------------------------------
     auth_header = headers.get("authorization")
     if not auth_header:
         state_key = getattr(request.app.state, "OPENAI_API_KEY", None)
@@ -73,6 +77,20 @@ async def forward_openai_request(request: Request) -> Response:
             auth_header = f"Bearer {key}"
     if auth_header:
         headers["authorization"] = auth_header
+
+    # ------------------------------------------------------------------
+    # Organization header (optional)
+    # ------------------------------------------------------------------
+    org_header = (
+        headers.get("OpenAI-Organization")
+        or headers.get("openai-organization")
+        or None
+    )
+    if not org_header:
+        state_org = getattr(request.app.state, "OPENAI_ORG_ID", None)
+        org = state_org or DEFAULT_OPENAI_ORG_ID
+        if org:
+            headers["OpenAI-Organization"] = org
 
     # Disable compression so we can stream / inspect bodies cleanly
     headers["accept-encoding"] = "identity"

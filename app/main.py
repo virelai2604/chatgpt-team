@@ -25,6 +25,8 @@ from fastapi.responses import JSONResponse, FileResponse
 
 from app.middleware.validation import SchemaValidationMiddleware
 from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
+from app.utils.error_handler import register_error_handlers
+from app.utils.logger import setup_logging
 
 from app.api.tools_api import router as tools_router
 from app.routes import (
@@ -45,12 +47,17 @@ def create_app() -> FastAPI:
     # Load .env (no-op on Render where env vars are already injected)
     load_dotenv()
 
+    # Initialize logging as early as possible
+    setup_logging()
+
     relay_name = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
     bifl_version = os.getenv("BIFL_VERSION", "dev")
     environment = os.getenv("ENVIRONMENT", "development")
 
     # Core configuration
     openai_api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
+    openai_api_key = os.getenv("OPENAI_API_KEY", "")
+    openai_org_id = os.getenv("OPENAI_ORG_ID", "")
     default_model = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
     validation_schema_path = os.getenv("VALIDATION_SCHEMA_PATH", "")
     tools_manifest_path = os.getenv(
@@ -67,6 +74,8 @@ def create_app() -> FastAPI:
 
     # Store config on app.state for use by other modules if needed
     app.state.OPENAI_API_BASE = openai_api_base
+    app.state.OPENAI_API_KEY = openai_api_key
+    app.state.OPENAI_ORG_ID = openai_org_id
     app.state.DEFAULT_MODEL = default_model
     app.state.ENVIRONMENT = environment
     app.state.VALIDATION_SCHEMA_PATH = validation_schema_path
@@ -169,6 +178,11 @@ def create_app() -> FastAPI:
     app.include_router(actions_routes.router)
 
     # All other /v1/* paths fall back to P4Orchestrator + forward_openai_request.
+
+    # ------------------------------------------------------------
+    # Global error handlers
+    # ------------------------------------------------------------
+    register_error_handlers(app)
 
     return app
 

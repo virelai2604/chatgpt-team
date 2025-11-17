@@ -11,13 +11,13 @@ Client connects to:
 Relay opens a WebSocket to:
   wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview
 
-and passes messages both ways, adding Authorization headers on the
-upstream connection only (never exposing the API key to the client).
+and passes messages both ways, adding Authorization (and optional
+OpenAI-Beta: realtime=v1) on the upstream connection only (never
+exposing the API key to the client).
 """
 
 import asyncio
 import os
-from typing import Optional
 
 import websockets
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
@@ -31,15 +31,19 @@ router = APIRouter(prefix="/v1/realtime", tags=["realtime"])
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 # Optional; GA may not require this, but keeping it preserves beta behavior.
+# Example value: "realtime=v1"
 OPENAI_REALTIME_BETA = os.getenv("OPENAI_REALTIME_BETA", "realtime=v1")
 
 
 def _build_upstream_ws_url(model: str) -> str:
     """
     Derive wss://.../v1/realtime?model=... from OPENAI_API_BASE.
-    Example:
+
+    Examples:
       OPENAI_API_BASE = https://api.openai.com
-      -> wss://api.openai.com/v1/realtime?model=...
+        -> wss://api.openai.com/v1/realtime?model=...
+      OPENAI_API_BASE = http://localhost:8080
+        -> ws://localhost:8080/v1/realtime?model=...
     """
     base = OPENAI_API_BASE.rstrip("/")
     if base.startswith("https://"):
@@ -49,7 +53,7 @@ def _build_upstream_ws_url(model: str) -> str:
         host = base[len("http://") :]
         ws_base = f"ws://{host}/v1/realtime"
     else:
-        # Assume caller set full wss:// URL; append /v1/realtime if not present
+        # Assume caller set full ws(s) URL; append /v1/realtime if not present
         ws_base = base
         if "/v1/realtime" not in ws_base:
             ws_base = ws_base.rstrip("/") + "/v1/realtime"
@@ -63,7 +67,7 @@ def _upstream_headers() -> dict:
     }
     # Keep the beta header for compatibility if configured
     if OPENAI_REALTIME_BETA:
-        # Expect value like "realtime=v1" so we send: OpenAI-Beta: realtime=v1
+        # Value like "realtime=v1" → OpenAI-Beta: realtime=v1
         headers["OpenAI-Beta"] = OPENAI_REALTIME_BETA
     return headers
 

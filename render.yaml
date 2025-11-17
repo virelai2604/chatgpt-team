@@ -41,6 +41,8 @@ services:
         value: 2025-10-29
       - key: BUILD_CHANNEL
         value: stable
+      - key: OPENAI_REALTIME_BETA
+        value: realtime=v1
 
       # --- Python Runtime ---
       # Pin to 3.12.x so pydantic-core has prebuilt wheels

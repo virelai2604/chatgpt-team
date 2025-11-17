@@ -1,103 +1,159 @@
-"""
-responses.py — /v1/responses
-─────────────────────────────
-Thin but explicit wrapper around OpenAI's Responses API.
-
-This is where you can later add:
-  • extra logging,
-  • org-level policy,
-  • default tools configuration.
-
-For now it forwards to OpenAI with true streaming support.
-"""
-
-import os
 import json
-import httpx
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+import os
+from typing import AsyncGenerator
 
-from app.utils.logger import relay_log as logger
+import httpx
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 router = APIRouter(prefix="/v1", tags=["responses"])
 
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "60"))
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
+RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "120"))
 USER_AGENT = os.getenv("RELAY_USER_AGENT", "chatgpt-team-relay/1.0")
 
+# Optional – allow forcing a specific beta flag for responses, but by default
+# there is no beta header required for this family.
+OPENAI_RESPONSES_BETA = os.getenv("OPENAI_RESPONSES_BETA", "")
 
-def _headers():
-    return {
+
+def _base_url(path: str) -> str:
+    return f"{OPENAI_API_BASE.rstrip('/')}{path}"
+
+
+def build_headers(request: Request) -> dict:
+    """
+    Build upstream headers:
+
+    - Always set Authorization from our relay's OPENAI_API_KEY.
+    - Optionally add OpenAI-Organization from OPENAI_ORG_ID.
+    - Propagate or override OpenAI-Beta, favoring env if set.
+    - Forward Idempotency-Key if present.
+    """
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
+
+    headers: dict[str, str] = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "User-Agent": USER_AGENT,
         "Content-Type": "application/json",
     }
 
+    if OPENAI_ORG_ID:
+        headers["OpenAI-Organization"] = OPENAI_ORG_ID
+
+    # Merge beta headers: env wins, otherwise propagate client header
+    beta_from_env = OPENAI_RESPONSES_BETA.strip()
+    beta_from_client = request.headers.get("OpenAI-Beta", "").strip()
+    beta_header = beta_from_env or beta_from_client
+    if beta_header:
+        headers["OpenAI-Beta"] = beta_header
+
+    idem = request.headers.get("Idempotency-Key")
+    if idem:
+        headers["Idempotency-Key"] = idem
+
+    return headers
+
+
+async def _stream_responses(
+    client: httpx.AsyncClient,
+    request: Request,
+    body: dict,
+) -> AsyncGenerator[bytes, None]:
+    """
+    Stream Server-Sent Events (SSE) from OpenAI's /v1/responses endpoint
+    back to the caller unchanged.
+    """
+    url = _base_url("/v1/responses")
+
+    async with client.stream(
+        "POST",
+        url,
+        headers=build_headers(request),
+        content=json.dumps(body),
+        timeout=None,  # streaming; let upstream control timeouts
+    ) as upstream:
+        async for chunk in upstream.aiter_bytes():
+            # Pass through raw SSE data
+            yield chunk
+
 
 @router.post("/responses")
-async def create_response(request: Request):
+async def create_response(request: Request) -> StreamingResponse | JSONResponse:
     """
-    POST /v1/responses
+    Proxy POST /v1/responses with optional streaming support.
 
-    Accepts a standard Responses API body and forwards it to OpenAI.
-    Supports both streaming and non-streaming modes.
+    This matches openai-python 2.8 / openai-node 6.9 `responses.create(...)`
+    semantics, including `stream: true` for SSE.
 
-    Tools are passed via the 'tools' field and are NOT modified here.
+    Optional micro-tweak:
+    - If the client sends Accept: text/event-stream, we also treat this as a
+      request for streaming, even if the JSON body does not explicitly include
+      "stream": true. This makes the relay friendlier to non-SDK clients that
+      negotiate streaming via the Accept header.
     """
     try:
         body = await request.json()
     except Exception:
-        return JSONResponse(
-            {"error": {"message": "Invalid JSON body", "type": "invalid_request_error"}},
-            status_code=400,
-        )
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    stream = bool(body.get("stream", False))
-    model = body.get("model")
-    logger.info(f"[Responses] model={model} stream={stream}")
+    # Primary signal: explicit `stream: true` in the JSON payload
+    has_stream_flag = bool(body.get("stream", False))
 
-    url = f"{OPENAI_API_BASE.rstrip('/')}/responses"
-    headers = _headers()
+    # Optional signal: client advertises it wants SSE
+    accept_header = request.headers.get("accept", "").lower()
+    wants_sse = "text/event-stream" in accept_header
 
-    # Non-streaming: simple JSON round-trip
-    if not stream:
-        async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
-            try:
-                resp = await client.post(url, headers=headers, json=body)
-            except httpx.RequestError as e:
-                logger.error(f"[Responses] network error: {e}")
-                return JSONResponse(
-                    {
-                        "error": {
-                            "message": str(e),
-                            "type": "upstream_error",
-                        }
-                    },
-                    status_code=502,
-                )
-        try:
-            return JSONResponse(resp.json(), status_code=resp.status_code)
-        except Exception:
-            return JSONResponse(
-                {"status_code": resp.status_code, "body": resp.text},
-                status_code=resp.status_code,
+    # We stream if either condition is true
+    should_stream = has_stream_flag or wants_sse
+
+    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
+        if should_stream:
+            generator = _stream_responses(client, request, body)
+            return StreamingResponse(
+                generator,
+                media_type="text/event-stream",
             )
 
-    # Streaming: true SSE passthrough
-    async def sse_stream():
-        async with httpx.AsyncClient(timeout=None) as client:
-            try:
-                async with client.stream("POST", url, headers=headers, json=body) as upstream:
-                    async for line in upstream.aiter_lines():
-                        if await request.is_disconnected():
-                            break
-                        if line:
-                            yield line + "\n"
-            except httpx.RequestError as e:
-                logger.error(f"[Responses] stream error: {e}")
-                err = {"message": str(e), "type": "upstream_error"}
-                yield "event: error\n"
-                yield f"data: {json.dumps(err)}\n\n"
+        url = _base_url("/v1/responses")
+        upstream = await client.post(
+            url,
+            headers=build_headers(request),
+            content=json.dumps(body),
+        )
 
-    return StreamingResponse(sse_stream(), media_type="text/event-stream")
+    if upstream.is_error:
+        # Bubble up OpenAI error payload directly
+        raise HTTPException(
+            status_code=upstream.status_code,
+            detail=upstream.text,
+        )
+
+    return JSONResponse(
+        status_code=upstream.status_code,
+        content=upstream.json(),
+    )
+
+
+@router.get("/responses/{response_id}")
+async def retrieve_response(response_id: str, request: Request) -> JSONResponse:
+    """
+    Proxy GET /v1/responses/{id}.
+    """
+    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
+        url = _base_url(f"/v1/responses/{response_id}")
+        upstream = await client.get(url, headers=build_headers(request))
+
+    if upstream.is_error:
+        raise HTTPException(
+            status_code=upstream.status_code,
+            detail=upstream.text,
+        )
+
+    return JSONResponse(
+        status_code=upstream.status_code,
+        content=upstream.json(),
+    )
