@@ -81,7 +81,6 @@
     📄 __init__.py
     📄 client.py
     📄 conftest.py
-    📄 sora.py
     📄 test_embeddings_images_videos.py
     📄 test_files_and_vectorstores.py
     📄 test_health_and_tools.py
