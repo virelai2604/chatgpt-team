@@ -1,164 +1,193 @@
 # app/routes/realtime.py
 
 """
-realtime.py — /v1/realtime
-──────────────────────────
-WebSocket bridge for OpenAI Realtime API.
+realtime.py — /v1/realtime/sessions
+───────────────────────────────────
+Secure proxy for the OpenAI Realtime Sessions API.
 
-Client connects to:
-  wss://chatgpt-team-relay.onrender.com/v1/realtime/sessions?model=gpt-4o-realtime-preview
+This endpoint mints ephemeral session tokens for browser / client-side
+use with the Realtime WebSocket or WebRTC APIs, as described in the
+Realtime Sessions reference:
 
-Relay opens a WebSocket to:
-  wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview
+  • POST https://api.openai.com/v1/realtime/sessions
 
-and passes messages both ways, adding Authorization (and optional
-OpenAI-Beta: realtime=v1) on the upstream connection only (never
-exposing the API key to the client).
+The upstream returns a session object that includes a `client_secret`
+which can be used by clients to connect directly to:
+
+  • wss://api.openai.com/v1/realtime?model=...
+
+Pattern:
+
+  Frontend:
+    POST https://chatgpt-team-relay.onrender.com/v1/realtime/sessions
+      { model, modalities, voice, ... }
+
+  Relay (this file):
+    - Adds Authorization: Bearer <OPENAI_API_KEY>
+    - Optionally adds OpenAI-Organization and OpenAI-Beta
+    - POSTs to https://api.openai.com/v1/realtime/sessions
+    - Returns the session JSON (including client_secret) unchanged.
+
+  Frontend:
+    - Uses client_secret as the Bearer token when connecting
+      to the Realtime API via WebSocket or WebRTC.
+
+We intentionally do NOT proxy the Realtime WebSocket itself; the client
+connects directly to OpenAI using the ephemeral client_secret.
 """
 
-import asyncio
+from __future__ import annotations
+
 import os
+from typing import Any, Dict, Optional
 
-import websockets
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+import httpx
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
-from websockets.exceptions import ConnectionClosed
 
-from app.utils.logger import relay_log as log
-
-router = APIRouter(prefix="/v1/realtime", tags=["realtime"])
+from app.utils.logger import relay_log as logger
 
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-# Optional; GA may not require this, but keeping it preserves beta behavior.
-# Example value: "realtime=v1"
-OPENAI_REALTIME_BETA = os.getenv("OPENAI_REALTIME_BETA", "realtime=v1")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
+OPENAI_REALTIME_BETA = os.getenv("OPENAI_REALTIME_BETA")  # e.g. "realtime=v1"
+PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120")))
+
+router = APIRouter(
+    prefix="/v1",
+    tags=["realtime"],
+)
 
 
-def _build_upstream_ws_url(model: str) -> str:
+def _build_headers(request: Request) -> Dict[str, str]:
     """
-    Derive wss://.../v1/realtime?model=... from OPENAI_API_BASE.
+    Build headers for POST /v1/realtime/sessions.
 
-    Examples:
-      OPENAI_API_BASE = https://api.openai.com
-        -> wss://api.openai.com/v1/realtime?model=...
-      OPENAI_API_BASE = http://localhost:8080
-        -> ws://localhost:8080/v1/realtime?model=...
+    Security:
+      - We NEVER forward any client Authorization header.
+      - We ALWAYS use the server-side OPENAI_API_KEY.
+      - OpenAI-Beta:
+          * Prefer client header if present
+          * Otherwise, fall back to OPENAI_REALTIME_BETA env if set
     """
-    base = OPENAI_API_BASE.rstrip("/")
-    if base.startswith("https://"):
-        host = base[len("https://") :]
-        ws_base = f"wss://{host}/v1/realtime"
-    elif base.startswith("http://"):
-        host = base[len("http://") :]
-        ws_base = f"ws://{host}/v1/realtime"
-    else:
-        # Assume caller set full ws(s) URL; append /v1/realtime if not present
-        ws_base = base
-        if "/v1/realtime" not in ws_base:
-            ws_base = ws_base.rstrip("/") + "/v1/realtime"
+    if not OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": "OPENAI_API_KEY is not configured for Realtime sessions",
+                    "type": "config_error",
+                    "code": "no_api_key",
+                }
+            },
+        )
 
-    return f"{ws_base}?model={model}"
-
-
-def _upstream_headers() -> dict:
-    headers = {
+    headers: Dict[str, str] = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
     }
-    # Keep the beta header for compatibility if configured
-    if OPENAI_REALTIME_BETA:
-        # Value like "realtime=v1" → OpenAI-Beta: realtime=v1
-        headers["OpenAI-Beta"] = OPENAI_REALTIME_BETA
+
+    if OPENAI_ORG_ID:
+        headers["OpenAI-Organization"] = OPENAI_ORG_ID
+
+    # Respect any caller-provided beta header; otherwise, use env toggle.
+    incoming_beta = request.headers.get("OpenAI-Beta")
+    beta = incoming_beta or OPENAI_REALTIME_BETA
+    if beta:
+        headers["OpenAI-Beta"] = beta
+
     return headers
 
 
-@router.get("/sessions/ping")
-async def ping_realtime():
+async def _post_realtime_sessions(
+    request: Request,
+    body: Optional[Dict[str, Any]],
+) -> Any:
     """
-    Simple HTTP ping so you can curl /v1/realtime/sessions/ping for monitoring.
+    Call the upstream OpenAI Realtime Sessions endpoint:
+
+        POST {OPENAI_API_BASE}/v1/realtime/sessions
+
+    with the given JSON body and properly constructed headers.
     """
-    return JSONResponse({"object": "realtime.ping", "status": "ok"}, status_code=200)
+    base = OPENAI_API_BASE.rstrip("/")
+    url = f"{base}/v1/realtime/sessions"
 
+    headers = _build_headers(request)
 
-@router.websocket("/sessions")
-async def realtime_sessions(
-    websocket: WebSocket,
-    model: str = Query("gpt-4o-realtime-preview"),
-):
-    """
-    WebSocket endpoint that proxies a Realtime session.
+    # Important: do not log body, as the response includes client_secret.
+    logger.info("→ [realtime] POST %s", url)
 
-    - Client connects here with a model query param.
-    - Relay connects upstream to OpenAI Realtime with the same model.
-    - Messages (text or binary) are forwarded both ways.
-    """
-    await websocket.accept()
-    upstream_url = _build_upstream_ws_url(model)
-    log.info(f"[Realtime] Bridging WebSocket for model={model} → {upstream_url}")
-
-    # If no API key is configured, fail fast.
-    if not OPENAI_API_KEY:
-        await websocket.send_text(
-            '{"type":"error","error":{"message":"Relay missing OPENAI_API_KEY"}}'
-        )
-        await websocket.close()
-        return
-
-    try:
-        async with websockets.connect(
-            upstream_url,
-            extra_headers=_upstream_headers(),
-            ping_interval=None,
-        ) as upstream:
-
-            async def client_to_openai():
-                try:
-                    while True:
-                        msg = await websocket.receive()
-                        if "text" in msg and msg["text"] is not None:
-                            await upstream.send(msg["text"])
-                        elif "bytes" in msg and msg["bytes"] is not None:
-                            await upstream.send(msg["bytes"])
-                        elif msg.get("type") == "websocket.disconnect":
-                            break
-                except WebSocketDisconnect:
-                    log.info("[Realtime] Client disconnected.")
-                    await upstream.close()
-                except Exception as e:
-                    log.error(f"[Realtime] client_to_openai error: {e}")
-                    try:
-                        await upstream.close()
-                    except Exception:
-                        pass
-
-            async def openai_to_client():
-                try:
-                    async for msg in upstream:
-                        if isinstance(msg, str):
-                            await websocket.send_text(msg)
-                        else:
-                            await websocket.send_bytes(msg)
-                except ConnectionClosed:
-                    log.info("[Realtime] Upstream connection closed.")
-                    try:
-                        await websocket.close()
-                    except Exception:
-                        pass
-                except Exception as e:
-                    log.error(f"[Realtime] openai_to_client error: {e}")
-                    try:
-                        await websocket.close()
-                    except Exception:
-                        pass
-
-            await asyncio.gather(client_to_openai(), openai_to_client())
-
-    except Exception as e:
-        log.error(f"[Realtime] Failed to open upstream WS: {e}")
+    async with httpx.AsyncClient(timeout=PROXY_TIMEOUT) as client:
         try:
-            await websocket.send_text(
-                '{"type":"error","error":{"message":"Failed to connect to Realtime upstream"}}'
+            resp = await client.post(url, headers=headers, json=body)
+        except httpx.RequestError as exc:
+            logger.error("[realtime] Upstream request error: %s", exc)
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error": {
+                        "message": "Failed to reach OpenAI Realtime Sessions API",
+                        "type": "upstream_error",
+                        "code": "realtime_upstream_unreachable",
+                    }
+                },
             )
-        except Exception:
-            pass
-        await websocket.close()
+
+    # Try to preserve upstream JSON error payloads when possible.
+    try:
+        payload = resp.json()
+    except Exception:
+        payload = {
+            "error": {
+                "message": resp.text,
+                "type": "api_error",
+                "code": resp.status_code,
+            }
+        }
+
+    if resp.status_code >= 400:
+        logger.warning(
+            "[realtime] Upstream error %s: %s",
+            resp.status_code,
+            payload.get("error", {}).get("message", ""),
+        )
+        raise HTTPException(status_code=resp.status_code, detail=payload)
+
+    return payload
+
+
+@router.post("/realtime/sessions")
+async def create_realtime_session(request: Request):
+    """
+    POST /v1/realtime/sessions
+
+    Create an ephemeral API token for use in client-side applications
+    with the Realtime API. Mirrors the official REST endpoint:
+
+        POST https://api.openai.com/v1/realtime/sessions
+
+    The request body usually includes fields like:
+
+      - model
+      - modalities
+      - instructions
+      - voice
+      - input_audio_format
+      - output_audio_format
+      - input_audio_transcription
+      - turn_detection
+      - tools
+
+    We forward the JSON body as-is to OpenAI and return the upstream
+    JSON response unchanged, including the `client_secret`.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        # Body may be optional; treat non-JSON as empty object.
+        body = None
+
+    payload = await _post_realtime_sessions(request, body)
+    # Do NOT log payload (contains client_secret).
+    return JSONResponse(payload, status_code=200)

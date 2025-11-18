@@ -1,9 +1,9 @@
 """
 validation.py — Schema Validation Middleware
-────────────────────────────────────────────
+─────────────────────────────────────────────
 Performs lightweight JSON validation and request sanity checking
 before passing to the orchestrator. Ensures requests are well-formed
-and OpenAI-compatible.
+and OpenAI-compatible without adding significant latency.
 """
 
 import json
@@ -13,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-logger = logging.getLogger("validation")
+logger = logging.getLogger("relay.validation")
 
 
 class SchemaValidationMiddleware(BaseHTTPMiddleware):
@@ -44,11 +44,12 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
                     _ = await request.json()
                 else:
                     logger.warning(
-                        f"[validation] Non-JSON request to {request.url.path} "
-                        f"with Content-Type: {content_type}"
+                        "[validation] Non-JSON request to %s with Content-Type: %s",
+                        request.url.path,
+                        content_type,
                     )
             except json.JSONDecodeError:
-                logger.error(f"[validation] Invalid JSON on {request.url.path}")
+                logger.error("[validation] Invalid JSON on %s", request.url.path)
                 return JSONResponse(
                     {
                         "error": {
@@ -58,12 +59,16 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
                     },
                     status_code=400,
                 )
-            except Exception as e:
-                logger.exception(f"[validation] Unexpected validation error: {e}")
+            except Exception as exc:  # pragma: no cover (defensive)
+                logger.exception(
+                    "[validation] Unexpected validation error on %s: %s",
+                    request.url.path,
+                    exc,
+                )
                 return JSONResponse(
                     {
                         "error": {
-                            "message": f"Unexpected validation error: {str(e)}",
+                            "message": f"Unexpected validation error: {str(exc)}",
                             "type": "validation_error",
                         }
                     },

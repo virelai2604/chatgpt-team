@@ -72,7 +72,7 @@ def create_app() -> FastAPI:
         redoc_url=None,
     )
 
-    # Store config on app.state for use by other modules if needed
+    # Store config on app.state for use by other modules
     app.state.OPENAI_API_BASE = openai_api_base
     app.state.OPENAI_API_KEY = openai_api_key
     app.state.OPENAI_ORG_ID = openai_org_id
@@ -102,8 +102,8 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allow_origins or ["*"],
-        allow_methods=allow_methods,
-        allow_headers=allow_headers,
+        allow_methods=allow_methods or ["*"],
+        allow_headers=allow_headers or ["*"],
     )
 
     # ------------------------------------------------------------

@@ -3,44 +3,25 @@
   "name_for_human": "ChatGPT Team Relay",
   "name_for_model": "chatgpt_team_relay",
   "description_for_human": "An OpenAI-compatible API relay that supports /v1/responses, /v1/files, /v1/embeddings, /v1/vector_stores, and registered tool execution via ChatGPT Actions.",
-  "description_for_model": "Relay API for ChatGPT Team. This service mirrors the official OpenAI API surface (including /v1/responses, /v1/models, /v1/files, /v1/embeddings, /v1/vector_stores, /v1/realtime/sessions, /v1/images/generations, /v1/videos, and /v1/tools) at https://chatgpt-team-relay.onrender.com. It is designed to be used from ChatGPT Actions and is compatible with the latest OpenAI Python and Node.js SDKs.",
+  "description_for_model": "Relay API for ChatGPT Team. This service mirrors the official OpenAI API surface (including /v1/responses, /v1/models, /v1/files, /v1/embeddings, /v1/vector_stores, /v1/realtime/sessions, /v1/images/generations, /v1/videos, and /v1/tools) at https://chatgpt-team-relay.onrender.com. It is designed to be used from ChatGPT Actions and is compatible with the latest OpenAI Python (2.8.x) and Node.js (6.9.x) SDKs. Use this action whenever you need to call the OpenAI-compatible REST API with Responses, Realtime, Files, Embeddings, Vector Stores, Images, Videos, or the hosted tools registry.",
   "auth": {
     "type": "service_http",
-    "authorization_type": "bearer"
+    "authorization_type": "bearer",
+    "verification_tokens": {
+      "openai": "REPLACE_WITH_VERIFICATION_TOKEN_FROM_CHATGPT_UI"
+    }
   },
   "api": {
     "type": "openapi",
-    "is_user_authenticated": false,
-    "url": "https://chatgpt-team-relay.onrender.com/schemas/openapi.yaml"
+    "url": "https://chatgpt-team-relay.onrender.com/schemas/openapi.yaml",
+    "is_user_authenticated": false
   },
   "logo_url": "https://chatgpt-team-relay.onrender.com/static/logo.png",
   "contact_email": "support@chatgpt-team-relay.com",
   "legal_info_url": "https://chatgpt-team-relay.onrender.com/legal",
   "terms_of_service_url": "https://chatgpt-team-relay.onrender.com/terms",
-
-  "endpoints": [
-    "/v1/responses",
-    "/v1/models",
-    "/v1/files",
-    "/v1/embeddings",
-    "/v1/vector_stores",
-    "/v1/realtime/sessions",
-    "/v1/images/generations",
-    "/v1/videos",
-    "/v1/tools"
-  ],
-
-  "supported_models": [
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    "gpt-4o",
-    "gpt-5.1",
-    "gpt-5.1-mini"
-  ],
-
   "tags": [
     "relay",
-    "openai",
     "openai-compatible",
     "fastapi",
     "chatgpt",
