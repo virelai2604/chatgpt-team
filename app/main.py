@@ -21,7 +21,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, PlainTextResponse
 
 from app.middleware.validation import SchemaValidationMiddleware
 from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
@@ -127,6 +127,16 @@ def create_app() -> FastAPI:
             "openai_api_base": openai_api_base,
         }
 
+    @app.head("/", include_in_schema=False)
+    async def root_head():
+        """
+        HEAD / — respond like GET / but without a body, so health
+        probes and crawlers don't get 405 Method Not Allowed.
+        """
+        # Returning an empty JSONResponse with 200 is sufficient;
+        # FastAPI will still emit standard headers.
+        return JSONResponse(status_code=200, content={})
+
     @app.get("/v1/health")
     async def health():
         """
@@ -140,6 +150,16 @@ def create_app() -> FastAPI:
             "default_model": default_model,
             "openai_api_base": openai_api_base,
         }
+
+    @app.get("/robots.txt", include_in_schema=False)
+    async def robots_txt():
+        """
+        Basic robots.txt so Render bots and crawlers don't see a 404.
+
+        This relay only exposes JSON APIs, so an 'allow all' policy is safe.
+        """
+        content = "User-agent: *\nDisallow:\n"
+        return PlainTextResponse(content, status_code=200)
 
     @app.get("/schemas/openapi.yaml", include_in_schema=False)
     async def openapi_schema():
