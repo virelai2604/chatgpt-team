@@ -7,7 +7,10 @@ python-dotenv==1.0.1
 aiofiles==24.1.0
 sse-starlette==2.1.2
 anyio==4.4.0
-openai==2.8.0
+
+# OpenAI SDK — allow 2.8.x patch upgrades (2.8.0, 2.8.1, etc.)
+openai>=2.8.0,<2.9.0
+
 pyyaml==6.0.2
 jsonschema==4.23.0
 typing-extensions>=4.12.2

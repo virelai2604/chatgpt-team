@@ -1,127 +1,76 @@
 """
-images.py — /v1/images & /v1/images/generations
-───────────────────────────────────────────────
-Thin proxy for the OpenAI Images API (gpt-image-*).
+images.py — /v1/images proxy
+─────────────────────────────
+Thin, OpenAI-compatible proxy for image generation (and any related
+image operations) via the official Images API.
 
-Ground truth (API Reference):
-  • Generate images: POST /v1/images/generations
-    Body: { "model": "gpt-image-1", "prompt": "...", "n": 1, "size": "1024x1024", ... }
-    See: https://api.openai.com/v1/images/generations
+Main endpoint (per current OpenAI docs):
+
+  • POST /v1/images/generations   → generate images from a prompt
+
+Legacy / extended endpoints MAY include:
+
+  • POST /v1/images/edits         → edit existing images
+  • POST /v1/images/variations    → generate variations
+
+This router intentionally does NOT encode any business logic or
+parameter validation. All behavior is delegated to
+`forward_openai_request`, so the relay automatically tracks
+changes in the upstream API and openai-python SDK.
 """
 
-import os
-from typing import Any, Dict
+from __future__ import annotations
 
-import httpx
-from fastapi import APIRouter, Body, Form, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request
 
-router = APIRouter(prefix="/v1", tags=["images"])
+from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger
 
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
-TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "120"))
-
-
-def _headers() -> Dict[str, str]:
-    """
-    Standard JSON headers for calling OpenAI's Images API.
-    """
-    headers: Dict[str, str] = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    if OPENAI_ORG_ID:
-        headers["OpenAI-Organization"] = OPENAI_ORG_ID
-    return headers
-
-
-def _images_generations_url() -> str:
-    """
-    Official upstream endpoint:
-      POST https://api.openai.com/v1/images/generations
-    """
-    return f"{OPENAI_API_BASE.rstrip('/')}/v1/images/generations"
-
-
-@router.post("/images")
-async def create_image_form(
-    prompt: str = Form(...),
-    model: str = Form("gpt-image-1"),
-    size: str = Form("1024x1024"),
-    n: int = Form(1),
-):
-    """
-    Convenience wrapper for image generation using HTML form fields.
-
-    Effectively equivalent to:
-
-        client.images.generate(
-            model="gpt-image-1",
-            prompt="...",
-            size="1024x1024",
-            n=1,
-        )
-
-    but exposed as:
-        POST /v1/images  (form-data)
-    and forwarded as JSON to the official upstream:
-        POST /v1/images/generations
-    """
-    data: Dict[str, Any] = {
-        "model": model,
-        "prompt": prompt,
-        "size": size,
-        "n": n,
-    }
-
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.post(
-            _images_generations_url(),
-            headers=_headers(),
-            json=data,
-        )
-
-    return JSONResponse(resp.json(), status_code=resp.status_code)
+router = APIRouter(
+    prefix="/v1",
+    tags=["images"],
+)
 
 
 @router.post("/images/generations")
-async def create_image_generation(
-    request: Request,
-    body: Dict[str, Any] = Body(...),
-):
+async def create_image_generations(request: Request):
     """
-    JSON-compatible proxy for the official Images Generations endpoint.
+    POST /v1/images/generations
 
-    Matches the API reference:
+    Generates one or more images from a text prompt, equivalent to:
 
-        POST https://api.openai.com/v1/images/generations
-        Body:
-        {
+        client.images.generate({
           "model": "gpt-image-1",
-          "prompt": "A cute baby sea otter",
-          "n": 1,
-          "size": "1024x1024",
+          "prompt": "...",
           ...
-        }
+        })
 
-    Used by:
-        • tests/test_embeddings_images_videos.py::test_images_generation
-        • openai-python client.images.generate(...)
+    The request body and response payload are forwarded 1:1 to/from
+    the upstream OpenAI Images API by `forward_openai_request`.
     """
-    # Ensure we have a body even if someone sends raw JSON without using `body` param
-    if not body:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
+    logger.info("→ [images] %s %s", request.method, request.url.path)
+    return await forward_openai_request(request)
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.post(
-            _images_generations_url(),
-            headers=_headers(),
-            json=body,
-        )
 
-    return JSONResponse(resp.json(), status_code=resp.status_code)
+@router.api_route("/images/{path:path}", methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"])
+async def proxy_images_subpaths(path: str, request: Request):
+    """
+    /v1/images/{...} — catch-all for image sub-resources.
+
+    This route covers any additional or legacy endpoints under
+    /v1/images/*, such as (depending on the API version):
+
+      • POST /v1/images/edits
+      • POST /v1/images/variations
+      • Any future subpaths introduced by OpenAI.
+
+    We simply forward the HTTP method, path, headers, and body to
+    the upstream API via `forward_openai_request`.
+    """
+    logger.info(
+        "→ [images] %s %s (subpath=%s)",
+        request.method,
+        request.url.path,
+        path,
+    )
+    return await forward_openai_request(request)

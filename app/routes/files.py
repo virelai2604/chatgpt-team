@@ -1,89 +1,82 @@
 """
-files.py — /v1/files
-────────────────────
-Thin proxy for file upload/list/retrieve/delete against OpenAI.
+files.py — /v1/files proxy
+──────────────────────────
+Thin, OpenAI-compatible proxy for file upload, listing, retrieval,
+deletion, and content download.
 
-Matches the official Files API:
+Matches the official Files API surface:
+
   • GET    /v1/files
   • POST   /v1/files
   • GET    /v1/files/{file_id}
   • GET    /v1/files/{file_id}/content
   • DELETE /v1/files/{file_id}
+
+The actual HTTP behavior (auth, multipart handling, streaming, errors)
+is delegated to `forward_openai_request`, which is shared by all
+proxied /v1/* endpoints in the relay.
 """
 
-import os
+from __future__ import annotations
 
-import httpx
-from fastapi import APIRouter, UploadFile, File
-from fastapi.responses import JSONResponse, Response
+from fastapi import APIRouter, Request
 
-from app.utils.logger import relay_log as log
+from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger
 
-router = APIRouter(prefix="/v1/files", tags=["files"])
-
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
-RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "60"))
+router = APIRouter(
+    prefix="/v1",
+    tags=["files"],
+)
 
 
-def auth_headers() -> dict:
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-    if OPENAI_ORG_ID:
-        headers["OpenAI-Organization"] = OPENAI_ORG_ID
-    return headers
+@router.api_route("/files", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def proxy_files_root(request: Request):
+    """
+    /v1/files
+
+    GET:
+      Lists files available to the API key, as defined by the OpenAI Files
+      API (e.g., used for assistants, fine-tuning, batch, and vector stores).
+
+    POST:
+      Uploads a new file via multipart/form-data with fields like:
+        - purpose
+        - file (binary)
+      and any other parameters supported by the upstream API.
+
+    We do not implement any custom logic here; everything is forwarded to
+    OpenAI via the shared forwarder to keep behavior perfectly aligned with
+    the official spec and SDK behavior.
+    """
+    logger.info("→ [files] %s %s", request.method, request.url.path)
+    return await forward_openai_request(request)
 
 
-def files_base_url() -> str:
-    return f"{OPENAI_API_BASE.rstrip('/')}/v1/files"
+@router.api_route("/files/{path:path}", methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"])
+async def proxy_files_subpaths(path: str, request: Request):
+    """
+    /v1/files/{...} — catch-all for file sub-resources.
 
+    This route covers, for example:
 
-@router.get("")
-async def list_files():
-    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
-        resp = await client.get(files_base_url(), headers=auth_headers())
-        return JSONResponse(resp.json(), status_code=resp.status_code)
+      • GET    /v1/files/{file_id}
+            → Retrieve file metadata.
 
+      • GET    /v1/files/{file_id}/content
+            → Download the raw file content.
 
-@router.post("")
-async def upload_file(file: UploadFile = File(...), purpose: str = "assistants"):
-    files = {"file": (file.filename, await file.read(), file.content_type)}
-    data = {"purpose": purpose}
-    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
-        resp = await client.post(
-            files_base_url(),
-            headers=auth_headers(),
-            files=files,
-            data=data,
-        )
-        return JSONResponse(resp.json(), status_code=resp.status_code)
+      • DELETE /v1/files/{file_id}
+            → Delete a file.
 
-
-@router.get("/{file_id}")
-async def retrieve_file(file_id: str):
-    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
-        resp = await client.get(
-            f"{files_base_url()}/{file_id}",
-            headers=auth_headers(),
-        )
-        return JSONResponse(resp.json(), status_code=resp.status_code)
-
-
-@router.get("/{file_id}/content")
-async def download_file_content(file_id: str):
-    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
-        resp = await client.get(
-            f"{files_base_url()}/{file_id}/content",
-            headers=auth_headers(),
-        )
-        return Response(content=resp.content, status_code=resp.status_code)
-
-
-@router.delete("/{file_id}")
-async def delete_file(file_id: str):
-    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
-        resp = await client.delete(
-            f"{files_base_url()}/{file_id}",
-            headers=auth_headers(),
-        )
-        return JSONResponse(resp.json(), status_code=resp.status_code)
+    Any future sub-resources introduced under /v1/files/* are also
+    automatically supported, because we delegate the full path and HTTP
+    method to the upstream OpenAI API via `forward_openai_request`.
+    """
+    logger.info(
+        "→ [files] %s %s (subpath=%s)",
+        request.method,
+        request.url.path,
+        path,
+    )
+    return await forward_openai_request(request)

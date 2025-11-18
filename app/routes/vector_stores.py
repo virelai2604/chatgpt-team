@@ -1,164 +1,277 @@
-import json
+from __future__ import annotations
+
 import os
+from typing import Any, Dict, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
 
-router = APIRouter(prefix="/v1/vector_stores", tags=["vector_stores"])
+from app.utils.logger import relay_log as logger
 
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
-RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "120"))
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
+OPENAI_ASSISTANTS_BETA = os.getenv("OPENAI_ASSISTANTS_BETA", "assistants=v2")
+PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", "120"))
 
-# For vector stores (historically tied to Assistants v2), some stacks require:
-#   OpenAI-Beta: assistants=v2
-# The official SDKs add this themselves when talking directly to api.openai.com;
-# here we allow you to configure it explicitly.
-OPENAI_ASSISTANTS_BETA = os.getenv("OPENAI_ASSISTANTS_BETA", "")
-
-
-def _base_url(path: str) -> str:
-    return f"{OPENAI_API_BASE.rstrip('/')}{path}"
+router = APIRouter(
+    prefix="/v1/vector_stores",
+    tags=["vector_stores"],
+)
 
 
-def auth_headers(request: Request | None = None) -> dict:
+def _build_headers(request: Request) -> Dict[str, str]:
+    """
+    Build headers for vector store calls:
+
+    - Authorization and optional organization
+    - OpenAI-Beta:
+        * Prefer incoming header (from SDK/client)
+        * Fallback to OPENAI_ASSISTANTS_BETA env (e.g. 'assistants=v2')
+    """
     if not OPENAI_API_KEY:
-        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
+        raise HTTPException(
+            status_code=500,
+            detail={"error": {"message": "OPENAI_API_KEY is not configured", "type": "config_error", "code": "no_api_key"}},
+        )
 
-    headers: dict[str, str] = {
+    headers: Dict[str, str] = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json",
     }
 
-    if OPENAI_ORG_ID:
-        headers["OpenAI-Organization"] = OPENAI_ORG_ID
+    # Organization – prefer request header, then env
+    request_org = request.headers.get("OpenAI-Organization")
+    org_id = request_org or OPENAI_ORG_ID
+    if org_id:
+        headers["OpenAI-Organization"] = org_id
 
-    beta = OPENAI_ASSISTANTS_BETA.strip()
-    if not beta and request is not None:
-        # Fallback: propagate any beta header the client sent (e.g. from SDK)
-        beta = request.headers.get("OpenAI-Beta", "").strip()
-
-    if beta:
-        headers["OpenAI-Beta"] = beta
+    # Assistants / vector store beta header – prefer incoming, else env
+    incoming_beta = request.headers.get("OpenAI-Beta")
+    beta_header = incoming_beta or OPENAI_ASSISTANTS_BETA
+    if beta_header:
+        headers["OpenAI-Beta"] = beta_header
 
     return headers
 
 
-async def _proxy(
+async def _request_json(
+    request: Request,
     method: str,
-    path: str,
-    request: Request | None = None,
-    body: dict | None = None,
-) -> JSONResponse:
-    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
-        url = _base_url(path)
-        kwargs = {
-            "headers": auth_headers(request),
-        }
-        if body is not None:
-            kwargs["content"] = json.dumps(body)
+    path_suffix: str,
+    *,
+    json: Optional[Dict[str, Any]] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> Any:
+    """
+    Generic JSON proxy to OpenAI's Vector Stores API.
 
-        upstream = await client.request(method, url, **kwargs)
+    path_suffix is appended after '/v1/vector_stores'.
+    """
+    url = f"{OPENAI_API_BASE}/v1/vector_stores{path_suffix}"
 
-    if upstream.is_error:
-        raise HTTPException(
-            status_code=upstream.status_code,
-            detail=upstream.text,
+    headers = _build_headers(request)
+
+    logger.info("→ [vector_stores] %s %s", method, url)
+
+    async with httpx.AsyncClient(timeout=PROXY_TIMEOUT) as client:
+        resp = await client.request(method, url, headers=headers, json=json, params=params)
+
+    if resp.status_code >= 400:
+        # Try to preserve OpenAI error payload as-is
+        try:
+            payload = resp.json()
+        except Exception:
+            payload = {
+                "error": {
+                    "message": resp.text,
+                    "type": "api_error",
+                    "code": resp.status_code,
+                }
+            }
+
+        logger.error(
+            "✖ [vector_stores] %s %s → %s %s",
+            method,
+            url,
+            resp.status_code,
+            resp.text,
         )
+        raise HTTPException(status_code=resp.status_code, detail=payload)
 
-    return JSONResponse(
-        status_code=upstream.status_code,
-        content=upstream.json(),
-    )
+    return resp.json()
 
 
-@router.get("")
-async def list_vector_stores(request: Request) -> JSONResponse:
-    """
-    GET /v1/vector_stores
-    """
-    return await _proxy("GET", "/v1/vector_stores", request=request)
+# ---------------------------------------------------------------------------
+# Vector store core operations
+# ---------------------------------------------------------------------------
 
 
 @router.post("")
-async def create_vector_store(request: Request) -> JSONResponse:
+async def create_vector_store(request: Request):
     """
-    POST /v1/vector_stores
+    Create a vector store.
 
-    Mirrors client.vector_stores.create(...) from the official SDKs. 
+    Mirrors POST /v1/vector_stores as in the official API reference and
+    openai-python 2.8.x client:
+    - name, metadata, description
+    - expires_after, file_ids, chunking_strategy, etc.
     """
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    body = await request.json()
+    return await _request_json(request, "POST", "", json=body)
 
-    return await _proxy("POST", "/v1/vector_stores", request=request, body=body)
+
+@router.get("")
+async def list_vector_stores(request: Request):
+    """
+    List vector stores.
+
+    Supports standard pagination and filtering via query params, e.g.:
+    - limit, order, after, before
+    """
+    params = dict(request.query_params)
+    return await _request_json(request, "GET", "", params=params)
 
 
 @router.get("/{vector_store_id}")
-async def retrieve_vector_store(vector_store_id: str, request: Request) -> JSONResponse:
+async def retrieve_vector_store(vector_store_id: str, request: Request):
     """
-    GET /v1/vector_stores/{vector_store_id}
+    Retrieve a vector store by ID.
     """
-    path = f"/v1/vector_stores/{vector_store_id}"
-    return await _proxy("GET", path, request=request)
+    return await _request_json(request, "GET", f"/{vector_store_id}")
+
+
+@router.post("/{vector_store_id}")
+async def update_vector_store(vector_store_id: str, request: Request):
+    """
+    Update a vector store.
+
+    Mirrors POST /v1/vector_stores/{vector_store_id}:
+    - name
+    - metadata
+    - expires_after
+    """
+    body = await request.json()
+    return await _request_json(request, "POST", f"/{vector_store_id}", json=body)
+
+
+@router.delete("/{vector_store_id}")
+async def delete_vector_store(vector_store_id: str, request: Request):
+    """
+    Delete a vector store.
+
+    Mirrors DELETE /v1/vector_stores/{vector_store_id}.
+    """
+    return await _request_json(request, "DELETE", f"/{vector_store_id}")
+
+
+@router.post("/{vector_store_id}/search")
+async def search_vector_store(vector_store_id: str, request: Request):
+    """
+    Search within a vector store.
+
+    Mirrors POST /v1/vector_stores/{vector_store_id}/search with parameters like:
+    - query (or input)
+    - filters
+    - max_num_results
+    """
+    body = await request.json()
+    return await _request_json(request, "POST", f"/{vector_store_id}/search", json=body)
+
+
+# ---------------------------------------------------------------------------
+# Vector store files (vector_store.file objects)
+# ---------------------------------------------------------------------------
 
 
 @router.post("/{vector_store_id}/files")
-async def create_vector_store_file(vector_store_id: str, request: Request) -> JSONResponse:
+async def create_vector_store_file(vector_store_id: str, request: Request):
     """
-    POST /v1/vector_stores/{vector_store_id}/files
+    Attach files to a vector store.
 
-    This attaches a file to an existing vector store. It maps to
-    client.vector_stores.files.create(...) in the Python/Node SDKs. 
+    Mirrors POST /v1/vector_stores/{vector_store_id}/files with body:
+    - file_ids: [...]
     """
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
-
-    path = f"/v1/vector_stores/{vector_store_id}/files"
-    return await _proxy("POST", path, request=request, body=body)
+    body = await request.json()
+    return await _request_json(request, "POST", f"/{vector_store_id}/files", json=body)
 
 
 @router.get("/{vector_store_id}/files")
-async def list_vector_store_files(vector_store_id: str, request: Request) -> JSONResponse:
+async def list_vector_store_files(vector_store_id: str, request: Request):
     """
-    GET /v1/vector_stores/{vector_store_id}/files
+    List files associated with a vector store.
+
+    Mirrors GET /v1/vector_stores/{vector_store_id}/files with pagination params.
     """
-    path = f"/v1/vector_stores/{vector_store_id}/files"
-    return await _proxy("GET", path, request=request)
+    params = dict(request.query_params)
+    return await _request_json(request, "GET", f"/{vector_store_id}/files", params=params)
+
+
+@router.get("/{vector_store_id}/files/{file_id}")
+async def retrieve_vector_store_file(vector_store_id: str, file_id: str, request: Request):
+    """
+    Retrieve a vector_store.file object.
+
+    Mirrors GET /v1/vector_stores/{vector_store_id}/files/{file_id}.
+    """
+    return await _request_json(request, "GET", f"/{vector_store_id}/files/{file_id}")
+
+
+@router.delete("/{vector_store_id}/files/{file_id}")
+async def delete_vector_store_file(vector_store_id: str, file_id: str, request: Request):
+    """
+    Delete (detach) a file from a vector store.
+
+    Mirrors DELETE /v1/vector_stores/{vector_store_id}/files/{file_id}.
+    """
+    return await _request_json(request, "DELETE", f"/{vector_store_id}/files/{file_id}")
+
+
+# ---------------------------------------------------------------------------
+# Vector store file batches
+# ---------------------------------------------------------------------------
 
 
 @router.post("/{vector_store_id}/file_batches")
-async def create_vector_store_file_batch(
-    vector_store_id: str, request: Request
-) -> JSONResponse:
+async def create_file_batch(vector_store_id: str, request: Request):
     """
-    POST /v1/vector_stores/{vector_store_id}/file_batches
+    Create a file batch for a vector store.
 
-    Equivalent to client.vector_stores.file_batches.create(...) or
-    create_and_poll(...) at the REST level. 
+    Mirrors POST /v1/vector_stores/{vector_store_id}/file_batches with:
+    - file_ids: [...]
     """
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
-
-    path = f"/v1/vector_stores/{vector_store_id}/file_batches"
-    return await _proxy("POST", path, request=request, body=body)
+    body = await request.json()
+    return await _request_json(request, "POST", f"/{vector_store_id}/file_batches", json=body)
 
 
 @router.get("/{vector_store_id}/file_batches/{batch_id}")
-async def retrieve_vector_store_file_batch(
-    vector_store_id: str,
-    batch_id: str,
-    request: Request,
-) -> JSONResponse:
+async def retrieve_file_batch(vector_store_id: str, batch_id: str, request: Request):
     """
-    GET /v1/vector_stores/{vector_store_id}/file_batches/{batch_id}
+    Retrieve a vector store file batch.
+
+    Mirrors GET /v1/vector_stores/{vector_store_id}/file_batches/{batch_id}.
     """
-    path = f"/v1/vector_stores/{vector_store_id}/file_batches/{batch_id}"
-    return await _proxy("GET", path, request=request)
+    return await _request_json(request, "GET", f"/{vector_store_id}/file_batches/{batch_id}")
+
+
+@router.post("/{vector_store_id}/file_batches/{batch_id}/cancel")
+async def cancel_file_batch(vector_store_id: str, batch_id: str, request: Request):
+    """
+    Cancel a vector store file batch.
+
+    Mirrors POST /v1/vector_stores/{vector_store_id}/file_batches/{batch_id}/cancel.
+    """
+    # Body is usually empty, but we forward anything provided.
+    body = await request.json() if request.headers.get("Content-Length", "0") != "0" else None
+    return await _request_json(request, "POST", f"/{vector_store_id}/file_batches/{batch_id}/cancel", json=body)
+
+
+@router.get("/{vector_store_id}/file_batches/{batch_id}/files")
+async def list_file_batch_files(vector_store_id: str, batch_id: str, request: Request):
+    """
+    List files in a vector store file batch.
+
+    Mirrors GET /v1/vector_stores/{vector_store_id}/file_batches/{batch_id}/files.
+    """
+    params = dict(request.query_params)
+    return await _request_json(request, "GET", f"/{vector_store_id}/file_batches/{batch_id}/files", params=params)

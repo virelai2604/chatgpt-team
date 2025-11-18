@@ -1,149 +1,88 @@
-import os
+"""
+videos.py — /v1/videos proxy
+─────────────────────────────
+Thin, OpenAI-compatible proxy for video generation and retrieval
+(Sora-style Video API).
 
-import httpx
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+Typical upstream operations:
 
-router = APIRouter(prefix="/v1/videos", tags=["videos"])
+  • POST   /v1/videos                 → create video job
+  • GET    /v1/videos                 → list videos
+  • GET    /v1/videos/{video_id}      → get job status / metadata
+  • GET    /v1/videos/{video_id}/content
+                                     → download video bytes (e.g. MP4)
+  • DELETE /v1/videos/{video_id}      → delete a stored video (when supported)
 
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
-RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "300"))  # videos can take longer
+We do not interpret or transform the payloads here. All behavior is
+delegated to `forward_openai_request` so your relay stays aligned
+with the official OpenAI Video API and the openai-python SDK.
+"""
 
-# Optional beta flag for future video features. At the time of writing, the
-# Sora Video API doesn't require an explicit OpenAI-Beta header, but we
-# support configuring one to stay future-proof.
-OPENAI_VIDEOS_BETA = os.getenv("OPENAI_VIDEOS_BETA", "")
+from __future__ import annotations
 
+from fastapi import APIRouter, Request
 
-def _base_url(path: str) -> str:
-    return f"{OPENAI_API_BASE.rstrip('/')}{path}"
+from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger
 
-
-def video_headers(request: Request | None = None, is_json: bool = True) -> dict:
-    if not OPENAI_API_KEY:
-        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
-
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-    }
-
-    if is_json:
-        headers["Content-Type"] = "application/json"
-
-    if OPENAI_ORG_ID:
-        headers["OpenAI-Organization"] = OPENAI_ORG_ID
-
-    beta = OPENAI_VIDEOS_BETA.strip()
-    if not beta and request is not None:
-        beta = request.headers.get("OpenAI-Beta", "").strip()
-
-    if beta:
-        headers["OpenAI-Beta"] = beta
-
-    return headers
+router = APIRouter(
+    prefix="/v1",
+    tags=["videos"],
+)
 
 
-async def _proxy_json(
-    method: str,
-    path: str,
-    request: Request | None = None,
-    body: dict | None = None,
-) -> JSONResponse:
-    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
-        url = _base_url(path)
-        kwargs = {"headers": video_headers(request, is_json=True)}
-        if body is not None:
-            kwargs["json"] = body
+@router.api_route("/videos", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def proxy_videos_root(request: Request):
+    """
+    /v1/videos
 
-        upstream = await client.request(method, url, **kwargs)
+    GET:
+      List video jobs associated with the authenticated project/org.
 
-    if upstream.is_error:
-        raise HTTPException(
-            status_code=upstream.status_code,
-            detail=upstream.text,
-        )
+    POST:
+      Create a new video generation job (e.g. Sora model), with a body
+      similar to:
 
-    return JSONResponse(
-        status_code=upstream.status_code,
-        content=upstream.json(),
+          {
+            "model": "sora-2",
+            "prompt": "...",
+            "seconds": 8,
+            "size": "720x1280",
+            ...
+          }
+
+    We forward the request directly to the upstream OpenAI /v1/videos
+    endpoint via `forward_openai_request`.
+    """
+    logger.info("→ [videos] %s %s", request.method, request.url.path)
+    return await forward_openai_request(request)
+
+
+@router.api_route("/videos/{path:path}", methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"])
+async def proxy_videos_subpaths(path: str, request: Request):
+    """
+    /v1/videos/{...} — catch-all for video sub-resources.
+
+    This route covers subpaths such as:
+
+      • GET    /v1/videos/{video_id}
+           → Retrieve job status / metadata.
+
+      • GET    /v1/videos/{video_id}/content
+           → Download the completed video file.
+
+      • DELETE /v1/videos/{video_id}
+           → Delete a video (subject to upstream support).
+
+      • Any future control or remix endpoints under /v1/videos/*.
+
+    The relay makes no assumptions about the semantics; it simply
+    forwards the full request to OpenAI via `forward_openai_request`.
+    """
+    logger.info(
+        "→ [videos] %s %s (subpath=%s)",
+        request.method,
+        request.url.path,
+        path,
     )
-
-
-@router.post("")
-async def create_video(request: Request) -> JSONResponse:
-    """
-    POST /v1/videos
-
-    Mirrors client.videos.create(...) in the official SDKs:
-    - Create a new Sora video job from a prompt and optional inputs. 
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
-
-    return await _proxy_json("POST", "/v1/videos", request=request, body=body)
-
-
-@router.get("")
-async def list_videos(request: Request) -> JSONResponse:
-    """
-    GET /v1/videos
-
-    List existing video jobs for the API key/project.
-    """
-    return await _proxy_json("GET", "/v1/videos", request=request)
-
-
-@router.get("/{video_id}")
-async def retrieve_video(video_id: str, request: Request) -> JSONResponse:
-    """
-    GET /v1/videos/{video_id}
-
-    Retrieve the status and metadata for a single video job.
-    """
-    path = f"/v1/videos/{video_id}"
-    return await _proxy_json("GET", path, request=request)
-
-
-@router.delete("/{video_id}")
-async def delete_video(video_id: str, request: Request) -> JSONResponse:
-    """
-    DELETE /v1/videos/{video_id}
-
-    Delete a video job and its stored content.
-    """
-    path = f"/v1/videos/{video_id}"
-    return await _proxy_json("DELETE", path, request=request)
-
-
-@router.get("/{video_id}/content")
-async def download_video_content(video_id: str, request: Request) -> StreamingResponse:
-    """
-    GET /v1/videos/{video_id}/content
-
-    Stream the raw MP4 (or other configured variant) back to the caller.
-    The SDKs expose this as client.videos.download_content(...). 
-    """
-    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
-        url = _base_url(f"/v1/videos/{video_id}/content")
-        upstream = await client.get(
-            url,
-            headers=video_headers(request, is_json=False),
-            timeout=RELAY_TIMEOUT,
-        )
-
-    if upstream.is_error:
-        raise HTTPException(
-            status_code=upstream.status_code,
-            detail=upstream.text,
-        )
-
-    # Stream binary content through
-    async def content_generator():
-        yield upstream.content
-
-    media_type = upstream.headers.get("Content-Type", "application/octet-stream")
-    return StreamingResponse(content_generator(), media_type=media_type)
+    return await forward_openai_request(request)
