@@ -23,7 +23,7 @@ We expose:
 import csv
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import httpx
@@ -83,7 +83,11 @@ def _append_snapshot(conv_id: str, data: Dict) -> None:
     try:
         with open(path, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow([conv_id, json.dumps(data), datetime.utcnow().isoformat()])
+            writer.writerow([
+                conv_id,
+                json.dumps(data),
+                datetime.now(timezone.utc).isoformat(),
+            ])
     except Exception as exc:
         log.warning(f"[Conversations] Failed to append snapshot to CSV: {exc}")
 
@@ -117,7 +121,7 @@ def save_conversation(conv_id: str, data: Dict) -> None:
     Public helper: append a snapshot for a conversation.
     """
     if not conv_id:
-        conv_id = data.get("id") or f"local-{datetime.utcnow().timestamp()}"
+        conv_id = data.get("id") or f"local-{datetime.now(timezone.utc).timestamp()}"
     _append_snapshot(conv_id, data)
 
 
@@ -260,18 +264,21 @@ async def create_conversation(request: Request):
             resp = await client.post(url, headers=headers, json=body)
             if resp.status_code in (200, 201):
                 data = resp.json()
-                conv_id = data.get("id", f"local-{datetime.utcnow().timestamp()}")
+                conv_id = data.get(
+                    "id",
+                    f"local-{datetime.now(timezone.utc).timestamp()}",
+                )
                 save_conversation(conv_id, data)
                 return JSONResponse(data, status_code=resp.status_code)
         except httpx.RequestError as e:
             log.warning(f"[Conversations] Online create failed: {e}, saving locally.")
 
-    conv_id = f"local-{datetime.utcnow().timestamp()}"
+    conv_id = f"local-{datetime.now(timezone.utc).timestamp()}"
     data = {
         "id": conv_id,
         "title": body.get("title", "Untitled"),
         "messages": body.get("messages", []),
-        "created": datetime.utcnow().isoformat(),
+        "created": datetime.now(timezone.utc).isoformat(),
     }
     save_conversation(conv_id, data)
     return JSONResponse(data, status_code=201)
@@ -311,7 +318,7 @@ async def update_conversation(conv_id: str, request: Request):
     existing = get_conversation(conv_id) or {"id": conv_id}
     if isinstance(body, dict):
         existing.update(body)
-    existing.setdefault("updated", datetime.utcnow().isoformat())
+    existing.setdefault("updated", datetime.now(timezone.utc).isoformat())
     save_conversation(conv_id, existing)
     return JSONResponse(existing, status_code=200)
 
@@ -336,7 +343,7 @@ async def delete_conversation(conv_id: str):
                 tombstone = {
                     "id": conv_id,
                     "deleted": True,
-                    "deleted_at": datetime.utcnow().isoformat(),
+                    "deleted_at": datetime.now(timezone.utc).isoformat(),
                 }
                 save_conversation(conv_id, tombstone)
                 return JSONResponse(payload, status_code=resp.status_code)
@@ -349,7 +356,7 @@ async def delete_conversation(conv_id: str):
     tombstone = {
         "id": conv_id,
         "deleted": True,
-        "deleted_at": datetime.utcnow().isoformat(),
+        "deleted_at": datetime.now(timezone.utc).isoformat(),
     }
     save_conversation(conv_id, tombstone)
     return JSONResponse(tombstone, status_code=200)
@@ -381,7 +388,7 @@ async def append_message(conv_id: str, request: Request):
                 existing = get_conversation(conv_id) or {
                     "id": conv_id,
                     "messages": [],
-                    "created": datetime.utcnow().isoformat(),
+                    "created": datetime.now(timezone.utc).isoformat(),
                 }
                 messages = existing.get("messages", [])
                 messages.append(msg)
@@ -395,7 +402,7 @@ async def append_message(conv_id: str, request: Request):
     existing = get_conversation(conv_id) or {
         "id": conv_id,
         "messages": [],
-        "created": datetime.utcnow().isoformat(),
+        "created": datetime.now(timezone.utc).isoformat(),
     }
     messages = existing.get("messages", [])
     messages.append(msg)

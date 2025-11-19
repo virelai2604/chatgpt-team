@@ -1,4 +1,5 @@
   📄 .env
+  📄 .env.example.env
   📄 .gitattributes
   📄 .gitignore
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf

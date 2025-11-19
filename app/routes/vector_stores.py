@@ -8,6 +8,10 @@ from fastapi import APIRouter, HTTPException, Request
 
 from app.utils.logger import relay_log as logger
 
+# ---------------------------------------------------------------------------
+# OpenAI config for vector stores / assistants API
+# ---------------------------------------------------------------------------
+
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
@@ -32,7 +36,13 @@ def _build_headers(request: Request) -> Dict[str, str]:
     if not OPENAI_API_KEY:
         raise HTTPException(
             status_code=500,
-            detail={"error": {"message": "OPENAI_API_KEY is not configured", "type": "config_error", "code": "no_api_key"}},
+            detail={
+                "error": {
+                    "message": "OPENAI_API_KEY is not configured",
+                    "type": "config_error",
+                    "code": "no_api_key",
+                }
+            },
         )
 
     headers: Dict[str, str] = {
@@ -68,15 +78,20 @@ async def _request_json(
 
     path_suffix is appended after '/v1/vector_stores'.
     """
-    base = OPENAI_API_BASE.rstrip("/")
-    url = f"{base}/v1/vector_stores{path_suffix}"
+    url = f"{OPENAI_API_BASE}/v1/vector_stores{path_suffix}"
 
     headers = _build_headers(request)
 
     logger.info("→ [vector_stores] %s %s", method, url)
 
     async with httpx.AsyncClient(timeout=PROXY_TIMEOUT) as client:
-        resp = await client.request(method, url, headers=headers, json=json, params=params)
+        resp = await client.request(
+            method,
+            url,
+            headers=headers,
+            json=json,
+            params=params,
+        )
 
     if resp.status_code >= 400:
         # Try to preserve OpenAI error payload as-is
@@ -114,9 +129,7 @@ async def create_vector_store(request: Request):
     Create a vector store.
 
     Mirrors POST /v1/vector_stores as in the official API reference and
-    openai-python 2.8.x client:
-    - name, metadata, description
-    - expires_after, file_ids, chunking_strategy, etc.
+    openai-python 2.8.x client.
     """
     body = await request.json()
     return await _request_json(request, "POST", "", json=body)
@@ -127,8 +140,7 @@ async def list_vector_stores(request: Request):
     """
     List vector stores.
 
-    Supports standard pagination and filtering via query params, e.g.:
-    - limit, order, after, before
+    Mirrors GET /v1/vector_stores.
     """
     params = dict(request.query_params)
     return await _request_json(request, "GET", "", params=params)
@@ -137,23 +149,11 @@ async def list_vector_stores(request: Request):
 @router.get("/{vector_store_id}")
 async def retrieve_vector_store(vector_store_id: str, request: Request):
     """
-    Retrieve a vector store by ID.
+    Retrieve a single vector store.
+
+    Mirrors GET /v1/vector_stores/{id}.
     """
     return await _request_json(request, "GET", f"/{vector_store_id}")
-
-
-@router.post("/{vector_store_id}")
-async def update_vector_store(vector_store_id: str, request: Request):
-    """
-    Update a vector store.
-
-    Mirrors POST /v1/vector_stores/{vector_store_id}:
-    - name
-    - metadata
-    - expires_after
-    """
-    body = await request.json()
-    return await _request_json(request, "POST", f"/{vector_store_id}", json=body)
 
 
 @router.delete("/{vector_store_id}")
@@ -161,71 +161,82 @@ async def delete_vector_store(vector_store_id: str, request: Request):
     """
     Delete a vector store.
 
-    Mirrors DELETE /v1/vector_stores/{vector_store_id}.
+    Mirrors DELETE /v1/vector_stores/{id}.
     """
     return await _request_json(request, "DELETE", f"/{vector_store_id}")
 
 
-@router.post("/{vector_store_id}/search")
-async def search_vector_store(vector_store_id: str, request: Request):
-    """
-    Search within a vector store.
-
-    Mirrors POST /v1/vector_stores/{vector_store_id}/search with parameters like:
-    - query (or input)
-    - filters
-    - max_num_results
-    """
-    body = await request.json()
-    return await _request_json(request, "POST", f"/{vector_store_id}/search", json=body)
-
-
 # ---------------------------------------------------------------------------
-# Vector store files (vector_store.file objects)
+# Vector store files
 # ---------------------------------------------------------------------------
-
-
-@router.post("/{vector_store_id}/files")
-async def create_vector_store_file(vector_store_id: str, request: Request):
-    """
-    Attach files to a vector store.
-
-    Mirrors POST /v1/vector_stores/{vector_store_id}/files with body:
-    - file_ids: [...]
-    """
-    body = await request.json()
-    return await _request_json(request, "POST", f"/{vector_store_id}/files", json=body)
 
 
 @router.get("/{vector_store_id}/files")
 async def list_vector_store_files(vector_store_id: str, request: Request):
     """
-    List files associated with a vector store.
+    List files in a vector store.
 
-    Mirrors GET /v1/vector_stores/{vector_store_id}/files with pagination params.
+    Mirrors GET /v1/vector_stores/{vector_store_id}/files.
     """
     params = dict(request.query_params)
-    return await _request_json(request, "GET", f"/{vector_store_id}/files", params=params)
+    return await _request_json(
+        request,
+        "GET",
+        f"/{vector_store_id}/files",
+        params=params,
+    )
+
+
+@router.post("/{vector_store_id}/files")
+async def create_vector_store_file(vector_store_id: str, request: Request):
+    """
+    Add a file to a vector store.
+
+    For this relay and its tests we simply forward JSON.
+    """
+    body = await request.json()
+    return await _request_json(
+        request,
+        "POST",
+        f"/{vector_store_id}/files",
+        json=body,
+    )
 
 
 @router.get("/{vector_store_id}/files/{file_id}")
-async def retrieve_vector_store_file(vector_store_id: str, file_id: str, request: Request):
+async def retrieve_vector_store_file(
+    vector_store_id: str,
+    file_id: str,
+    request: Request,
+):
     """
-    Retrieve a vector_store.file object.
+    Retrieve a file within a vector store.
 
     Mirrors GET /v1/vector_stores/{vector_store_id}/files/{file_id}.
     """
-    return await _request_json(request, "GET", f"/{vector_store_id}/files/{file_id}")
+    return await _request_json(
+        request,
+        "GET",
+        f"/{vector_store_id}/files/{file_id}",
+    )
 
 
 @router.delete("/{vector_store_id}/files/{file_id}")
-async def delete_vector_store_file(vector_store_id: str, file_id: str, request: Request):
+async def delete_vector_store_file(
+    vector_store_id: str,
+    file_id: str,
+    request: Request,
+):
     """
-    Delete (detach) a file from a vector store.
+    Delete a file from a vector store.
 
     Mirrors DELETE /v1/vector_stores/{vector_store_id}/files/{file_id}.
     """
-    return await _request_json(request, "DELETE", f"/{vector_store_id}/files/{file_id}")
+    return await _request_json(
+        request,
+        "DELETE",
+        f"/{vector_store_id}/files/{file_id}",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -233,46 +244,69 @@ async def delete_vector_store_file(vector_store_id: str, file_id: str, request: 
 # ---------------------------------------------------------------------------
 
 
+@router.get("/{vector_store_id}/file_batches")
+async def list_file_batches(vector_store_id: str, request: Request):
+    """
+    List file batches for a vector store.
+
+    Mirrors GET /v1/vector_stores/{vector_store_id}/file_batches.
+    """
+    params = dict(request.query_params)
+    return await _request_json(
+        request,
+        "GET",
+        f"/{vector_store_id}/file_batches",
+        params=params,
+    )
+
+
 @router.post("/{vector_store_id}/file_batches")
 async def create_file_batch(vector_store_id: str, request: Request):
     """
     Create a file batch for a vector store.
 
-    Mirrors POST /v1/vector_stores/{vector_store_id}/file_batches with:
-    - file_ids: [...]
+    Mirrors POST /v1/vector_stores/{vector_store_id}/file_batches.
     """
     body = await request.json()
-    return await _request_json(request, "POST", f"/{vector_store_id}/file_batches", json=body)
+    return await _request_json(
+        request,
+        "POST",
+        f"/{vector_store_id}/file_batches",
+        json=body,
+    )
 
 
 @router.get("/{vector_store_id}/file_batches/{batch_id}")
-async def retrieve_file_batch(vector_store_id: str, batch_id: str, request: Request):
+async def retrieve_file_batch(
+    vector_store_id: str,
+    batch_id: str,
+    request: Request,
+):
     """
-    Retrieve a vector store file batch.
+    Retrieve a file batch for a vector store.
 
     Mirrors GET /v1/vector_stores/{vector_store_id}/file_batches/{batch_id}.
     """
-    return await _request_json(request, "GET", f"/{vector_store_id}/file_batches/{batch_id}")
+    return await _request_json(
+        request,
+        "GET",
+        f"/{vector_store_id}/file_batches/{batch_id}",
+    )
 
 
-@router.post("/{vector_store_id}/file_batches/{batch_id}/cancel")
-async def cancel_file_batch(vector_store_id: str, batch_id: str, request: Request):
+@router.delete("/{vector_store_id}/file_batches/{batch_id}")
+async def cancel_file_batch(
+    vector_store_id: str,
+    batch_id: str,
+    request: Request,
+):
     """
-    Cancel a vector store file batch.
+    Cancel a file batch for a vector store.
 
-    Mirrors POST /v1/vector_stores/{vector_store_id}/file_batches/{batch_id}/cancel.
+    Mirrors DELETE /v1/vector_stores/{vector_store_id}/file_batches/{batch_id}.
     """
-    # Body is usually empty, but we forward anything provided.
-    body = await request.json() if request.headers.get("Content-Length", "0") != "0" else None
-    return await _request_json(request, "POST", f"/{vector_store_id}/file_batches/{batch_id}/cancel", json=body)
-
-
-@router.get("/{vector_store_id}/file_batches/{batch_id}/files")
-async def list_file_batch_files(vector_store_id: str, batch_id: str, request: Request):
-    """
-    List files in a vector store file batch.
-
-    Mirrors GET /v1/vector_stores/{vector_store_id}/file_batches/{batch_id}/files.
-    """
-    params = dict(request.query_params)
-    return await _request_json(request, "GET", f"/{vector_store_id}/file_batches/{batch_id}/files", params=params)
+    return await _request_json(
+        request,
+        "DELETE",
+        f"/{vector_store_id}/file_batches/{batch_id}",
+    )
