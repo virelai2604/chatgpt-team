@@ -9,6 +9,7 @@
   📄 pytest.ini
   📄 render.yaml
   📄 requirements.txt
+  📄 run_uvicorn_debug.sh
   📁 app
     📄 __init__.py
     📄 main.py
@@ -41,6 +42,7 @@
       📄 error_handler.py
       📄 logger.py
   📁 data
+    📄 conversations.csv
     📄 conversations.db
     📁 conversations
       📄 conversations.db
@@ -86,4 +88,5 @@
     📄 test_health_and_tools.py
     📄 test_realtime_and_infra.py
     📄 test_responses_and_conversations.py
+    📄 test_validation_middleware.py
     📁 downloads

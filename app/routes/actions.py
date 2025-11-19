@@ -1,5 +1,3 @@
-# app/routes/actions.py
-
 """
 actions.py — Custom ChatGPT Actions Endpoints
 ─────────────────────────────────────────────

@@ -15,8 +15,10 @@ This file is “BIFL”: minimal moving parts, stable paths, and
 behavior aligned with the official OpenAI API reference.
 """
 
+import json
 import os
 from pathlib import Path
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -41,6 +43,38 @@ from app.routes import (
     vector_stores as vector_stores_routes,
     videos as videos_routes,
 )
+
+
+def parse_cors_list(
+    raw_value: Optional[str],
+    default: List[str],
+) -> List[str]:
+    """
+    Parse CORS env values in a BIFL way:
+
+    Supports:
+      • JSON list strings, e.g.: '["https://chat.openai.com"]'
+      • Comma-separated strings, e.g.: 'https://chat.openai.com,https://platform.openai.com'
+    Falls back to `default` if parsing fails or value is empty.
+    """
+    if not raw_value:
+        return default
+
+    value = raw_value.strip()
+
+    # JSON list form: ["*"] or ["https://...","https://..."]
+    if value.startswith("["):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list) and parsed:
+                return [str(item) for item in parsed]
+        except Exception:
+            # fall through to comma-separated parsing
+            pass
+
+    # Comma-separated form
+    items = [v.strip() for v in value.split(",") if v.strip()]
+    return items or default
 
 
 def create_app() -> FastAPI:
@@ -88,22 +122,22 @@ def create_app() -> FastAPI:
         "CORS_ALLOW_ORIGINS",
         "https://chat.openai.com,https://platform.openai.com",
     )
-    allow_origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
+    allow_origins = parse_cors_list(origins_raw, ["*"])
 
     methods_raw = os.getenv(
         "CORS_ALLOW_METHODS",
         "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     )
-    allow_methods = [m.strip() for m in methods_raw.split(",") if m.strip()]
+    allow_methods = parse_cors_list(methods_raw, ["*"])
 
     headers_raw = os.getenv("CORS_ALLOW_HEADERS", "*")
-    allow_headers = [h.strip() for h in headers_raw.split(",") if h.strip()]
+    allow_headers = parse_cors_list(headers_raw, ["*"])
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allow_origins or ["*"],
-        allow_methods=allow_methods or ["*"],
-        allow_headers=allow_headers or ["*"],
+        allow_origins=allow_origins,
+        allow_methods=allow_methods,
+        allow_headers=allow_headers,
     )
 
     # ------------------------------------------------------------
