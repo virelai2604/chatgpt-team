@@ -1,103 +1,89 @@
 # app/api/forward_openai.py
+"""
+forward_openai.py — upstream forwarder for the ChatGPT Team Relay.
+
+Responsibilities:
+  - Take the incoming FastAPI Request.
+  - Build the outbound HTTP request to the OpenAI API:
+      • Preserve path and query string.
+      • Override auth headers using env vars (OPENAI_API_KEY / OPENAI_ORG_ID).
+      • Forward JSON bodies as JSON.
+      • Forward multipart/form-data bodies (e.g. /v1/files) as raw bytes.
+  - Return a FastAPI Response mirroring upstream status, headers, and body.
+"""
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Any, Dict, Optional
-from urllib.parse import urljoin
 
 import httpx
-from fastapi import Request, Response, status
+from fastapi import Request, Response
 
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
+
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com").rstrip("/")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
-
-
-def _build_base_url() -> str:
-    base = OPENAI_API_BASE.rstrip("/")
-    if not base.startswith("http://") and not base.startswith("https://"):
-        base = "https://" + base
-    return base
+RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "120"))
 
 
 async def forward_openai_request(
     request: Request,
-    *,
-    subpath: Optional[str] = None,
+    method: Optional[str] = None,
+    json: Optional[Dict[str, Any]] = None,
+    raw_body: Optional[bytes] = None,
+    content_type: Optional[str] = None,
 ) -> Response:
     """
-    Generic forwarder for OpenAI-compatible endpoints.
+    Generic forwarder used by all /v1/* routers.
 
-    - Rebuilds the target URL from OPENAI_API_BASE + request.url.path (+ subpath).
-    - Copies through method, headers, and query params.
-    - Handles:
-        * application/json → uses httpx `json=` so tests can see forward_spy["json"].
-        * multipart/form-data → uses `files=` (for file upload endpoints).
-        * everything else → falls back to `content=`.
+    Args:
+        request: Incoming FastAPI Request.
+        method:  Optional override for HTTP method (defaults to request.method).
+        json:    JSON payload to send upstream.
+        raw_body:Raw bytes to send upstream (e.g. multipart/form-data).
+        content_type: Explicit Content-Type (e.g. multipart/form-data;boundary=...).
+
+    Behavior:
+        - Upstream URL: OPENAI_API_BASE + request.url.path + (query string).
+        - Auth: Uses OPENAI_API_KEY / OPENAI_ORG_ID, ignoring caller's Authorization.
+        - Body:
+            • If raw_body is not None → HTTP body = raw bytes.
+            • Else if json is not None → HTTP body = JSON.
+            • Else → No body.
+        - Returns: FastAPI Response with upstream status_code, headers, and body.
     """
+    if not OPENAI_API_KEY:
+        # Hard fail if relay has no key configured
+        return Response(
+            content=b'{"error": "Relay missing OPENAI_API_KEY"}',
+            media_type="application/json",
+            status_code=500,
+        )
 
-    method = request.method.upper()
-    base_url = _build_base_url()
+    # -----------------------------------------------------------------------
+    # Resolve method and upstream URL
+    # -----------------------------------------------------------------------
+    upstream_method = (method or request.method).upper()
 
-    # Build upstream path
-    incoming_path = request.url.path
-    if subpath:
-        if not incoming_path.endswith("/"):
-            incoming_path += "/"
-        incoming_path += subpath
+    path = request.url.path  # e.g. "/v1/responses", "/v1/files"
+    query = request.url.query
+    if query:
+        upstream_url = f"{OPENAI_API_BASE}{path}?{query}"
+    else:
+        upstream_url = f"{OPENAI_API_BASE}{path}"
 
-    target_url = urljoin(base_url + "/", incoming_path.lstrip("/"))
+    # -----------------------------------------------------------------------
+    # Build headers (override auth, drop hop-by-hop)
+    # -----------------------------------------------------------------------
+    incoming_headers = dict(request.headers)
 
-    # Query params (e.g. ?limit=, ?cursor=)
-    query_params = dict(request.query_params)
-
-    # Copy headers except Host / Content-Length, override auth headers
-    upstream_headers: Dict[str, str] = {}
-    for name, value in request.headers.items():
-        lname = name.lower()
-        if lname in {"host", "content-length"}:
-            continue
-        upstream_headers[name] = value
-
-    if OPENAI_API_KEY:
-        upstream_headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
+    upstream_headers: Dict[str, str] = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+    }
     if OPENAI_ORG_ID:
         upstream_headers["OpenAI-Organization"] = OPENAI_ORG_ID
 
-    # Decide how to send the body
-    content_type = request.headers.get("content-type", "")
-    send_kwargs: Dict[str, Any] = {"headers": upstream_headers, "params": query_params}
-
-    # Read the raw body once (if needed)
-    body_bytes: bytes = await request.body()
-
-    # 1) Multipart/form-data (file uploads)
-    if content_type.startswith("multipart/form-data"):
-        # For tests in this repo we can forward the raw multipart safely.
-        # httpx can reuse the same payload via `content=body_bytes`.
-        send_kwargs["content"] = body_bytes
-
-    # 2) application/json → use `json=` so forward_spy["json"] sees the dict
-    elif "application/json" in content_type.lower():
-        try:
-            parsed_json = json.loads(body_bytes.decode("utf-8") or "null")
-            send_kwargs["json"] = parsed_json
-        except Exception:
-            # If parsing fails, just send raw content (defensive fallback)
-            send_kwargs["content"] = body_bytes
-
-    # 3) Everything else → raw content
-    else:
-        send_kwargs["content"] = body_bytes
-
-    # Perform the upstream request
-    async with httpx.AsyncClient(timeout=float(os.getenv("RELAY_TIMEOUT", "120"))) as client:
-        upstream_resp = await client.request(method, target_url, **send_kwargs)
-
-    # Build FastAPI Response
-    # Pass through status and headers, but don't forward hop-by-hop ones.
     hop_by_hop = {
         "connection",
         "keep-alive",
@@ -109,13 +95,61 @@ async def forward_openai_request(
         "upgrade",
     }
 
-    response_headers = {
-        k: v for k, v in upstream_resp.headers.items() if k.lower() not in hop_by_hop
-    }
+    for k, v in incoming_headers.items():
+        lk = k.lower()
+        if lk in hop_by_hop:
+            continue
+        if lk in {"authorization", "openai-organization"}:
+            # Always use relay's credentials, not caller's
+            continue
+        if lk == "content-type":
+            # We'll set Content-Type based on body below
+            continue
+        upstream_headers.setdefault(k, v)
+
+    # Content-Type
+    if content_type:
+        upstream_headers["Content-Type"] = content_type
+    elif json is not None:
+        upstream_headers.setdefault("Content-Type", "application/json")
+
+    # -----------------------------------------------------------------------
+    # Outbound request via httpx
+    # -----------------------------------------------------------------------
+    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
+        if raw_body is not None:
+            upstream_resp = await client.request(
+                method=upstream_method,
+                url=upstream_url,
+                headers=upstream_headers,
+                content=raw_body,
+            )
+        elif json is not None:
+            upstream_resp = await client.request(
+                method=upstream_method,
+                url=upstream_url,
+                headers=upstream_headers,
+                json=json,
+            )
+        else:
+            upstream_resp = await client.request(
+                method=upstream_method,
+                url=upstream_url,
+                headers=upstream_headers,
+            )
+
+    # -----------------------------------------------------------------------
+    # Build FastAPI Response with upstream data
+    # -----------------------------------------------------------------------
+    resp_headers: Dict[str, str] = {}
+    for k, v in upstream_resp.headers.items():
+        if k.lower() in hop_by_hop:
+            continue
+        # Let FastAPI manage Content-Length if omitted
+        resp_headers[k] = v
 
     return Response(
         content=upstream_resp.content,
         status_code=upstream_resp.status_code,
-        headers=response_headers,
-        media_type=upstream_resp.headers.get("content-type"),
+        headers=resp_headers,
     )
