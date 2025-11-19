@@ -13,6 +13,7 @@
   📄 run_uvicorn_debug.sh
   📄 sample.txt
   📄 sample_direct.txt
+  📄 sample_relay.txt
   📁 app
     📄 __init__.py
     📄 main.py
