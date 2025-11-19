@@ -1,5 +1,3 @@
-# app/api/forward_openai.py
-
 from typing import Any, Dict, Optional
 
 import os

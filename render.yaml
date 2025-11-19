@@ -98,8 +98,8 @@ services:
       - key: LOG_COLOR
         value: false
 
-      # --- Validation Schema (API reference PDF) ---
-      # This path is used internally by your validation / tooling, not by Render.
+      # --- Validation Schema (API reference snapshot) ---
+      # Used internally by validation/tooling, not by Render itself.
       - key: VALIDATION_SCHEMA_PATH
         value: ChatGPT-API_reference_ground_truth-2025-10-29.pdf
 

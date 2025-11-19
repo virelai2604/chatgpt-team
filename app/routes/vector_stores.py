@@ -68,7 +68,8 @@ async def _request_json(
 
     path_suffix is appended after '/v1/vector_stores'.
     """
-    url = f"{OPENAI_API_BASE}/v1/vector_stores{path_suffix}"
+    base = OPENAI_API_BASE.rstrip("/")
+    url = f"{base}/v1/vector_stores{path_suffix}"
 
     headers = _build_headers(request)
 

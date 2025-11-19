@@ -9,7 +9,27 @@ from typing import Any, Dict
 # ---------------------------------------------------------------------------
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
-LOG_FORMAT = os.getenv("LOG_FORMAT", "plain").lower()  # "plain" | "json"
+
+# Support both:
+#   - LOG_JSON=true|false  (used in .env)
+#   - LOG_FORMAT=plain|json (used in render.yaml)
+_log_json_raw = os.getenv("LOG_JSON")
+_log_format_raw = os.getenv("LOG_FORMAT")
+
+if _log_json_raw is not None:
+    # LOG_JSON wins when explicitly set
+    lowered = _log_json_raw.lower()
+    if lowered in {"true", "1", "yes"}:
+        LOG_FORMAT = "json"
+    elif lowered in {"false", "0", "no"}:
+        LOG_FORMAT = "plain"
+    else:
+        # Fallback to LOG_FORMAT or default
+        LOG_FORMAT = (_log_format_raw or "plain").lower()
+else:
+    # No LOG_JSON defined → use LOG_FORMAT or default
+    LOG_FORMAT = (_log_format_raw or "plain").lower()
+
 LOG_COLOR = os.getenv("LOG_COLOR", "true").lower() == "true"
 
 # Ensure logs directory exists (ephemeral on Render but still useful)
@@ -42,21 +62,22 @@ class JsonFormatter(logging.Formatter):
 
     @staticmethod
     def _to_json(obj: Dict[str, Any]) -> str:
-        # Import inline to avoid mandatory dependency at import time
+        # Minimal JSON encoding to avoid pulling in extra deps
+        # We intentionally avoid orjson here to keep logger standalone.
         import json
 
-        return json.dumps(obj, ensure_ascii=False)
+        return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
 
 
 class ColorFormatter(logging.Formatter):
-    """Simple ANSI-colored formatter for console output."""
+    """Human-friendly colored logs for local dev."""
 
     COLORS = {
-        "DEBUG": "\033[37m",     # white
-        "INFO": "\033[36m",      # cyan
-        "WARNING": "\033[33m",   # yellow
-        "ERROR": "\033[31m",     # red
-        "CRITICAL": "\033[41m",  # red bg
+        "DEBUG": "\033[36m",   # Cyan
+        "INFO": "\033[32m",    # Green
+        "WARNING": "\033[33m", # Yellow
+        "ERROR": "\033[31m",   # Red
+        "CRITICAL": "\033[35m" # Magenta
     }
     RESET = "\033[0m"
 

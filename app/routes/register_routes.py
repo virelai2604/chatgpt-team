@@ -33,3 +33,4 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(responses_router)
     app.include_router(vector_stores_router)
     app.include_router(videos_router)
+    
