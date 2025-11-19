@@ -1,155 +1,262 @@
-# app/api/forward_openai.py
 """
-forward_openai.py — upstream forwarder for the ChatGPT Team Relay.
+OpenAI upstream forwarder for the ChatGPT Team Relay.
 
-Responsibilities:
-  - Take the incoming FastAPI Request.
-  - Build the outbound HTTP request to the OpenAI API:
-      • Preserve path and query string.
-      • Override auth headers using env vars (OPENAI_API_KEY / OPENAI_ORG_ID).
-      • Forward JSON bodies as JSON.
-      • Forward multipart/form-data bodies (e.g. /v1/files) as raw bytes.
-  - Return a FastAPI Response mirroring upstream status, headers, and body.
+This module exposes a single entrypoint:
+
+    forward_openai_request(request: fastapi.Request) -> fastapi.Response
+
+It is used by all local `/v1/*` routes (responses, files, embeddings, etc.)
+to transparently proxy requests to the real OpenAI API while:
+
+- Re-using the original HTTP method, path, query string, and body.
+- Rebuilding headers safely (no hop-by-hop headers, fixed Authorization).
+- Supporting both JSON and multipart/form-data bodies.
+- Optionally streaming responses (SSE/chunked) when `stream` is requested.
+
+The implementation is intentionally generic and does NOT depend on any
+application-specific settings object so that it can be dropped into a
+minimal FastAPI environment.
 """
 
 from __future__ import annotations
 
+import json
 import os
-from typing import Any, Dict, Optional
+from typing import AsyncIterator, Dict, Iterable, Tuple
 
 import httpx
-from fastapi import Request, Response
+from fastapi import HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
+
+# ---------------------------------------------------------------------------
+# Basic environment configuration
+# ---------------------------------------------------------------------------
 
 
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com").rstrip("/")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
-RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "120"))
-
-
-async def forward_openai_request(
-    request: Request,
-    method: Optional[str] = None,
-    json: Optional[Dict[str, Any]] = None,
-    raw_body: Optional[bytes] = None,
-    content_type: Optional[str] = None,
-) -> Response:
+def _get_upstream_base() -> str:
     """
-    Generic forwarder used by all /v1/* routers.
+    Return the upstream base URL (without trailing slash).
 
-    Args:
-        request: Incoming FastAPI Request.
-        method:  Optional override for HTTP method (defaults to request.method).
-        json:    JSON payload to send upstream.
-        raw_body:Raw bytes to send upstream (e.g. multipart/form-data).
-        content_type: Explicit Content-Type (e.g. multipart/form-data;boundary=...).
+    OPENAI_API_BASE is expected to be something like:
+        https://api.openai.com
 
-    Behavior:
-        - Upstream URL: OPENAI_API_BASE + request.url.path + (query string).
-        - Auth: Uses OPENAI_API_KEY / OPENAI_ORG_ID, ignoring caller's Authorization.
-        - Body:
-            • If raw_body is not None → HTTP body = raw bytes.
-            • Else if json is not None → HTTP body = JSON.
-            • Else → No body.
-        - Returns: FastAPI Response with upstream status_code, headers, and body.
+    We intentionally do NOT append `/v1` here because the incoming path
+    already includes `/v1/...`.
     """
-    if not OPENAI_API_KEY:
-        # Hard fail if relay has no key configured
-        return Response(
-            content=b'{"error": "Relay missing OPENAI_API_KEY"}',
-            media_type="application/json",
-            status_code=500,
-        )
+    base = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
+    return base.rstrip("/")
 
-    # -----------------------------------------------------------------------
-    # Resolve method and upstream URL
-    # -----------------------------------------------------------------------
-    upstream_method = (method or request.method).upper()
 
-    path = request.url.path  # e.g. "/v1/responses", "/v1/files"
+def _get_upstream_key() -> str:
+    """
+    Return the OpenAI API key that will be sent to the upstream service.
+
+    - We NEVER forward the caller's Authorization header.
+    - Instead, we always inject OPENAI_API_KEY from the environment.
+    """
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise RuntimeError("OPENAI_API_KEY is not configured in the environment.")
+    return key
+
+
+def _get_timeout_seconds() -> float:
+    """Return the timeout used for upstream HTTP requests."""
+    # Use RELAY_TIMEOUT if set; fall back to PROXY_TIMEOUT, then a sane default.
+    for env_name in ("RELAY_TIMEOUT", "PROXY_TIMEOUT"):
+        val = os.getenv(env_name)
+        if val:
+            try:
+                return float(val)
+            except ValueError:
+                pass
+    return 120.0
+
+
+# A single shared AsyncClient is sufficient and avoids connection churn.
+_UPSTREAM_CLIENT: httpx.AsyncClient | None = None
+
+
+def _get_httpx_client() -> httpx.AsyncClient:
+    global _UPSTREAM_CLIENT
+    if _UPSTREAM_CLIENT is None or _UPSTREAM_CLIENT.is_closed:
+        _UPSTREAM_CLIENT = httpx.AsyncClient(timeout=_get_timeout_seconds())
+    return _UPSTREAM_CLIENT
+
+
+# ---------------------------------------------------------------------------
+# Helper utilities
+# ---------------------------------------------------------------------------
+
+
+_HOP_BY_HOP_HEADERS = {
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
+    "host",
+    "content-length",
+}
+
+
+def _clean_request_headers(incoming: Iterable[Tuple[str, str]]) -> Dict[str, str]:
+    """
+    Take the incoming ASGI headers and return a sanitized dict suitable
+    for sending to httpx / the upstream OpenAI API.
+    """
+    headers: Dict[str, str] = {}
+    for name, value in incoming:
+        lname = name.lower()
+        if lname in _HOP_BY_HOP_HEADERS:
+            continue
+        # For most headers we simply keep the last value.
+        headers[name] = value
+
+    # Inject upstream Authorization, regardless of what the caller sent.
+    upstream_key = _get_upstream_key()
+    headers["Authorization"] = f"Bearer {upstream_key}"
+
+    # If the user configured organization / project, pass them through.
+    org = os.getenv("OPENAI_ORG_ID") or os.getenv("OPENAI_ORGANIZATION")
+    if org:
+        headers.setdefault("OpenAI-Organization", org)
+
+    project = os.getenv("OPENAI_PROJECT")
+    if project:
+        headers.setdefault("OpenAI-Project", project)
+
+    return headers
+
+
+def _should_stream(headers: Dict[str, str], body: bytes) -> bool:
+    """
+    Decide whether the upstream request is asking for a streaming response.
+
+    For the /v1/responses and similar endpoints, OpenAI uses a JSON field
+    named `stream`. It may be:
+        - true / false
+        - an object with a `mode` field (e.g. { "mode": "updates" })
+
+    Any truthy `stream` value means "use SSE / streaming".
+    """
+    if not body:
+        return False
+
+    content_type = headers.get("Content-Type") or headers.get("content-type") or ""
+    if "application/json" not in content_type.lower():
+        return False
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return False
+
+    if isinstance(payload, dict) and payload.get("stream"):
+        return True
+
+    return False
+
+
+def _clean_response_headers(upstream_headers: httpx.Headers) -> Dict[str, str]:
+    """
+    Strip hop-by-hop headers from the upstream response and return a plain dict.
+    """
+    cleaned: Dict[str, str] = {}
+    for name, value in upstream_headers.items():
+        lname = name.lower()
+        if lname in _HOP_BY_HOP_HEADERS:
+            continue
+        cleaned[name] = value
+    return cleaned
+
+
+# ---------------------------------------------------------------------------
+# Main proxy entrypoint
+# ---------------------------------------------------------------------------
+
+
+async def forward_openai_request(request: Request) -> Response:
+    """
+    Generic forwarder: take the incoming FastAPI request and proxy it
+    to the real OpenAI API with minimal transformation.
+
+    This function is suitable for wiring directly into routes such as:
+        - POST   /v1/responses
+        - POST   /v1/embeddings
+        - POST   /v1/files
+        - GET    /v1/files
+        - DELETE /v1/files/{file_id}
+        - etc.
+    """
+    client = _get_httpx_client()
+    upstream_base = _get_upstream_base()
+
+    # Path and querystring are forwarded 1:1.
+    path = request.url.path
     query = request.url.query
+    upstream_url = f"{upstream_base}{path}"
     if query:
-        upstream_url = f"{OPENAI_API_BASE}{path}?{query}"
-    else:
-        upstream_url = f"{OPENAI_API_BASE}{path}"
+        upstream_url = f"{upstream_url}?{query}"
 
-    # -----------------------------------------------------------------------
-    # Build headers (override auth, drop hop-by-hop)
-    # -----------------------------------------------------------------------
-    incoming_headers = dict(request.headers)
+    method = request.method.upper()
 
-    upstream_headers: Dict[str, str] = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-    }
-    if OPENAI_ORG_ID:
-        upstream_headers["OpenAI-Organization"] = OPENAI_ORG_ID
+    # Read the full body ONCE from the ASGI request.
+    try:
+        body = await request.body()
+    except Exception as exc:  # pragma: no cover - extremely rare
+        raise HTTPException(status_code=400, detail=f"Failed to read request body: {exc}") from exc
 
-    hop_by_hop = {
-        "connection",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "te",
-        "trailers",
-        "transfer-encoding",
-        "upgrade",
-    }
+    # Build sanitized headers + injected Authorization.
+    headers = _clean_request_headers(request.headers.raw)
 
-    for k, v in incoming_headers.items():
-        lk = k.lower()
-        if lk in hop_by_hop:
-            continue
-        if lk in {"authorization", "openai-organization"}:
-            # Always use relay's credentials, not caller's
-            continue
-        if lk == "content-type":
-            # We'll set Content-Type based on body below
-            continue
-        upstream_headers.setdefault(k, v)
+    # Decide whether to use a streaming response.
+    stream_mode = _should_stream(headers, body)
 
-    # Content-Type
-    if content_type:
-        upstream_headers["Content-Type"] = content_type
-    elif json is not None:
-        upstream_headers.setdefault("Content-Type", "application/json")
+    try:
+        if stream_mode:
+            # Streaming / SSE branch – do not buffer the upstream response.
+            async with client.stream(
+                method,
+                upstream_url,
+                headers=headers,
+                content=body,
+            ) as upstream_resp:
+                resp_headers = _clean_response_headers(upstream_resp.headers)
+                status_code = upstream_resp.status_code
 
-    # -----------------------------------------------------------------------
-    # Outbound request via httpx
-    # -----------------------------------------------------------------------
-    async with httpx.AsyncClient(timeout=RELAY_TIMEOUT) as client:
-        if raw_body is not None:
-            upstream_resp = await client.request(
-                method=upstream_method,
-                url=upstream_url,
-                headers=upstream_headers,
-                content=raw_body,
-            )
-        elif json is not None:
-            upstream_resp = await client.request(
-                method=upstream_method,
-                url=upstream_url,
-                headers=upstream_headers,
-                json=json,
-            )
-        else:
-            upstream_resp = await client.request(
-                method=upstream_method,
-                url=upstream_url,
-                headers=upstream_headers,
-            )
+                async def _iter_stream() -> AsyncIterator[bytes]:
+                    async for chunk in upstream_resp.aiter_raw():
+                        if chunk:
+                            yield chunk
 
-    # -----------------------------------------------------------------------
-    # Build FastAPI Response with upstream data
-    # -----------------------------------------------------------------------
-    resp_headers: Dict[str, str] = {}
-    for k, v in upstream_resp.headers.items():
-        if k.lower() in hop_by_hop:
-            continue
-        # Let FastAPI manage Content-Length if omitted
-        resp_headers[k] = v
+                return StreamingResponse(
+                    _iter_stream(),
+                    status_code=status_code,
+                    headers=resp_headers,
+                )
 
+        # Non-streaming: simple request/response with full buffering.
+        upstream_resp = await client.request(
+            method,
+            upstream_url,
+            headers=headers,
+            content=body if body else None,
+        )
+    except httpx.HTTPError as exc:
+        # Network-level / protocol issues talking to OpenAI.
+        raise HTTPException(
+            status_code=502,
+            detail=f"Upstream OpenAI request failed: {exc}",
+        ) from exc
+
+    resp_headers = _clean_response_headers(upstream_resp.headers)
     return Response(
         content=upstream_resp.content,
         status_code=upstream_resp.status_code,
         headers=resp_headers,
+        media_type=resp_headers.get("content-type"),
     )
