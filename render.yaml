@@ -69,8 +69,7 @@ services:
       # These are configured in Render dashboard, not committed to Git.
       - key: OPENAI_API_KEY
         sync: false
-      - key: OPENAI_ORG_ID
-        sync: false
+      
 
       # --- Defaults ---
       - key: DEFAULT_MODEL

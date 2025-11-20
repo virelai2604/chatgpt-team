@@ -91,7 +91,6 @@ def create_app() -> FastAPI:
     # Core configuration
     openai_api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
     openai_api_key = os.getenv("OPENAI_API_KEY", "")
-    openai_org_id = os.getenv("OPENAI_ORG_ID", "")
     default_model = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
     validation_schema_path = os.getenv("VALIDATION_SCHEMA_PATH", "")
     tools_manifest_path = os.getenv(
@@ -109,7 +108,6 @@ def create_app() -> FastAPI:
     # Store config on app.state for use by other modules
     app.state.OPENAI_API_BASE = openai_api_base
     app.state.OPENAI_API_KEY = openai_api_key
-    app.state.OPENAI_ORG_ID = openai_org_id
     app.state.DEFAULT_MODEL = default_model
     app.state.ENVIRONMENT = environment
     app.state.VALIDATION_SCHEMA_PATH = validation_schema_path

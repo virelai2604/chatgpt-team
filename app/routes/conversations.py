@@ -39,7 +39,7 @@ router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
 #  • Paths below explicitly append /v1/conversations...
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID", "")
+
 
 RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "60"))
 
@@ -183,9 +183,7 @@ def build_headers() -> Dict[str, str]:
         "User-Agent": USER_AGENT,
         "Content-Type": "application/json",
     }
-    if OPENAI_ORG_ID:
-        headers["OpenAI-Organization"] = OPENAI_ORG_ID
-    return headers
+
 
 
 def conversations_base_url() -> str:

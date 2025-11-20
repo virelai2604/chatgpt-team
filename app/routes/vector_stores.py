@@ -14,7 +14,6 @@ from app.utils.logger import relay_log as logger
 
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_ORG_ID = os.getenv("OPENAI_ORG_ID")
 OPENAI_ASSISTANTS_BETA = os.getenv("OPENAI_ASSISTANTS_BETA", "assistants=v2")
 PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", "120"))
 
@@ -50,11 +49,6 @@ def _build_headers(request: Request) -> Dict[str, str]:
         "Content-Type": "application/json",
     }
 
-    # Organization – prefer request header, then env
-    request_org = request.headers.get("OpenAI-Organization")
-    org_id = request_org or OPENAI_ORG_ID
-    if org_id:
-        headers["OpenAI-Organization"] = org_id
 
     # Assistants / vector store beta header – prefer incoming, else env
     incoming_beta = request.headers.get("OpenAI-Beta")
