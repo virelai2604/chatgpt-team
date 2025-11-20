@@ -1,77 +1,56 @@
 # app/routes/files.py
 
-from fastapi import APIRouter, Request, UploadFile, File, Form
-from fastapi.responses import Response
+from fastapi import APIRouter, Request
 
-from app.api.forward_openai import (
-    forward_openai_request,
-    forward_multipart_to_openai,
-)
+from app.api.forward_openai import forward_openai_request
 
-router = APIRouter(prefix="/v1/files", tags=["files"])
+router = APIRouter()
 
 
-@router.get("")
-async def list_files(request: Request) -> Response:
+@router.get("/v1/files", tags=["files"])
+async def list_files(request: Request):
     """
-    Mirror OpenAI GET /v1/files
+    List files – simple passthrough to OpenAI /v1/files.
     """
-    return await forward_openai_request(
-        request=request,
-        upstream_path="/files",
-        method="GET",
-    )
+    return await forward_openai_request(request)
 
 
-@router.post("")
-async def upload_file(
-    request: Request,
-    file: UploadFile = File(...),
-    purpose: str = Form(...),
-) -> Response:
+@router.post("/v1/files", tags=["files"])
+async def create_file(request: Request):
     """
-    Mirror OpenAI POST /v1/files (multipart upload).
+    Create/upload a file.
+
+    Important: we do NOT declare UploadFile/Form parameters here.
+    That would force FastAPI to validate the multipart body and can
+    produce a 422 before we ever hit the relay.
+
+    Instead, we pass the raw multipart/form-data body through to OpenAI.
     """
-    return await forward_multipart_to_openai(
-        request=request,
-        upstream_path="/files",
-        file=file,
-        purpose=purpose,
-    )
+    return await forward_openai_request(request)
 
 
-@router.get("/{file_id}")
-async def retrieve_file(file_id: str, request: Request) -> Response:
+@router.get("/v1/files/{file_id}", tags=["files"])
+async def retrieve_file(request: Request, file_id: str):
     """
-    Mirror OpenAI GET /v1/files/{file_id}
+    Retrieve file metadata.
     """
-    return await forward_openai_request(
-        request=request,
-        upstream_path=f"/files/{file_id}",
-        method="GET",
-    )
+    return await forward_openai_request(request)
 
 
-@router.delete("/{file_id}")
-async def delete_file(file_id: str, request: Request) -> Response:
+@router.delete("/v1/files/{file_id}", tags=["files"])
+async def delete_file(request: Request, file_id: str):
     """
-    Mirror OpenAI DELETE /v1/files/{file_id}
+    Delete a file.
     """
-    return await forward_openai_request(
-        request=request,
-        upstream_path=f"/files/{file_id}",
-        method="DELETE",
-    )
+    return await forward_openai_request(request)
 
 
-@router.get("/{file_id}/content")
-async def download_file(file_id: str, request: Request) -> Response:
+@router.get("/v1/files/{file_id}/content", tags=["files"])
+async def download_file_content(request: Request, file_id: str):
     """
-    Mirror OpenAI GET /v1/files/{file_id}/content (binary payload).
+    Download full file content.
+
+    We still use the same generic forwarder; it will proxy the binary
+    response body and headers back to the client.
     """
-    return await forward_openai_request(
-        request=request,
-        upstream_path=f"/files/{file_id}/content",
-        method="GET",
-        stream_binary=True,
-    )
+    return await forward_openai_request(request)
