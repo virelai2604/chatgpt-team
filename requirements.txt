@@ -1,18 +1,19 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
-
 httpx==0.27.2
+
 pydantic==2.9.2
 pydantic-settings==2.5.2
 python-dotenv==1.0.1
-python-multipart==0.0.9
+
+# Fixed security issue (GHSA-59g5-xgcq-4qw3):
+# https://github.com/Kludex/python-multipart/security/advisories
+python-multipart==0.0.18
 
 websockets==12.0
 sse-starlette==2.1.2
 
-# Align with "openai-python 2.8.x" as ground truth
 openai>=2.8.0,<3.0.0
-
 pyyaml==6.0.2
 loguru==0.7.2
 orjson==3.10.7
