@@ -1,5 +1,3 @@
-# app/api/forward_openai.py
-
 from __future__ import annotations
 
 import os
@@ -52,6 +50,55 @@ def _normalize_upstream_path(request: Request, upstream_path: Optional[str]) -> 
     return path
 
 
+def _build_upstream_headers(request: Request) -> Dict[str, str]:
+    """
+    Build a clean set of headers for the upstream OpenAI API.
+
+    Rules:
+    - Always enforce Authorization from OPENAI_API_KEY (never trust client).
+    - Forward a safe subset of client headers:
+        * content-type, accept
+        * openai-* headers EXCEPT openai-organization
+        * x-request-id
+    - Do NOT set OpenAI-Organization at all (we assume project keys).
+    """
+    upstream_headers: Dict[str, str] = {}
+
+    # 1) Forward a minimal, safe subset of client headers.
+    for name, value in request.headers.items():
+        lname = name.lower()
+
+        # Basic content negotiation headers
+        if lname in ("content-type", "accept"):
+            upstream_headers[name] = value
+
+        # Forward OpenAI feature / beta flags, but never organization.
+        elif lname.startswith("openai-"):
+            if lname != "openai-organization":
+                upstream_headers[name] = value
+
+        # Preserve client request-id for tracing if present.
+        elif lname == "x-request-id":
+            upstream_headers[name] = value
+
+    # 2) Enforce API key from environment (mandatory).
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        # If the relay is misconfigured, fail fast and clearly.
+        raise HTTPException(
+            status_code=500,
+            detail="Relay misconfiguration: OPENAI_API_KEY is not set.",
+        )
+
+    upstream_headers["Authorization"] = f"Bearer {api_key}"
+
+    # 3) Remove hop-by-hop and length/encoding headers if they slipped through.
+    for h in ("host", "content-length", "connection"):
+        upstream_headers.pop(h, None)
+
+    return upstream_headers
+
+
 async def forward_openai_request(
     request: Request,
     upstream_path: Optional[str] = None,
@@ -92,22 +139,8 @@ async def forward_openai_request(
     # Raw body – works for JSON, multipart/form-data, and binary
     body: bytes = await request.body()
 
-    # Clone incoming headers
-    upstream_headers: Dict[str, str] = dict(request.headers)
-
-    # Enforce API key / org from env rather than trusting client
-    api_key = os.getenv("OPENAI_API_KEY")
-    if api_key:
-        upstream_headers["authorization"] = f"Bearer {api_key}"
-
-    org_id = os.getenv("OPENAI_ORG_ID")
-    if org_id:
-        upstream_headers["OpenAI-Organization"] = org_id
-
-    # Remove hop-by-hop headers; httpx/upstream will set correct values
-    for h in ("host", "content-length", "connection"):
-        upstream_headers.pop(h, None)
-
+    # Build upstream headers with our policy.
+    upstream_headers = _build_upstream_headers(request)
     request_id = upstream_headers.get("x-request-id")
 
     logger.debug(
@@ -143,7 +176,7 @@ async def forward_openai_request(
             detail="Upstream OpenAI API request failed",
         )
 
-    # Copy headers back, minus hop-by-hop
+    # Copy headers back, minus hop-by-hop and encoding/length that httpx has already handled.
     resp_headers: Dict[str, str] = dict(upstream_response.headers)
     for h in (
         "connection",
@@ -154,6 +187,8 @@ async def forward_openai_request(
         "trailers",
         "transfer-encoding",
         "upgrade",
+        "content-encoding",  # avoid double-decompression in client
+        "content-length",    # length no longer matches decompressed body
     ):
         resp_headers.pop(h, None)
 

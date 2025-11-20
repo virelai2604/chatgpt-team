@@ -10,7 +10,6 @@
   📄 pytest.ini
   📄 render.yaml
   📄 requirements.txt
-  📄 run_uvicorn_debug.sh
   📄 sample.txt
   📄 sample_direct.txt
   📄 sample_relay.txt
@@ -74,11 +73,12 @@
   📁 docs
     📄 README.md
   📁 logs
-    📄 test_summary.tx
-    📄 test_summary.txt
+    📄 smoke_routes_local_20251120-192805.json
   📁 schemas
     📄 __init__.py
     📄 openapi.yaml
+  📁 scripts
+    📄 smoke_routes_local.py
   📁 static
     📁 .well-known
       📄 __init__.py
@@ -92,5 +92,6 @@
     📄 test_health_and_tools.py
     📄 test_realtime_and_infra.py
     📄 test_responses_and_conversations.py
+    📄 test_responses_and_embeddings_sdk.py
     📄 test_validation_middleware.py
     📁 downloads

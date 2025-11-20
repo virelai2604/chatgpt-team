@@ -1,0 +1,48 @@
+{
+  "base_url": "http://127.0.0.1:8080",
+  "health": {
+    "object": "health",
+    "status": "ok",
+    "environment": "local",
+    "default_model": "gpt-4o-mini",
+    "openai_api_base": "https://api.openai.com"
+  },
+  "tools": {
+    "status_code": 200,
+    "keys": [
+      "object",
+      "tools"
+    ]
+  },
+  "actions": {
+    "ping": {
+      "object": "action.ping",
+      "status": "ok",
+      "relay_name": "ChatGPT Team Relay (local)",
+      "environment": "local"
+    },
+    "relay_info": {
+      "relay_name": "ChatGPT Team Relay (local)",
+      "environment": "local",
+      "default_model": "gpt-4o-mini"
+    }
+  },
+  "models_error": "DecodingError('Error -3 while decompressing data: incorrect header check')",
+  "responses_error": "DecodingError('Error -3 while decompressing data: incorrect header check')",
+  "embeddings_error": "DecodingError('Error -3 while decompressing data: incorrect header check')",
+  "files_and_vector_store_error": "DecodingError('Error -3 while decompressing data: incorrect header check')",
+  "images_error": "HTTPStatusError(\"Client error '400 Bad Request' for url 'http://127.0.0.1:8080/v1/images/generations'\\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\")",
+  "videos_error": "HTTPStatusError(\"Client error '400 Bad Request' for url 'http://127.0.0.1:8080/v1/videos'\\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400\")",
+  "realtime": {
+    "status_code": 200,
+    "session_id": "sess_Cdy3VsIDLGkFaeQ90lIgR"
+  },
+  "conversations": {
+    "conversation_id": "local-1763641682.548714",
+    "list_status_code": 200,
+    "retrieve_title": "smoke_routes_local conversation",
+    "updated_title": "smoke_routes_local conversation (updated)",
+    "append_message_status": 200,
+    "deleted_flag": true
+  }
+}
