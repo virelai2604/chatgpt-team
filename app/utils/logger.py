@@ -1,151 +1,125 @@
+from __future__ import annotations
+
+import json
 import logging
 import os
-from datetime import datetime
-from typing import Any, Dict
+import sys
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
+# ---------------------------------------------------------------------------
+# Environment configuration
+# ---------------------------------------------------------------------------
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_FORMAT = os.getenv("LOG_FORMAT", "structured").lower()  # "structured" or "plain"
+LOG_COLOR = os.getenv("LOG_COLOR", "false").lower() == "true"
+ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("APP_MODE", "local"))
 
 
 # ---------------------------------------------------------------------------
-# Environment-driven logging configuration
+# JSON formatter for relay logs
 # ---------------------------------------------------------------------------
-
-LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
-
-# Support both:
-#   - LOG_JSON=true|false  (used in .env)
-#   - LOG_FORMAT=plain|json (used in render.yaml)
-_log_json_raw = os.getenv("LOG_JSON")
-_log_format_raw = os.getenv("LOG_FORMAT")
-
-if _log_json_raw is not None:
-    # LOG_JSON wins when explicitly set
-    lowered = _log_json_raw.lower()
-    if lowered in {"true", "1", "yes"}:
-        LOG_FORMAT = "json"
-    elif lowered in {"false", "0", "no"}:
-        LOG_FORMAT = "plain"
-    else:
-        # Fallback to LOG_FORMAT or default
-        LOG_FORMAT = (_log_format_raw or "plain").lower()
-else:
-    # No LOG_JSON defined → use LOG_FORMAT or default
-    LOG_FORMAT = (_log_format_raw or "plain").lower()
-
-LOG_COLOR = os.getenv("LOG_COLOR", "true").lower() == "true"
-
-# Ensure logs directory exists (ephemeral on Render but still useful)
-os.makedirs("logs", exist_ok=True)
-
-# Log file path (ephemeral but fine for debugging)
-LOG_FILE_PATH = os.path.join("logs", "relay.log")
-
 
 class JsonFormatter(logging.Formatter):
-    """Very small JSON-line formatter for structured logs."""
+    """
+    Minimal JSON formatter to match the relay-style logs you see like:
 
-    def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
+      {"ts":"2025-11-20T00:38:09.440496Z",
+       "level":"INFO",
+       "logger":"relay",
+       "message":"relay logging initialized",
+       "path":"startup",
+       "environment":"production"}
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Base payload
         payload: Dict[str, Any] = {
-            "ts": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
+            "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
+            "environment": ENVIRONMENT,
         }
 
-        # Optional extras that tests / operators may care about
-        if record.__dict__.get("request_id"):
-            payload["request_id"] = record.__dict__["request_id"]
-        if record.__dict__.get("path"):
-            payload["path"] = record.__dict__["path"]
+        # Optionally include a "path" field if the record has it
+        if hasattr(record, "path"):
+            payload["path"] = getattr(record, "path")
 
+        # Include exception info if present
         if record.exc_info:
-            payload["exc_type"] = record.exc_info[0].__name__  # type: ignore[index]
-        return self._to_json(payload)
+            payload["exc_info"] = self.formatException(record.exc_info)
 
-    @staticmethod
-    def _to_json(obj: Dict[str, Any]) -> str:
-        # Minimal JSON encoding to avoid pulling in extra deps
-        # We intentionally avoid orjson here to keep logger standalone.
-        import json
-
-        return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+        return json.dumps(payload, ensure_ascii=False)
 
 
-class ColorFormatter(logging.Formatter):
-    """Human-friendly colored logs for local dev."""
+# ---------------------------------------------------------------------------
+# Handler + setup helpers
+# ---------------------------------------------------------------------------
 
-    COLORS = {
-        "DEBUG": "\033[36m",   # Cyan
-        "INFO": "\033[32m",    # Green
-        "WARNING": "\033[33m", # Yellow
-        "ERROR": "\033[31m",   # Red
-        "CRITICAL": "\033[35m" # Magenta
-    }
-    RESET = "\033[0m"
+def _build_handler() -> logging.Handler:
+    """
+    Build a stdout handler using either JSON or plain formatting.
+    """
+    handler = logging.StreamHandler(sys.stdout)
 
-    def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
-        base = (
-            f"[{datetime.fromtimestamp(record.created).isoformat()}] "
-            f"{record.levelname:8s} {record.name}: {record.getMessage()}"
+    if LOG_FORMAT in ("structured", "json"):
+        formatter: logging.Formatter = JsonFormatter()
+    else:
+        # Simple plain-text fallback if you ever change LOG_FORMAT
+        formatter = logging.Formatter(
+            fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S%z",
         )
-        if LOG_COLOR:
-            color = self.COLORS.get(record.levelname, "")
-            return f"{color}{base}{self.RESET}"
-        return base
 
-
-def _build_formatter_for_handler(is_stream: bool) -> logging.Formatter:
-    """Decide which formatter to use for a handler."""
-    if LOG_FORMAT == "json":
-        return JsonFormatter()
-    if is_stream:
-        return ColorFormatter()
-    # Fallback: plain text for files
-    return logging.Formatter(
-        "[%(asctime)s] %(levelname)s %(name)s: %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S",
-    )
+    handler.setFormatter(formatter)
+    return handler
 
 
 def setup_logging() -> logging.Logger:
     """
-    Initialize structured relay logging.
+    Configure root logging once, and return the main relay logger.
 
-    Idempotent: safe to call multiple times.
+    Used by app.main at startup.
     """
     root = logging.getLogger()
-    # Avoid duplicating handlers in reload / tests
-    if getattr(root, "_relay_logging_configured", False):
+
+    # If already configured, just return the relay logger
+    if root.handlers:
         return logging.getLogger("relay")
 
-    root.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+    # Configure root logger
+    root.setLevel(LOG_LEVEL)
 
-    # Clear any default basicConfig handlers
-    for h in list(root.handlers):
-        root.removeHandler(h)
+    handler = _build_handler()
+    root.addHandler(handler)
 
-    # File handler
-    file_handler = logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")
-    file_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-    file_handler.setFormatter(_build_formatter_for_handler(is_stream=False))
-    root.addHandler(file_handler)
-
-    # Console handler (stderr)
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-    stream_handler.setFormatter(_build_formatter_for_handler(is_stream=True))
-    root.addHandler(stream_handler)
-
-    root._relay_logging_configured = True  # type: ignore[attr-defined]
-
+    # Ensure our primary named logger exists
     relay_logger = logging.getLogger("relay")
-    relay_logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-    relay_logger.info("relay logging initialized", extra={"path": "startup"})
+    relay_logger.setLevel(LOG_LEVEL)
 
     return relay_logger
 
 
-# Main logger instance for the relay
-relay_log = setup_logging()
+def get_logger(name: str) -> logging.Logger:
+    """
+    Get a named logger, ensuring logging is initialized first.
 
-# Backward compatibility aliases
-logger = relay_log
-log = relay_log
+    Used by forwarders and routes:
+      from app.utils.logger import get_logger
+      log = get_logger("relay.orchestrator")
+    """
+    # If no handlers yet, initialize logging (safe to call multiple times)
+    if not logging.getLogger().handlers:
+        setup_logging()
+    return logging.getLogger(name)
+
+
+# ---------------------------------------------------------------------------
+# Default relay logger alias
+# ---------------------------------------------------------------------------
+
+# This is what conversations.py expects:
+#   from app.utils.logger import relay_log as log
+relay_log: logging.Logger = get_logger("relay")
