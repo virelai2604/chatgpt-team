@@ -22,6 +22,7 @@ from typing import List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, PlainTextResponse
 
@@ -104,6 +105,16 @@ def create_app() -> FastAPI:
         docs_url=None,
         redoc_url=None,
     )
+    
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    STATIC_ROOT = BASE_DIR / "static"
+
+    # Serve the Actions / plugin manifest
+    app.mount(
+        "/.well-known",
+        StaticFiles(directory=STATIC_ROOT / ".well-known"),
+        name="well_known",
+)
 
     # Store config on app.state for use by other modules
     app.state.OPENAI_API_BASE = openai_api_base
