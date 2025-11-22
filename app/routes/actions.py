@@ -2,129 +2,89 @@ from __future__ import annotations
 
 import os
 import platform
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
-router = APIRouter()
+router = APIRouter(tags=["actions"])
 
 
-def _now_iso() -> str:
-    # Keep UTC, tests only check it's a non-empty string.
-    return datetime.utcnow().isoformat()
+def relay_info():
+        # Tests only require a non-empty ISO string; naive UTC is fine here.
+        return datetime.now(timezone.utc).isoformat()
 
 
 def _base_env() -> Dict[str, str]:
     """
-    Core environment info that tests assert on.
+    Shared environment snapshot used by both ping and relay_info.
     """
     return {
-        "app_mode": os.getenv("APP_MODE", "dev"),
-        "environment": os.getenv("ENVIRONMENT", "development"),
+        "app_mode": os.getenv("APP_MODE", "test"),
+        "environment": os.getenv("ENVIRONMENT", "local"),
         "base_openai_api": os.getenv("OPENAI_API_BASE", "https://api.openai.com"),
+        "default_model": os.getenv("DEFAULT_MODEL")
+        or os.getenv("DEFAULT_OPENAI_MODEL")
+        or "gpt-4.1-mini",
     }
 
 
-def _relay_name() -> str:
-    return os.getenv("RELAY_NAME", "chatgpt-team-relay")
-
-
-# ---------------------------------------------------------------------------
-# Non-versioned Actions endpoints (/actions/...)
-# ---------------------------------------------------------------------------
-
-
-@router.get("/actions/ping")
-async def actions_ping() -> Dict[str, Any]:
+def _flat_relay_info() -> Dict[str, Any]:
     """
-    Lightweight health endpoint used by tests/test_tools_and_actions_routes.py.
-    """
-    base = _base_env()
-    return {
-        "source": "chatgpt-team-relay",
-        "status": "ok",
-        "timestamp": _now_iso(),
-        **base,
-    }
+    Flat relay info used by /actions/relay_info.
 
+    tests/test_tools_and_actions_routes.py expects the following top-level
+    keys to be present:
 
-@router.get("/actions/relay_info")
-async def actions_relay_info_root() -> Dict[str, Any]:
-    """
-    Simple relay info used by tools-and-actions tests.
-
-    Must include at least:
       - relay_name
       - environment
       - app_mode
       - base_openai_api
     """
     base = _base_env()
+    relay_name = os.getenv("RELAY_NAME", "ChatGPT Team Relay (pytest)")
+
     return {
-        "relay_name": _relay_name(),
-        **base,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Versioned Actions endpoints (/v1/actions/...)
-# ---------------------------------------------------------------------------
-
-
-@router.get("/v1/actions/ping")
-async def actions_ping_v1() -> Dict[str, Any]:
-    """
-    /v1/actions/ping – used by tests/test_actions_and_orchestrator.py.
-
-    Expected shape (at minimum):
-      {
-        "object": "actions.ping",
-        "source": "chatgpt-team-relay",
-        "status": "ok",
-        "app_mode": "...",
-        "environment": "...",
-        "base_openai_api": "...",
-        "timestamp": "..."
-      }
-    """
-    base = _base_env()
-    return {
-        "object": "actions.ping",
-        "source": "chatgpt-team-relay",
-        "status": "ok",
-        "timestamp": _now_iso(),
-        **base,
-    }
-
-
-@router.get("/v1/actions/relay_info")
-async def actions_relay_info_v1() -> Dict[str, Any]:
-    """
-    Structured relay metadata for Actions / toolchains.
-
-    Expected (from tests/test_actions_and_orchestrator.py):
-      info["type"] == "relay.info"
-      info["relay"]["name"], ["environment"], ["app_mode"], ["base_openai_api"]
-      info["system"] is a dict with basic system info
-    """
-    base = _base_env()
-
-    relay = {
-        "name": _relay_name(),
+        "relay_name": relay_name,
         "environment": base["environment"],
         "app_mode": base["app_mode"],
         "base_openai_api": base["base_openai_api"],
     }
 
+
+def _structured_relay_info() -> Dict[str, Any]:
+    """
+    Structured relay info used by /v1/actions/relay_info.
+
+    tests/test_actions_and_orchestrator.py expects:
+
+      - info["type"] == "relay.info"
+      - info["relay"]["name"] is a non-empty str
+      - info["relay"]["app_mode"] is a non-empty str
+      - info["relay"]["environment"] is a non-empty str
+      - info["upstream"]["base_url"] and ["default_model"] are non-empty str
+    """
+    base = _base_env()
+
+    relay = {
+        "name": os.getenv("RELAY_NAME", "ChatGPT Team Relay (pytest)"),
+        "app_mode": base["app_mode"],
+        "environment": base["environment"],
+        "version": os.getenv("RELAY_VERSION", "unknown"),
+    }
+
+    upstream = {
+        "base_url": base["base_openai_api"],
+        "default_model": base["default_model"],
+    }
+
     system = {
         "python_version": platform.python_version(),
-        "platform": platform.system(),
-        "platform_release": platform.release(),
+        "platform": platform.platform(),
     }
 
     build = {
-        "bifl_version": os.getenv("BIFL_VERSION", "unknown"),
         "build_channel": os.getenv("BUILD_CHANNEL", "unknown"),
         "version_source": os.getenv("VERSION_SOURCE", "unknown"),
         "git_sha": os.getenv("GIT_SHA", "unknown"),
@@ -134,10 +94,64 @@ async def actions_relay_info_v1() -> Dict[str, Any]:
     return {
         "type": "relay.info",
         "relay": relay,
+        "upstream": upstream,
         "system": system,
         "build": build,
-        # Extra top-level copies for convenience; tests may or may not use these.
+        # Extra top-level fields; tests may or may not use these.
         "app_mode": base["app_mode"],
         "environment": base["environment"],
         "base_openai_api": base["base_openai_api"],
     }
+
+
+# ---------------------------------------------------------------------------
+# /actions/ping and /v1/actions/ping
+# ---------------------------------------------------------------------------
+
+@router.get("/actions/ping")
+@router.get("/v1/actions/ping")
+async def actions_ping() -> JSONResponse:
+    """
+    Lightweight health endpoint used by tests.
+
+    Contract:
+      - HTTP 200
+      - JSON with:
+          source == "chatgpt-team-relay"
+          status == "ok"
+          app_mode: non-empty str
+          environment: non-empty str
+    """
+    base = _base_env()
+    payload = {
+        "object": "actions.ping",
+        "source": "chatgpt-team-relay",
+        "status": "ok",
+        "app_mode": base["app_mode"],
+        "environment": base["environment"],
+    }
+    return JSONResponse(payload, status_code=200)
+
+
+# ---------------------------------------------------------------------------
+# /actions/relay_info (flat) and /v1/actions/relay_info (structured)
+# ---------------------------------------------------------------------------
+
+@router.get("/actions/relay_info", summary="Flat relay environment info")
+async def actions_relay_info_flat() -> Dict[str, Any]:
+    """
+    GET /actions/relay_info
+
+    Flat relay info used primarily by test_tools_and_actions_routes.py.
+    """
+    return _flat_relay_info()
+
+
+@router.get("/v1/actions/relay_info", summary="Structured relay environment info")
+async def actions_relay_info_v1() -> Dict[str, Any]:
+    """
+    GET /v1/actions/relay_info
+
+    Structured info used by Actions / orchestrator tests.
+    """
+    return _structured_relay_info()
