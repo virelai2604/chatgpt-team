@@ -11,9 +11,12 @@ from fastapi.responses import JSONResponse
 router = APIRouter(tags=["actions"])
 
 
-def relay_info():
-        # Tests only require a non-empty ISO string; naive UTC is fine here.
-        return datetime.now(timezone.utc).isoformat()
+def _now_iso() -> str:
+    """
+    Return the current UTC time as an ISO-8601 string.
+    Used as default for BUILD_DATE in relay_info.
+    """
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _base_env() -> Dict[str, str]:
