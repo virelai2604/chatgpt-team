@@ -14,13 +14,17 @@ from app.routes import (
     conversations as conversations_routes,
     actions as actions_routes,
 )
-from app.api import tools_api
+from app.api import tools_api as tools_routes
 
 
 def register_routes(app: FastAPI) -> None:
     """
-    Central place to register all routers on the FastAPI app.
+    Central route registration for the relay.
+
+    This function is the single source of truth for API surfaces.
+    It keeps main.py minimal and makes the project tree the “compass”.
     """
+
     # OpenAI-compatible API surfaces
     app.include_router(models_routes.router)
     app.include_router(embeddings_routes.router)
@@ -36,4 +40,4 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(actions_routes.router)
 
     # Tools manifest endpoints (/v1/tools, /v1/tools/{id})
-    app.include_router(tools_api.router)
+    app.include_router(tools_routes.router)

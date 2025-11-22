@@ -61,6 +61,7 @@ def _load_tools_manifest() -> List[Dict[str, Any]]:
     # 3) Resolve path relative to project root if needed
     path_obj = Path(manifest_path)
     if not path_obj.is_absolute():
+        # project root = app/.. (adjust if needed)
         path_obj = Path(__file__).resolve().parents[2] / path_obj
 
     if not path_obj.is_file():

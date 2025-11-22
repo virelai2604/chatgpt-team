@@ -16,8 +16,16 @@
           },
           "recency_days": {
             "type": "integer",
-            "description": "Optional recency filter in days for prioritizing recent results.",
-            "minimum": 0
+            "description": "How many days back to prioritize in the search (e.g. 1 = last 24h, 7 = last week).",
+            "minimum": 1,
+            "default": 7
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of search results to retrieve.",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 5
           }
         },
         "required": ["query"]
@@ -34,13 +42,20 @@
         "properties": {
           "query": {
             "type": "string",
-            "description": "Search query string."
+            "description": "Search query string describing what to look up in files or vector stores."
           },
-          "vector_store_ids": {
-            "type": "array",
-            "description": "Optional list of vector store IDs to scope the search.",
-            "items": {
-              "type": "string"
+          "top_k": {
+            "type": "integer",
+            "description": "Maximum number of relevant chunks or documents to return.",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          },
+          "filters": {
+            "type": "object",
+            "description": "Optional metadata filters to narrow search results (e.g. file type, tags, or source).",
+            "additionalProperties": {
+              "type": ["string", "number", "boolean"]
             }
           }
         },
@@ -52,21 +67,23 @@
       "name": "code_interpreter",
       "object": "tool",
       "type": "function",
-      "description": "Run small code snippets and perform calculations or transformations in a sandboxed environment.",
+      "description": "Execute Python code in a sandbox for calculations, data analysis, and other utilities.",
       "parameters": {
         "type": "object",
         "properties": {
-          "language": {
+          "code": {
             "type": "string",
-            "description": "Programming language (e.g. 'python').",
-            "default": "python"
+            "description": "Python code to execute."
           },
-          "task": {
-            "type": "string",
-            "description": "Description of the computation or transformation."
+          "files": {
+            "type": "array",
+            "description": "Optional list of file IDs to make available in the runtime environment.",
+            "items": {
+              "type": "string"
+            }
           }
         },
-        "required": ["task"]
+        "required": ["code"]
       }
     },
     {
@@ -74,7 +91,7 @@
       "name": "image_generation",
       "object": "tool",
       "type": "function",
-      "description": "Generate images from natural language prompts using the upstream OpenAI images API.",
+      "description": "Generate images using the OpenAI image generation API via this relay.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -84,8 +101,20 @@
           },
           "size": {
             "type": "string",
-            "description": "Requested image size (e.g. '1024x1024').",
+            "description": "Image size, for example '1024x1024', '512x512', etc.",
             "default": "1024x1024"
+          },
+          "n": {
+            "type": "integer",
+            "description": "Number of images to generate.",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 1
+          },
+          "response_format": {
+            "type": "string",
+            "description": "Response format for the generated image(s), e.g. 'b64_json' or 'url'.",
+            "default": "b64_json"
           }
         },
         "required": ["prompt"]
@@ -96,17 +125,22 @@
       "name": "audio_transcription",
       "object": "tool",
       "type": "function",
-      "description": "Transcribe audio content to text using upstream OpenAI audio models.",
+      "description": "Transcribe audio files or streams into text using OpenAI audio models.",
       "parameters": {
         "type": "object",
         "properties": {
           "file_id": {
             "type": "string",
-            "description": "ID of the audio file previously uploaded via /v1/files."
+            "description": "File ID of the audio to transcribe."
+          },
+          "model": {
+            "type": "string",
+            "description": "Audio transcription model to use.",
+            "default": "gpt-4o-mini-transcribe"
           },
           "language": {
             "type": "string",
-            "description": "Language code hint for the transcription (e.g. 'en')."
+            "description": "Optional BCP-47 language code to bias transcription (e.g. 'en', 'id', 'en-US')."
           }
         },
         "required": ["file_id"]
@@ -117,17 +151,28 @@
       "name": "audio_generation",
       "object": "tool",
       "type": "function",
-      "description": "Generate spoken audio from text using upstream OpenAI audio generation models.",
+      "description": "Generate speech or audio clips from text using OpenAI audio models.",
       "parameters": {
         "type": "object",
         "properties": {
           "text": {
             "type": "string",
-            "description": "The text to read aloud."
+            "description": "Text to synthesize into audio."
           },
           "voice": {
             "type": "string",
-            "description": "Optional voice preset to use."
+            "description": "Voice name or style identifier.",
+            "default": "alloy"
+          },
+          "format": {
+            "type": "string",
+            "description": "Audio format to return (e.g. 'mp3', 'wav').",
+            "default": "mp3"
+          },
+          "model": {
+            "type": "string",
+            "description": "Audio generation model to use.",
+            "default": "gpt-4o-mini-tts"
           }
         },
         "required": ["text"]
@@ -138,23 +183,31 @@
       "name": "vector_store_search",
       "object": "tool",
       "type": "function",
-      "description": "Search a specific vector store and return relevant file chunks or references.",
+      "description": "Search a vector store managed through this relay using embeddings.",
       "parameters": {
         "type": "object",
         "properties": {
           "vector_store_id": {
             "type": "string",
-            "description": "The ID of the vector store to search."
+            "description": "Identifier of the vector store to search."
           },
           "query": {
             "type": "string",
-            "description": "Semantic query text."
+            "description": "Natural language query to embed and search against the vector store."
           },
-          "k": {
+          "top_k": {
             "type": "integer",
             "description": "Maximum number of results to return.",
-            "default": 8,
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          },
+          "filters": {
+            "type": "object",
+            "description": "Optional metadata filters to narrow search results.",
+            "additionalProperties": {
+              "type": ["string", "number", "boolean"]
+            }
           }
         },
         "required": ["vector_store_id", "query"]
@@ -165,16 +218,80 @@
       "name": "computer_use",
       "object": "tool",
       "type": "function",
-      "description": "Placeholder for computer-use style tools (screen interaction, automation, etc.)",
+      "description": "High-level computer control actions (mouse, keyboard, application control) via an external agent.",
       "parameters": {
         "type": "object",
         "properties": {
-          "task": {
+          "action": {
             "type": "string",
-            "description": "Description of the computer interaction task to perform."
+            "description": "Action to perform, for example 'click', 'type', 'open_app', 'scroll', etc."
+          },
+          "arguments": {
+            "type": "object",
+            "description": "Structured arguments for the action (coordinates, text, application id, etc.).",
+            "additionalProperties": true
           }
         },
-        "required": ["task"]
+        "required": ["action"]
+      }
+    },
+    {
+      "id": "video_generation",
+      "name": "video_generation",
+      "object": "tool",
+      "type": "function",
+      "description": "Generate short videos using the upstream OpenAI video generation APIs via this relay.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Natural language description of the desired video content."
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "description": "Target duration of the video in seconds (approximate).",
+            "minimum": 1,
+            "default": 6
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "description": "Requested aspect ratio (e.g. '16:9', '9:16', '1:1')."
+          },
+          "model": {
+            "type": "string",
+            "description": "Video-capable model to use for generation.",
+            "default": "gpt-4.1-mini"
+          }
+        },
+        "required": ["prompt"]
+      }
+    },
+    {
+      "id": "realtime_session",
+      "name": "realtime_session",
+      "object": "tool",
+      "type": "function",
+      "description": "Create a Realtime session descriptor that clients can use to establish a WebSocket connection via the OpenAI Realtime API.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "Realtime-capable model to request.",
+            "default": "gpt-4o-realtime-preview-2024-10-01"
+          },
+          "instructions": {
+            "type": "string",
+            "description": "Optional system-level instructions to apply to the realtime session."
+          },
+          "session_ttl_seconds": {
+            "type": "integer",
+            "description": "Optional session lifetime hint in seconds, if supported.",
+            "minimum": 60
+          }
+        },
+        "required": []
       }
     }
   ]
