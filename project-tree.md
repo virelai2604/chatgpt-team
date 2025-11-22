@@ -29,6 +29,7 @@
       📄 actions.py
       📄 conversations.py
       📄 embeddings.py
+      📄 embeddings.zip
       📄 files.py
       📄 images.py
       📄 models.py
