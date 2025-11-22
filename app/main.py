@@ -29,7 +29,6 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.requests import Request
 from starlette.staticfiles import StaticFiles
 
-# FIXED: register_routes lives in app/routes/register_routes.py
 from app.routes.register_routes import register_routes
 from app.middleware.validation import SchemaValidationMiddleware
 from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
@@ -107,7 +106,15 @@ def create_app() -> FastAPI:
 
     @app.get("/v1/health", include_in_schema=True)
     async def health() -> Dict[str, Any]:
+        """
+        Simple health endpoint used by tests and ops.
+
+        test_health_endpoint expects:
+          - HTTP 200
+          - JSON with object == "health"
+        """
         return {
+            "object": "health",
             "status": "ok",
             "app_mode": app_mode,
             "environment": environment,
@@ -131,7 +138,7 @@ def create_app() -> FastAPI:
         yaml_str = yaml.dump(openapi, sort_keys=False)
         return PlainTextResponse(yaml_str)
 
-    # Central route registration
+    # Central route registration (project tree as compass)
     register_routes(app)
 
     # Basic error handler so we return JSON consistently
