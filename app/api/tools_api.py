@@ -1,73 +1,110 @@
-"""
-tools_api.py — Hosted Tool Registry (OpenAI-compatible)
-───────────────────────────────────────────────────────
-Implements /v1/tools and /v1/tools/{tool_id} endpoints.
+from __future__ import annotations
 
-This is optional for openai-python 2.x and openai-node 6.x, since
-the SDKs normally configure tools inline on the request. However,
-it is useful for agents or diagnostics that probe /v1/tools.
-
-IMPORTANT:
-  • We do NOT try to auto-sync all official hosted tools here.
-    The canonical tools config stays on the /v1/responses body.
-"""
-
-import os
 import json
+import os
+from pathlib import Path
+from typing import Any, Dict, List
+
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
 
-router = APIRouter(prefix="/v1", tags=["tools"])
-
-# In your repo layout the manifest lives at app/manifests/tools_manifest.json
-MANIFEST_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "../manifests/tools_manifest.json",
-)
+router = APIRouter(prefix="/v1/tools", tags=["tools"])
 
 
-def load_manifest() -> dict:
-    """Safely load the local tools manifest (OpenAI-style schema)."""
-    try:
-        with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-            manifest = json.load(f)
-
-            # Normalize older "data" shape to "tools" if needed
-            if "data" in manifest and "tools" not in manifest:
-                manifest["tools"] = manifest.pop("data")
-
-            manifest.setdefault("object", "list")
-            manifest.setdefault("tools", [])
-            return manifest
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {"object": "list", "tools": []}
-
-
-@router.get("/tools")
-async def list_tools():
+def _load_tools_manifest() -> List[Dict[str, Any]]:
     """
-    Returns a list of available tools in OpenAI-compatible format:
+    Load tools manifest either from:
+    - TOOLS_MANIFEST (JSON string OR file path), or
+    - TOOLS_MANIFEST_PATH (JSON file path), or
+    - default: app/manifests/tools_manifest.json
 
-    {
-      "object": "list",
-      "tools": [ { ... } ]
-    }
+    The manifest JSON is expected to be either:
+      - { "object": "list", "data": [ ... ] }
+      - { "tools": [ ... ] }
+      - [ ... ]  # plain list
     """
-    manifest = load_manifest()
+    manifest_env = os.getenv("TOOLS_MANIFEST")
+    manifest_path_env = os.getenv("TOOLS_MANIFEST_PATH")
 
-    for tool in manifest.get("tools", []):
-        tool.setdefault("object", "tool")
-        tool.setdefault("type", "function")
-        tool.setdefault("name", tool.get("id"))
+    manifest_path: str | None = None
 
-    return JSONResponse(status_code=200, content=manifest)
+    # 1) If TOOLS_MANIFEST is set, decide whether it's inline JSON or a path.
+    if manifest_env:
+        stripped = manifest_env.lstrip()
+        # Looks like JSON → parse as JSON
+        if stripped.startswith("{") or stripped.startswith("["):
+            try:
+                data = json.loads(manifest_env)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError("Invalid TOOLS_MANIFEST JSON") from exc
+
+            if isinstance(data, dict):
+                tools = data.get("data") or data.get("tools")
+            else:
+                tools = data
+
+            if not isinstance(tools, list):
+                raise RuntimeError(
+                    "TOOLS_MANIFEST JSON must be a list or an object with 'data' or 'tools' list"
+                )
+            return tools
+        else:
+            # Treat value as path
+            manifest_path = manifest_env
+
+    # 2) Fall back to TOOLS_MANIFEST_PATH
+    if manifest_path is None:
+        if manifest_path_env:
+            manifest_path = manifest_path_env
+        else:
+            manifest_path = "app/manifests/tools_manifest.json"
+
+    # 3) Resolve path relative to project root if needed
+    path_obj = Path(manifest_path)
+    if not path_obj.is_absolute():
+        path_obj = Path(__file__).resolve().parents[2] / path_obj
+
+    if not path_obj.is_file():
+        raise RuntimeError(f"Tools manifest not found at {path_obj}")
+
+    # 4) Load JSON from file
+    with path_obj.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    if isinstance(data, dict):
+        tools = data.get("data") or data.get("tools")
+    else:
+        tools = data
+
+    if not isinstance(tools, list):
+        raise RuntimeError(
+            "Tools manifest JSON must be a list or an object with 'data' or 'tools' list"
+        )
+
+    return tools
 
 
-@router.get("/tools/{tool_id}")
-async def get_tool(tool_id: str):
-    """Retrieve metadata for one tool by ID or name."""
-    manifest = load_manifest()
-    for tool in manifest.get("tools", []):
-        if tool.get("id") == tool_id or tool.get("name") == tool_id:
-            return JSONResponse(status_code=200, content=tool)
-    raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found.")
+@router.get("", summary="List available tools")
+async def list_tools() -> Dict[str, Any]:
+    """
+    GET /v1/tools
+
+    Returns:
+      {
+        "object": "list",
+        "data": [ ...tool defs... ]
+      }
+    """
+    tools = _load_tools_manifest()
+    return {"object": "list", "data": tools}
+
+
+@router.get("/{tool_id}", summary="Get a single tool definition")
+async def get_tool(tool_id: str) -> Dict[str, Any]:
+    """
+    GET /v1/tools/{tool_id}
+    """
+    tools = _load_tools_manifest()
+    for tool in tools:
+        if str(tool.get("id")) == tool_id:
+            return tool
+    raise HTTPException(status_code=404, detail="Tool not found")
