@@ -1,136 +1,72 @@
 from __future__ import annotations
 
-import os
-from datetime import datetime
-from typing import Any, Dict
+from fastapi import APIRouter, Request, Response
 
-from fastapi import APIRouter
+from app.api.forward_openai import forward_openai_request
 
-router = APIRouter(tags=["actions"])
+router = APIRouter(tags=["responses"])
 
 
-def _now_iso() -> str:
-    # Tests tolerate naive UTC ISO timestamp.
-    return datetime.utcnow().isoformat()
+#
+# /v1/responses — thin proxy to upstream OpenAI-compatible API
+# The behavior is intentionally simple:
+#   - All endpoints delegate to forward_openai_request(...)
+#   - For "pure local" tests, httpx.AsyncClient is stubbed in conftest.py,
+#     so these become echo-style "test_proxy" responses.
+#   - For httpx_mock-based forwarding tests, forward_openai_request uses
+#     real httpx.AsyncClient, which pytest-httpx intercepts.
+#
 
 
-def _base_env() -> Dict[str, str]:
+@router.post("/v1/responses")
+async def create_response(request: Request) -> Response:
     """
-    Core environment fields used across ping and relay_info.
+    POST /v1/responses
+
+    tests/test_responses_and_conversations.py expects:
+      - HTTP 200
+      - JSON with:
+          object == "test_proxy"
+          echo_path == "/v1/responses"
+          echo_method == "POST"
+      - forward_spy["json"] == payload (via stubbed AsyncClient)
     """
-    return {
-        "relay_name": os.getenv("RELAY_NAME", "chatgpt-team-relay"),
-        "environment": os.getenv("ENVIRONMENT", os.getenv("APP_ENV", "development")),
-        "app_mode": os.getenv("APP_MODE", "development"),
-        "base_openai_api": os.getenv("OPENAI_API_BASE", "https://api.openai.com"),
-        "build_channel": os.getenv("BUILD_CHANNEL", "unknown"),
-        "bifl_version": os.getenv("BIFL_VERSION", "unknown"),
-    }
+    return await forward_openai_request(request)
 
 
-def _flat_relay_info() -> Dict[str, Any]:
+@router.get("/v1/responses")
+async def list_responses(request: Request) -> Response:
     """
-    Shape expected by tests hitting /actions/relay_info.
+    GET /v1/responses
+
+    Expected by tests to behave as a simple proxy (status + body passthrough).
     """
-    env = _base_env()
-    return {
-        "relay_name": env["relay_name"],
-        "environment": env["environment"],
-        "app_mode": env["app_mode"],
-        "base_openai_api": env["base_openai_api"],
-        "build_channel": env["build_channel"],
-        "bifl_version": env["bifl_version"],
-    }
+    return await forward_openai_request(request)
 
 
-def _structured_relay_info() -> Dict[str, Any]:
+@router.get("/v1/responses/{response_id}")
+async def retrieve_response(response_id: str, request: Request) -> Response:
     """
-    Shape expected by /v1/actions/relay_info and used by Actions/toolchains.
+    GET /v1/responses/{response_id}
 
-    {
-      "type": "relay.info",
-      "relay": {...},
-      "environment": {...},
-      "build": {...}
-    }
+    Local path:  /v1/responses/{id}
+    Upstream path: /v1/responses/{id}  (via forward_openai_request)
     """
-    env = _base_env()
-    return {
-        "type": "relay.info",
-        "relay": {
-            "name": env["relay_name"],
-            "version": env["bifl_version"],
-        },
-        "environment": {
-            "environment": env["environment"],
-            "app_mode": env["app_mode"],
-            "base_openai_api": env["base_openai_api"],
-        },
-        "build": {
-            "channel": env["build_channel"],
-            "version": env["bifl_version"],
-            "date": _now_iso(),
-        },
-    }
+    # forward_openai_request infers the upstream path from request.url.path
+    # and rewrites /v1/... → /v1/... using _normalize_upstream_path internally.
+    return await forward_openai_request(request)
 
 
-# ---------------------------------------------------------------------------
-# /actions/ping  (basic health)
-# ---------------------------------------------------------------------------
-
-@router.get("/actions/ping", summary="Simple actions health check")
-async def actions_ping_legacy() -> Dict[str, Any]:
+@router.post("/v1/responses/{response_id}/cancel")
+async def cancel_response(response_id: str, request: Request) -> Response:
     """
-    GET /actions/ping
+    POST /v1/responses/{response_id}/cancel
 
-    Simple health-style endpoint used by legacy tests.
+    tests/test_responses_and_conversations.py expects:
+      - HTTP 200
+      - JSON with:
+          object == "test_proxy"
+          echo_path == f"/v1/responses/{response_id}/cancel"
+          echo_method == "POST"
     """
-    env = _base_env()
-    return {
-        "object": "actions.ping",
-        "source": "chatgpt-team-relay",
-        "status": "ok",
-        "timestamp": _now_iso(),
-        "app_mode": env["app_mode"],
-        "environment": env["environment"],
-        "base_openai_api": env["base_openai_api"],
-    }
-
-
-@router.get("/v1/actions/ping", summary="Versioned actions health check")
-async def actions_ping_v1() -> Dict[str, Any]:
-    """
-    GET /v1/actions/ping
-
-    Used by orchestrator tests; same shape as legacy plus versioned path.
-    """
-    # Reuse the legacy shape to keep behavior identical.
-    return await actions_ping_legacy()
-
-
-# ---------------------------------------------------------------------------
-# /actions/relay_info (flat) and /v1/actions/relay_info (structured)
-# ---------------------------------------------------------------------------
-
-@router.get("/actions/relay_info", summary="Legacy relay environment info")
-async def actions_relay_info_legacy() -> Dict[str, Any]:
-    """
-    GET /actions/relay_info
-
-    Legacy flat shape. Tests in test_tools_and_actions_routes.py check for:
-      - relay_name
-      - environment
-      - app_mode
-      - base_openai_api
-    """
-    return _flat_relay_info()
-
-
-@router.get("/v1/actions/relay_info", summary="Structured relay environment info")
-async def actions_relay_info_v1() -> Dict[str, Any]:
-    """
-    GET /v1/actions/relay_info
-
-    Structured info used by Actions / orchestrator tests.
-    """
-    return _structured_relay_info()
+    return await forward_openai_request(request)

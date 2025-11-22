@@ -1,208 +1,170 @@
 from __future__ import annotations
 
+import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable
 
 import httpx
 from fastapi import HTTPException, Request, Response
 
-from app.utils.logger import get_logger
-
-logger = get_logger("relay.forwarder")
-
-# Default timeout in seconds; mirrors RELAY_TIMEOUT env if present.
-DEFAULT_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "120"))
+from app.utils.logger import relay_log as logger
 
 
 def _get_openai_base() -> str:
     """
-    Return the upstream OpenAI-compatible base URL, without a trailing slash.
+    Resolve the upstream OpenAI base URL.
 
-    pytest.ini sets:
-      OPENAI_API_BASE=https://api.openai.com
-    and expects us to append `/v1` ourselves.
+    Defaults to the public OpenAI REST API if not overridden.
     """
-    base = os.getenv("OPENAI_API_BASE", "https://api.openai.com").rstrip("/")
+    base = os.getenv("OPENAI_API_BASE", "https://api.openai.com").strip()
+    if base.endswith("/"):
+        base = base[:-1]
     return base
 
 
-def _normalize_upstream_path(request: Request, upstream_path: Optional[str]) -> str:
+def _build_upstream_headers(incoming: Iterable[tuple[str, str]]) -> Dict[str, str]:
     """
-    Ensure we end up with a path like `/responses`, `/embeddings`, `/files/{id}`.
+    Build the headers to send to OpenAI.
 
-    - If caller passes upstream_path explicitly, use that.
-    - Otherwise derive from request.url.path and strip the `/v1` prefix,
-      because our base URL does not include `/v1`.
+    - Always attach Authorization from OPENAI_API_KEY.
+    - Attach OpenAI-Organization from incoming header or OPENAI_ORG env.
+    - Pass through OpenAI-* headers (beta / experimental flags).
     """
-    if upstream_path is not None:
-        path = upstream_path
-    else:
-        path = request.url.path or "/"
-        # Strip leading /v1 from local paths, e.g. "/v1/embeddings" -> "/embeddings"
-        if path.startswith("/v1"):
-            path = path[len("/v1") :]
-            if not path:
-                path = "/"
+    headers: Dict[str, str] = {}
 
-    if not path.startswith("/"):
-        path = "/" + path
+    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_API_TOKEN")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
-    return path
+    env_org = os.getenv("OPENAI_ORG") or os.getenv("OPENAI_ORGANIZATION")
+
+    for name, value in incoming:
+        lower = name.lower()
+        if lower == "authorization":
+            # We prefer the server-side key rather than trusting the client.
+            continue
+        if lower in ("host", "content-length", "connection"):
+            continue
+        if lower == "openai-organization":
+            headers["OpenAI-Organization"] = value
+            continue
+        if lower.startswith("openai-"):
+            # Pass through OpenAI-Beta, OpenAI-Experimental, etc.
+            headers[name] = value
+
+    if "OpenAI-Organization" not in headers and env_org:
+        headers["OpenAI-Organization"] = env_org
+
+    return headers
 
 
-def _build_upstream_headers(request: Request) -> Dict[str, str]:
+def _filter_response_headers(upstream: httpx.Headers) -> Dict[str, str]:
     """
-    Build a clean set of headers for the upstream OpenAI API.
+    Select which headers from OpenAI to propagate back to the client.
 
-    Rules:
-    - Always enforce Authorization from OPENAI_API_KEY (never trust client).
-    - Forward a safe subset of client headers:
-        * content-type, accept
-        * openai-* headers EXCEPT openai-organization
-        * x-request-id
-    - Do NOT set OpenAI-Organization at all (we assume project keys).
+    We avoid hop-by-hop headers and let ASGI / FastAPI handle transfer
+    encoding, connection management, etc.
     """
-    upstream_headers: Dict[str, str] = {}
+    allowed_prefixes = ("openai-", "x-", "cf-")
+    allowed_exact = {"content-type"}
 
-    # 1) Forward a minimal, safe subset of client headers.
-    for name, value in request.headers.items():
-        lname = name.lower()
-
-        # Basic content negotiation headers
-        if lname in ("content-type", "accept"):
-            upstream_headers[name] = value
-
-        # Forward OpenAI feature / beta flags, but never organization.
-        elif lname.startswith("openai-"):
-            if lname != "openai-organization":
-                upstream_headers[name] = value
-
-        # Preserve client request-id for tracing if present.
-        elif lname == "x-request-id":
-            upstream_headers[name] = value
-
-    # 2) Enforce API key from environment (mandatory).
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        # If the relay is misconfigured, fail fast and clearly.
-        raise HTTPException(
-            status_code=500,
-            detail="Relay misconfiguration: OPENAI_API_KEY is not set.",
-        )
-
-    upstream_headers["Authorization"] = f"Bearer {api_key}"
-
-    # 3) Remove hop-by-hop and length/encoding headers if they slipped through.
-    for h in ("host", "content-length", "connection"):
-        upstream_headers.pop(h, None)
-
-    return upstream_headers
+    result: Dict[str, str] = {}
+    for name, value in upstream.items():
+        lower = name.lower()
+        if lower in ("content-length", "connection", "transfer-encoding"):
+            continue
+        if lower in allowed_exact or lower.startswith(allowed_prefixes):
+            result[name] = value
+    return result
 
 
 async def forward_openai_request(
     request: Request,
-    upstream_path: Optional[str] = None,
-    method: Optional[str] = None,
     *,
-    timeout: Optional[float] = None,
-    stream: Optional[bool] = None,
-    **_: Any,
+    upstream_path: str | None = None,
+    upstream_method: str | None = None,
 ) -> Response:
     """
-    Generic relay to the upstream OpenAI-compatible API.
+    Generic forwarder for OpenAI-style /v1/* requests.
 
-    This is intentionally forgiving for the callers used in your tests:
+    Used by all the thin routers (models, files, images, videos, embeddings,
+    responses, etc.) so behavior stays aligned with the official REST spec
+    and the openai-python 2.8.x client.
 
-    - If `upstream_path` is not provided, we infer it from `request.url.path`
-      and strip the `/v1` prefix.
-    - If `method` is not provided, we infer it from `request.method`.
-    - Extra keyword args are accepted and ignored (to stay compatible with
-      any middleware/orchestrator that passes extra flags).
-
-    The tests rely on:
-      - correct rewriting from local `/v1/...` to upstream `/v1/...`
-      - correct forwarding of JSON and multipart bodies
-      - returning the upstream status code and body.
+    This function:
+      - Builds the full upstream URL from OPENAI_API_BASE + request path
+      - Copies query params from the incoming request
+      - Detects JSON bodies and uses `json=...` for httpx so pytest_httpx
+        can expose Request.json() in tests
+      - Proxies status code, body, and key headers back to the caller
     """
-    base = _get_openai_base()
+    method = (upstream_method or request.method).upper()
+    path = upstream_path or request.url.path
 
-    # Method from caller or incoming request
-    method = (method or request.method).upper()
-
-    # Path: either explicit or derived from the request
-    normalized_path = _normalize_upstream_path(request, upstream_path)
-    url = f"{base}/v1{normalized_path}"
+    base_url = _get_openai_base()
+    target_url = f"{base_url}{path}"
 
     # Query parameters
-    params: Dict[str, str] = dict(request.query_params)
+    params: Dict[str, Any] = dict(request.query_params)
 
-    # Raw body – works for JSON, multipart/form-data, and binary
-    body: bytes = await request.body()
+    # Incoming headers and body
+    raw_body: bytes = await request.body()
+    content_type = request.headers.get("content-type", "").lower()
 
-    # Build upstream headers with our policy.
-    upstream_headers = _build_upstream_headers(request)
-    request_id = upstream_headers.get("x-request-id")
+    # Detect JSON body where possible so that pytest_httpx's Request objects
+    # expose a .json() for the smoke tests.
+    json_data: Any | None = None
+    if raw_body and "application/json" in content_type:
+        try:
+            json_data = json.loads(raw_body.decode("utf-8"))
+        except Exception:
+            json_data = None
 
-    logger.debug(
-        {
-            "event": "forward_openai_request.start",
-            "method": method,
-            "url": url,
-            "params": params,
-            "request_id": request_id,
-        }
-    )
+    # Build upstream headers
+    upstream_headers = _build_upstream_headers(request.headers.items())
+
+    # Prepare request kwargs for httpx
+    request_kwargs: Dict[str, Any] = {}
+    if json_data is not None:
+        request_kwargs["json"] = json_data
+    elif raw_body:
+        # Non-JSON body (e.g. multipart/form-data or binary download)
+        request_kwargs["content"] = raw_body
+
+    logger.info("forward_openai_request.start method=%s path=%s", method, path)
 
     try:
-        async with httpx.AsyncClient(timeout=timeout or DEFAULT_TIMEOUT) as client:
-            upstream_response = await client.request(
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            upstream_resp = await client.request(
                 method=method,
-                url=url,
+                url=target_url,
                 params=params,
-                # For GET/DELETE, content=None is fine; httpx ignores it.
-                content=body if body else None,
                 headers=upstream_headers,
+                **request_kwargs,
             )
     except httpx.RequestError as exc:
-        logger.error(
-            {
-                "event": "openai_upstream_error",
-                "error": str(exc),
-                "url": str(getattr(getattr(exc, "request", None), "url", url)),
-            }
-        )
+        logger.warning("forward_openai_request.error %s", exc)
         raise HTTPException(
             status_code=502,
-            detail="Upstream OpenAI API request failed",
-        )
+            detail={
+                "error": {
+                    "message": "Error contacting upstream OpenAI API",
+                    "type": "upstream_connection_error",
+                }
+            },
+        ) from exc
 
-    # Copy headers back, minus hop-by-hop and encoding/length that httpx has already handled.
-    resp_headers: Dict[str, str] = dict(upstream_response.headers)
-    for h in (
-        "connection",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "te",
-        "trailers",
-        "transfer-encoding",
-        "upgrade",
-        "content-encoding",  # avoid double-decompression in client
-        "content-length",    # length no longer matches decompressed body
-    ):
-        resp_headers.pop(h, None)
-
-    logger.debug(
-        {
-            "event": "forward_openai_request.complete",
-            "status_code": upstream_response.status_code,
-            "request_id": request_id,
-        }
+    logger.info(
+        "forward_openai_request.done method=%s path=%s status=%s",
+        method,
+        path,
+        upstream_resp.status_code,
     )
 
+    response_headers = _filter_response_headers(upstream_resp.headers)
+
     return Response(
-        content=upstream_response.content,
-        status_code=upstream_response.status_code,
-        headers=resp_headers,
-        media_type=resp_headers.get("content-type"),
+        content=upstream_resp.content,
+        status_code=upstream_resp.status_code,
+        headers=response_headers,
     )
