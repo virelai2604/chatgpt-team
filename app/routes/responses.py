@@ -11,6 +11,10 @@ router = APIRouter(tags=["responses"])
 async def create_response(request: Request) -> Response:
     """
     POST /v1/responses
+
+    Thin proxy to the OpenAI Responses API.
+    Streaming is controlled via the 'stream' field in the JSON body
+    and handled inside forward_openai_request.
     """
     return await forward_openai_request(request)
 

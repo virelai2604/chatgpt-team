@@ -28,7 +28,9 @@
             "default": 5
           }
         },
-        "required": ["query"]
+        "required": [
+          "query"
+        ]
       }
     },
     {
@@ -55,11 +57,17 @@
             "type": "object",
             "description": "Optional metadata filters to narrow search results (e.g. file type, tags, or source).",
             "additionalProperties": {
-              "type": ["string", "number", "boolean"]
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
             }
           }
         },
-        "required": ["query"]
+        "required": [
+          "query"
+        ]
       }
     },
     {
@@ -83,7 +91,9 @@
             }
           }
         },
-        "required": ["code"]
+        "required": [
+          "code"
+        ]
       }
     },
     {
@@ -117,7 +127,9 @@
             "default": "b64_json"
           }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       }
     },
     {
@@ -143,7 +155,9 @@
             "description": "Optional BCP-47 language code to bias transcription (e.g. 'en', 'id', 'en-US')."
           }
         },
-        "required": ["file_id"]
+        "required": [
+          "file_id"
+        ]
       }
     },
     {
@@ -175,7 +189,9 @@
             "default": "gpt-4o-mini-tts"
           }
         },
-        "required": ["text"]
+        "required": [
+          "text"
+        ]
       }
     },
     {
@@ -206,11 +222,18 @@
             "type": "object",
             "description": "Optional metadata filters to narrow search results.",
             "additionalProperties": {
-              "type": ["string", "number", "boolean"]
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
             }
           }
         },
-        "required": ["vector_store_id", "query"]
+        "required": [
+          "vector_store_id",
+          "query"
+        ]
       }
     },
     {
@@ -232,7 +255,9 @@
             "additionalProperties": true
           }
         },
-        "required": ["action"]
+        "required": [
+          "action"
+        ]
       }
     },
     {
@@ -261,10 +286,12 @@
           "model": {
             "type": "string",
             "description": "Video-capable model to use for generation.",
-            "default": "gpt-4.1-mini"
+            "default": "sora-2-pro"
           }
         },
-        "required": ["prompt"]
+        "required": [
+          "prompt"
+        ]
       }
     },
     {
