@@ -142,10 +142,10 @@ async def forward_openai_request(
         # Non-JSON body (e.g. multipart/form-data or binary)
         request_kwargs["content"] = raw_body
 
-    # --- Timeout configuration (THIS IS THE IMPORTANT FIX) ---
+    # --- Timeout configuration ---
     #
     # Images/videos can legitimately take longer than 30 seconds, especially
-    # at higher quality/resolution. The previous fixed timeout=30.0 caused
+    # at higher quality/resolution. A fixed short timeout causes
     # httpx.RequestError("Timeout") -> 502 "upstream_connection_error".
     #
     # We now:

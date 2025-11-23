@@ -15,73 +15,53 @@ services:
     plan: starter
 
     buildCommand: |
+      pip install --upgrade pip
       pip install -r requirements.txt
 
-    # Render injects $PORT automatically; bind to it with uvicorn.
     startCommand: |
       uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
-    branch: main
-    autoDeploy: true
-
-    # Render health check hits this path on the relay.
-    healthCheckPath: /v1/health
-
     envVars:
-      # --- Runtime and Metadata ---
+      # -------- Core relay / app mode --------
       - key: APP_MODE
         value: production
-      - key: RELAY_NAME
-        value: "ChatGPT Team Relay"
-      - key: BIFL_VERSION
-        value: v2.3.5-fp
       - key: ENVIRONMENT
         value: production
-      - key: BUILD_DATE
-        value: 2025-11-18
-      - key: BUILD_CHANNEL
-        value: stable
 
-      # --- OpenAI Beta Flags (used by forwarder if configured) ---
-      - key: OPENAI_REALTIME_BETA
-        value: realtime=v1
-      - key: OPENAI_ASSISTANTS_BETA
-        value: assistants=v2
-
-      # --- Python Runtime ---
-      - key: PYTHON_VERSION
-        value: 3.12.5
-
-      # --- Networking ---
-      - key: RELAY_HOST
-        value: 0.0.0.0
-      - key: RELAY_TIMEOUT
-        value: 120
-      - key: PROXY_TIMEOUT
-        value: 120
-
-      # --- Upstream OpenAI API ---
-      # NOTE: no /v1 suffix; paths like /v1/responses will be appended
-      #       by the relay and forwarded upstream unchanged.
+      # -------- OpenAI upstream config --------
       - key: OPENAI_API_BASE
         value: https://api.openai.com
-
-      # These are configured in Render dashboard, not committed to Git.
+      # IMPORTANT: set the real API key in the Render dashboard (do NOT commit it)
       - key: OPENAI_API_KEY
-        sync: false
-      
+        value: ""   # override in Render UI
+      - key: OPENAI_ASSISTANTS_BETA
+        value: assistants=v2
+      - key: OPENAI_REALTIME_BETA
+        value: realtime=v1
 
-      # --- Defaults ---
+      # -------- Default model --------
       - key: DEFAULT_MODEL
         value: gpt-4o-mini
-      - key: ENABLE_STREAM
-        value: true
-      - key: TOOLS_MANIFEST
-        value: app/manifests/tools_manifest.json
-      - key: CHAIN_WAIT_MODE
-        value: true
 
-      # --- CORS Configuration ---
+      # -------- Relay identity / runtime --------
+      - key: RELAY_HOST
+        value: 0.0.0.0
+      - key: RELAY_NAME
+        value: ChatGPT Team Relay
+      - key: RELAY_TIMEOUT
+        value: "120"
+      - key: PROXY_TIMEOUT
+        value: "120"
+      - key: PYTHON_VERSION
+        value: "3.12.5"
+
+      # -------- Streaming / orchestration --------
+      - key: ENABLE_STREAM
+        value: "true"
+      - key: CHAIN_WAIT_MODE
+        value: "true"
+
+      # -------- CORS config (for ChatGPT + Platform UI) --------
       - key: CORS_ALLOW_ORIGINS
         value: https://chat.openai.com,https://platform.openai.com
       - key: CORS_ALLOW_METHODS
@@ -89,38 +69,45 @@ services:
       - key: CORS_ALLOW_HEADERS
         value: "*"
 
-      # --- Logging ---
+      # -------- Tools & validation schema --------
+      - key: TOOLS_MANIFEST
+        value: app/manifests/tools_manifest.json
+      - key: VALIDATION_SCHEMA_PATH
+        value: ChatGPT-API_reference_ground_truth-2025-10-29.pdf
+
+      # -------- Logging --------
       - key: LOG_LEVEL
         value: info
       - key: LOG_FORMAT
         value: json
       - key: LOG_COLOR
-        value: false
+        value: "false"
 
-      # --- Validation Schema (API reference snapshot) ---
-      # Used internally by validation/tooling, not by Render itself.
-      - key: VALIDATION_SCHEMA_PATH
-        value: ChatGPT-API_reference_ground_truth-2025-10-29.pdf
-
-      # --- ChatGPT Actions Secret (optional but recommended) ---
+      # -------- Auth / secrets for relay usage --------
+      # Use a strong random value here; set it in Render UI and in client envs.
+      - key: RELAY_KEY
+        value: ""   # override in Render UI, e.g. via secrets or manual edit
+      # Secret used for ChatGPT Actions (if you wire actions → relay)
       - key: CHATGPT_ACTIONS_SECRET
-        sync: false
+        value: ""   # override in Render UI
 
-    buildFilter:
-      paths:
-        - app/**
-        - requirements.txt
-        - render.yaml
-        - .env
-        - schemas/openapi.yaml
-        - static/.well-known/ai-plugin.json
+      # -------- Feature flags for ChatGPT Actions --------
+      - key: ENABLE_STREAM
+        value: "true"
+
+    # (Optional) If you use static assets or schemas, keep them in repo:
+    #   - render.yaml
+    #   - .env                # not committed; use Render "Secret Files" for this
+    #   - schemas/openapi.yaml
+    #   - static/.well-known/ai-plugin.json
 
 # ==============================================================
 # Notes:
-# - OPENAI_API_KEY / OPENAI_ORG_ID / CHATGPT_ACTIONS_SECRET are set in
-#   the Render dashboard, never committed.
+# - OPENAI_API_KEY / RELAY_KEY / CHATGPT_ACTIONS_SECRET should be
+#   set as secrets in the Render dashboard, not committed with values.
 # - Health checks hit /v1/health on the relay.
 # - The relay exposes OpenAI-compatible endpoints (responses, files,
 #   embeddings, vector stores, realtime, images, videos, etc.) and
 #   a local tools registry at /v1/tools for ChatGPT Actions.
 # ==============================================================
+
