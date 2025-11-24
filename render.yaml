@@ -41,6 +41,7 @@ services:
       - key: RELAY_AUTH_ENABLED
         value: "true"
 
+
       # -------- Default model --------
       - key: DEFAULT_MODEL
         value: gpt-4o-mini
@@ -69,7 +70,7 @@ services:
       - key: CORS_ALLOW_METHODS
         value: GET,POST,PUT,PATCH,DELETE,OPTIONS
       - key: CORS_ALLOW_HEADERS
-        value: "*"
+        value: "Authorization,Content-Type,Accept"
 
       # -------- Tools & validation schema --------
       - key: TOOLS_MANIFEST
