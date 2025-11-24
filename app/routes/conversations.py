@@ -20,6 +20,8 @@ We expose:
   • POST /v1/conversations/{id}/messages  (relays to upstream /items + local cache)
 """
 
+from __future__ import annotations
+
 import csv
 import json
 import os
@@ -39,7 +41,6 @@ router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
 #  • Paths below explicitly append /v1/conversations...
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-
 
 RELAY_TIMEOUT = float(os.getenv("RELAY_TIMEOUT", "60"))
 
@@ -83,11 +84,13 @@ def _append_snapshot(conv_id: str, data: Dict) -> None:
     try:
         with open(path, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow([
-                conv_id,
-                json.dumps(data),
-                datetime.now(timezone.utc).isoformat(),
-            ])
+            writer.writerow(
+                [
+                    conv_id,
+                    json.dumps(data),
+                    datetime.now(timezone.utc).isoformat(),
+                ]
+            )
     except Exception as exc:
         log.warning(f"[Conversations] Failed to append snapshot to CSV: {exc}")
 
@@ -183,7 +186,7 @@ def build_headers() -> Dict[str, str]:
         "User-Agent": USER_AGENT,
         "Content-Type": "application/json",
     }
-
+    return headers
 
 
 def conversations_base_url() -> str:

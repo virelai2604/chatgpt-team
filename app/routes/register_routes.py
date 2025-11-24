@@ -19,10 +19,10 @@ from app.api import tools_api as tools_routes
 
 def register_routes(app: FastAPI) -> None:
     """
-    Central route registration for the relay.
+    Central route registration for the ChatGPT Team Relay.
 
     This function is the single source of truth for API surfaces.
-    It keeps main.py minimal and makes the project tree the “compass”.
+    It keeps main.py minimal and follows the project-tree layout.
     """
 
     # OpenAI-compatible API surfaces
