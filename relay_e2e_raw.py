@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import binascii
 import gzip
 import json
 import os
@@ -94,7 +93,7 @@ def maybe_decompress(content: bytes, headers: Dict[str, str]) -> bytes:
 
     This is intentionally forgiving to cope with mislabelled Content-Encoding.
     """
-    ce = headers.get("Content-Encoding", "").lower()
+    ce = headers.get("content-encoding", "").lower()
     if ce == "gzip":
         try:
             return gzip.decompress(content)
@@ -285,8 +284,6 @@ def _extract_text_from_response_obj(obj: Dict[str, Any]) -> str:
         content = first.get("content")
         if isinstance(content, list) and content:
             c0 = content[0]
-            # Several shapes are possible; we try a few:
-            # 1) {"type": "output_text", "text": {"value": "..."}}
             if isinstance(c0, dict):
                 txt_obj = c0.get("text")
                 if isinstance(txt_obj, dict) and "value" in txt_obj:
@@ -375,8 +372,6 @@ def test_responses_streaming() -> bool:
                     obj = json.loads(payload)
                 except Exception:
                     continue
-                # Responses SSE event shape:
-                #   {"type": "response.output_text.delta", "delta": "..." }
                 if obj.get("type") == "response.output_text.delta":
                     delta = obj.get("delta") or ""
                     if isinstance(delta, str):
@@ -414,10 +409,7 @@ def test_tools_and_agentic() -> None:
 
 
 def test_files_chain() -> None:
-    log("=== 6) /v1/files (best-effort upload → list → delete) ===")
-    # Minimal synthetic file payload; many relays will simply proxy or stub
-    # This is best-effort; any failure is logged but not core-fatal.
-    # We use the JSON upload style to keep things simple for a relay.
+    log("=== 6) /v1/files (best-effort upload → list) ===")
     body = {
         "purpose": "assistants",
         "file": base64.b64encode(b"relay test file").decode("ascii"),
@@ -453,7 +445,6 @@ def test_images_generation() -> None:
     }
     status, data, text = do_request("POST", "/v1/images", body)
     if status == 200:
-        # Try to verify at least one b64_json exists
         try:
             first = (data.get("data") or [])[0]
             _ = first.get("b64_json")
@@ -461,7 +452,9 @@ def test_images_generation() -> None:
         except Exception:
             log(f"/v1/images HTTP 200 but unexpected shape: {data!r}")
     else:
-        log(f"/v1/images HTTP {status}, body={text[:500]!r}")
+        # Build a safe log preview: prefer text, fall back to data repr
+        preview = text[:500] if text else repr(data)
+        log(f"/v1/images HTTP {status}, body={preview!r}")
 
 
 def test_videos_short() -> None:
@@ -469,11 +462,12 @@ def test_videos_short() -> None:
     body = {
         "model": TEST_MODEL,
         "input": "A short abstract test animation for relay sanity.",
-        # Many Sora-style APIs expect seconds as a string
         "seconds": "4",
     }
     status, data, text = do_request("POST", "/v1/videos", body)
-    log(f"/v1/videos HTTP {status}, body={text[:500]!r or data!r}")
+    # Build a safe log preview: prefer text, fall back to data repr
+    preview = text[:500] if text else repr(data)
+    log(f"/v1/videos HTTP {status}, body={preview!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -498,7 +492,6 @@ async def _realtime_ws_roundtrip(ws_url: str, client_secret: Optional[str]) -> b
 
     try:
         async with websockets.connect(ws_url, extra_headers=headers) as ws:
-            # Send input_text event as per realtime reference
             event = {
                 "type": "input_text",
                 "content": "Say exactly: relay-ws-ok",
@@ -506,7 +499,6 @@ async def _realtime_ws_roundtrip(ws_url: str, client_secret: Optional[str]) -> b
             await ws.send(json.dumps(event))
 
             chunks: list[str] = []
-            # We read a bounded number of messages to avoid hanging forever
             for _ in range(100):
                 msg = await ws.recv()
                 debug(f"WS recv: {msg!r}")
@@ -550,12 +542,14 @@ def test_realtime_session_and_ws() -> None:
         log(f"Realtime sessions response missing ws url: {data!r}")
         return
 
-    log(f"Realtime session created. ws_url={ws_url!r}, client_secret={'present' if client_secret else 'none'}")
+    log(
+        f"Realtime session created. ws_url={ws_url!r}, "
+        f"client_secret={'present' if client_secret else 'none'}"
+    )
 
     try:
         ok = asyncio.run(_realtime_ws_roundtrip(ws_url, client_secret))
     except RuntimeError:
-        # For some environments with an existing loop
         loop = asyncio.new_event_loop()
         try:
             ok = loop.run_until_complete(_realtime_ws_roundtrip(ws_url, client_secret))
@@ -578,7 +572,6 @@ def main() -> int:
 
     core_ok = True
 
-    # Core tests
     if not test_health():
         core_ok = False
     if not test_responses_simple():
@@ -586,11 +579,9 @@ def main() -> int:
     if not test_embeddings():
         core_ok = False
 
-    # Streaming test: strong but not strictly fatal
     if not test_responses_streaming():
         log("WARNING: streaming /v1/responses test failed (not flipping core_ok).")
 
-    # Best-effort surfaces (always log)
     test_models_list()
     test_tools_and_agentic()
     test_files_chain()
