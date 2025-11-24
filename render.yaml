@@ -38,6 +38,8 @@ services:
         value: assistants=v2
       - key: OPENAI_REALTIME_BETA
         value: realtime=v1
+      - key: RELAY_AUTH_ENABLED
+        value: "true"
 
       # -------- Default model --------
       - key: DEFAULT_MODEL
