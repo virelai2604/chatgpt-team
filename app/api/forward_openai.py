@@ -10,17 +10,11 @@ from fastapi import HTTPException, Request, Response
 
 logger = logging.getLogger("relay")
 
-# Base URL for upstream OpenAI API (or compatible endpoint)
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
-
-# API key used by the relay when contacting upstream.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 
 def _filter_request_headers(headers: Mapping[str, str]) -> Dict[str, str]:
-    """
-    Remove hop-by-hop or conflicting headers before forwarding to upstream.
-    """
     blocked = {
         "host",
         "content-length",
@@ -39,7 +33,6 @@ def _filter_request_headers(headers: Mapping[str, str]) -> Dict[str, str]:
         kl = k.lower()
         if kl in blocked:
             continue
-        # We always override Authorization, so we skip any client Authorization.
         if kl == "authorization":
             continue
         out[k] = v
@@ -47,9 +40,6 @@ def _filter_request_headers(headers: Mapping[str, str]) -> Dict[str, str]:
 
 
 def _filter_response_headers(headers: Mapping[str, str]) -> Dict[str, str]:
-    """
-    Filter response headers from upstream before returning to the client.
-    """
     blocked = {
         "connection",
         "keep-alive",
@@ -59,7 +49,7 @@ def _filter_response_headers(headers: Mapping[str, str]) -> Dict[str, str]:
         "trailers",
         "transfer-encoding",
         "upgrade",
-        "content-encoding",  # let ASGI/framework handle compression
+        "content-encoding",  # let ASGI/server handle compression
     }
 
     out: Dict[str, str] = {}
@@ -76,35 +66,20 @@ async def forward_openai_request(
     upstream_path: str | None = None,
     upstream_method: str | None = None,
 ) -> Response:
-    """
-    Generic forwarder for OpenAI-style /v1/* requests.
-
-    Used by all the thin routers (models, files, images, videos, embeddings,
-    responses, etc.) so behavior stays aligned with the official REST spec
-    and the openai-python client.
-    """
     method = upstream_method or request.method
     path = upstream_path or request.url.path
 
-    # Build upstream URL
-    if OPENAI_API_BASE.endswith("/"):
-        base = OPENAI_API_BASE[:-1]
-    else:
-        base = OPENAI_API_BASE
+    base = OPENAI_API_BASE.rstrip("/")
     target_url = f"{base}{path}"
 
-    # Query params passthrough
     params = dict(request.query_params)
 
-    # Headers passthrough + auth override
     request_headers = request.headers
     upstream_headers = _filter_request_headers(request_headers)
     if OPENAI_API_KEY:
         upstream_headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
-    # Force plain JSON (no gzip/br) from upstream to avoid decoding issues
     upstream_headers["Accept-Encoding"] = "identity"
 
-    # Body handling
     raw_body = await request.body()
     json_data: Any | None = None
 
@@ -121,14 +96,8 @@ async def forward_openai_request(
     elif raw_body:
         request_kwargs["content"] = raw_body
 
-    # Timeout: allow extra time for images/videos
     if path.startswith("/v1/images") or path.startswith("/v1/videos"):
-        timeout = httpx.Timeout(
-            connect=30.0,
-            read=120.0,
-            write=120.0,
-            pool=30.0,
-        )
+        timeout = httpx.Timeout(connect=30.0, read=120.0, write=120.0, pool=30.0)
     else:
         timeout = httpx.Timeout(30.0)
 

@@ -16,8 +16,8 @@ Legacy / extended endpoints MAY include:
 
 This router intentionally does NOT encode any business logic or
 parameter validation. All behavior is delegated to
-`forward_openai_request`, so the relay automatically tracks changes in
-the upstream API and openai-python SDK.
+`forward_openai_request`, so the relay automatically tracks
+changes in the upstream API and openai-python SDK.
 """
 
 from __future__ import annotations
@@ -26,13 +26,11 @@ from fastapi import APIRouter, Request
 
 from app.api.forward_openai import forward_openai_request
 from app.utils.logger import relay_log as logger
-from app.utils.auth import verify_relay_key
-
 
 router = APIRouter(
     prefix="/v1",
     tags=["images"],
-    dependencies=[verify_relay_key],
+    # Auth is handled centrally by RelayAuthMiddleware.
 )
 
 

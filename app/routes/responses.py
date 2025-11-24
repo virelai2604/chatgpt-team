@@ -14,25 +14,14 @@ from app.api.forward_openai import (
     _filter_request_headers,
 )
 from app.utils.logger import relay_log as logger
-from app.utils.auth import verify_relay_key
-
 
 router = APIRouter(
     prefix="/v1",
     tags=["responses"],
-    dependencies=[verify_relay_key],
 )
 
 
 async def _stream_openai_sse(request: Request, json_body: dict) -> StreamingResponse:
-    """
-    Streaming proxy for POST /v1/responses with `stream: true`.
-
-    Uses Accept-Encoding="identity" and aiter_bytes() so the stream is always
-    decoded bytes.
-
-    relay_e2e_raw.py expects the streamed text to aggregate to 'relay-stream-ok'.
-    """
     if not OPENAI_API_KEY:
         raise HTTPException(
             status_code=500,
@@ -79,12 +68,6 @@ async def _stream_openai_sse(request: Request, json_body: dict) -> StreamingResp
 
 @router.post("/responses")
 async def create_response(request: Request) -> Response:
-    """
-    POST /v1/responses
-
-    - If body.stream == true → streaming SSE proxy.
-    - Else → normal JSON proxy via forward_openai_request.
-    """
     raw_body = await request.body()
     json_body: dict | None = None
 
@@ -103,23 +86,14 @@ async def create_response(request: Request) -> Response:
 
 @router.get("/responses")
 async def list_responses(request: Request) -> Response:
-    """
-    GET /v1/responses
-    """
     return await forward_openai_request(request)
 
 
 @router.get("/responses/{response_id}")
 async def retrieve_response(response_id: str, request: Request) -> Response:
-    """
-    GET /v1/responses/{response_id}
-    """
     return await forward_openai_request(request)
 
 
 @router.post("/responses/{response_id}/cancel")
 async def cancel_response(response_id: str, request: Request) -> Response:
-    """
-    POST /v1/responses/{response_id}/cancel
-    """
     return await forward_openai_request(request)
