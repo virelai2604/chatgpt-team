@@ -4,7 +4,9 @@ from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
 
-router = APIRouter(tags=["files"])
+router = APIRouter(
+    tags=["files"],
+)
 
 
 @router.get("/v1/files")

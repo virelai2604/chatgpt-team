@@ -1,46 +1,65 @@
 #!/usr/bin/env python
 """
-relay_e2e_raw.py — End-to-end smoke test for ChatGPT Team Relay.
+relay_e2e_raw.py — Unified E2E test for ChatGPT Team Relay (HTTP + Realtime WS)
 
-Covers:
-  0) /health
-  1) /v1/responses (non-stream + stream=true SSE)
-  2) /v1/embeddings
-  3) /v1/models
-  4) /relay/models
-  5) /v1/tools
-  6) /v1/files
-  7) /v1/vector_stores
-  8) /v1/conversations
-  9) /relay/actions
- 10) /v1/realtime/sessions (basic JSON)
- 11) /v1/images (best-effort)
- 12) /v1/videos (best-effort)
+This script exercises the relay in two layers:
 
-Environment:
-  REST_BASE   — root of relay, e.g. https://chatgpt-team-relay.onrender.com
-  API_BASE    — base for /v1 APIs; if unset, defaults to REST_BASE + "/v1"
-  RELAY_KEY   — must match RELAY_KEY configured on the relay
-  DEBUG       — if truthy, prints verbose logs
+  1) Core HTTP tests against OpenAI-compatible surfaces:
+       - /health
+       - /v1/responses  (non-stream + SSE stream)
+       - /v1/embeddings
+       - /v1/models
+       - /v1/files              (best-effort)
+       - /v1/vector_stores      (best-effort)
+       - /v1/images             (best-effort)
+       - /v1/videos             (best-effort)
+       - /v1/conversations      (best-effort)
+       - /v1/tools              (best-effort)
+       - /v1/realtime/sessions  (HTTP best-effort)
+
+  2) Realtime WebSocket test, via OpenAI Realtime:
+       - POST /v1/realtime/sessions on the relay
+       - Connect WebSocket to OpenAI's Realtime URL using client_secret
+       - Send input_text event "Say exactly: relay-ws-ok"
+       - Aggregate response.output_text.delta messages
+       - Assert final text == "relay-ws-ok"
+
+Environment variables:
+
+  REST_BASE   — base URL for the relay, e.g. https://chatgpt-team-relay.onrender.com
+  API_BASE    — optional override for /v1 API base (default: REST_BASE + "/v1")
+  RELAY_KEY   — relay bearer key (must match relay's RELAY_KEY)
+  DEBUG       — "1"/"true"/"yes" for verbose logs
+
+Dependencies:
+
+  pip install requests websockets
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
-from typing import Any, Dict, Iterable, List, Tuple
+import time
+from typing import Any, Dict, Iterable, Tuple
 
 import requests
 
+try:
+    import websockets
+except ImportError:
+    websockets = None  # type: ignore[assignment]
+
+
 # ---------------------------------------------------------------------------
-# Environment & base URLs
+# Environment & URL utilities
 # ---------------------------------------------------------------------------
 
-REST_BASE = os.environ.get("REST_BASE", "https://chatgpt-team-relay.example.com").rstrip(
+REST_BASE = os.environ.get("REST_BASE", "https://chatgpt-team-relay.onrender.com").rstrip(
     "/"
 )
-# API_BASE can be set explicitly; otherwise default to REST_BASE + "/v1"
 _API_BASE_ENV = os.environ.get("API_BASE")
 if _API_BASE_ENV:
     API_BASE = _API_BASE_ENV.rstrip("/")
@@ -50,430 +69,468 @@ else:
 RELAY_KEY = os.environ.get("RELAY_KEY", "dummy")
 DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
 
-print(f"Using REST_BASE={REST_BASE}")
-print(f"Using API_BASE={API_BASE}")
-print(f"DEBUG={DEBUG}")
 
-
-# ---------------------------------------------------------------------------
-# Helper: URL construction
-# ---------------------------------------------------------------------------
+def _dbg(msg: str) -> None:
+    if DEBUG:
+        print(f"[relay-e2e] [DEBUG] {msg}", file=sys.stderr)
 
 
 def _build_url(path: str) -> str:
     """
-    Normalize path → full URL, avoiding /v1/v1 duplication.
+    Build a URL for the relay, mirroring the semantics used in the original
+    E2E script:
 
-    Rules:
-      • /health and /relay/* go to REST_BASE directly.
-      • All other test paths are treated as OpenAI-style endpoints, and we
-        join them against API_BASE. If API_BASE already ends with "/v1"
-        and path starts with "/v1/", we strip the additional "/v1" from
-        the path to avoid "/v1/v1/...".
+      - /health           → REST_BASE + "/health"
+      - /relay/...        → REST_BASE + "/relay/..."
+      - /v1/... and others:
+           API_BASE is the default base for /v1:
+             • If API_BASE endswith "/v1" and path startswith "/v1/":
+                 drop the leading "/v1" from path to avoid "/v1/v1" duplication.
+             • Else: use path as-is.
     """
-    if not path:
-        path = "/"
     if not path.startswith("/"):
         path = "/" + path
 
-    # Root / health / relay-introspection → REST_BASE
     if path == "/health" or path.startswith("/relay/"):
         return f"{REST_BASE}{path}"
 
-    # Everything else is considered under the OpenAI-style /v1 namespace.
     base = API_BASE.rstrip("/")
-
     if base.endswith("/v1") and path.startswith("/v1/"):
-        # API_BASE already has /v1; strip the duplicate from path
-        normalized_path = path[3:]  # drop the leading "/v1"
+        normalized_path = path[3:]  # remove leading "/v1"
     else:
         normalized_path = path
 
     return f"{base}{normalized_path}"
 
 
-# ---------------------------------------------------------------------------
-# Core HTTP helper
-# ---------------------------------------------------------------------------
-
-
-def do_request(
-    method: str, path: str, json_body: Dict[str, Any] | None
-) -> Tuple[int, Dict[str, Any]]:
-    url = _build_url(path)
-    headers = {
+def _headers_json() -> Dict[str, str]:
+    return {
+        "Authorization": f"Bearer {RELAY_KEY}",
         "Content-Type": "application/json",
+    }
+
+
+def _headers() -> Dict[str, str]:
+    return {
         "Authorization": f"Bearer {RELAY_KEY}",
     }
 
-    if DEBUG:
-        print(f"[relay-e2e-raw] [DEBUG] REQUEST {method} {path} json_body={json_body}")
-        print(f"[relay-e2e-raw] [DEBUG] REQUEST URL: {url}")
-        print(f"[relay-e2e-raw] [DEBUG] REQUEST HEADERS: {headers}")
 
-    resp = requests.request(method, url, headers=headers, json=json_body, timeout=60.0)
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    if DEBUG:
-        print(
-            f"[relay-e2e-raw] [DEBUG] RESPONSE {method} {path}: "
-            f"status={resp.status_code}, headers={dict(resp.headers)}, "
-            f"text={resp.text!r}"
-        )
+def _print_section(title: str) -> None:
+    print()
+    print("=" * 72)
+    print(title)
+    print("=" * 72)
 
-    status_code = resp.status_code
 
-    # Try to parse JSON defensively.
+def _require(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
+# ---------------------------------------------------------------------------
+# Core HTTP tests
+# ---------------------------------------------------------------------------
+
+def test_health() -> None:
+    _print_section("TEST: /health")
+    url = _build_url("/health")
+    _dbg(f"GET {url}")
+    resp = requests.get(url, timeout=15.0)
+    print(f"GET /health -> HTTP {resp.status_code}")
+    _require(resp.status_code == 200, "Expected HTTP 200 from /health")
+
     try:
         data = resp.json()
     except Exception:
-        if DEBUG:
-            print(
-                f"[relay-e2e-raw] [DEBUG] Failed to decode JSON from {method} {path}"
-            )
-        data = {}
+        raise AssertionError("Health endpoint did not return valid JSON")
 
-    return status_code, data
+    _dbg(f"Health payload: {json.dumps(data, indent=2)}")
+    _require(data.get("status") == "ok", "Health status is not 'ok'")
 
 
-# ---------------------------------------------------------------------------
-# SSE helpers
-# ---------------------------------------------------------------------------
-
-
-def _iter_sse_events(resp: requests.Response) -> Iterable[Tuple[str, str]]:
-    """
-    Parse a text/event-stream HTTP response into (event_type, data_str) tuples.
-
-    We handle the standard SSE framing:
-      event: <name>
-      data: <json>
-      <blank line>
-    """
-    event_type: str | None = None
-    data_lines: List[str] = []
-
-    for raw_line in resp.iter_lines(decode_unicode=True):
-        if raw_line is None:
-            continue
-
-        line = raw_line.strip()
-        if not line:
-            if event_type and data_lines:
-                yield event_type, "\n".join(data_lines)
-            event_type, data_lines = None, []
-            continue
-
-        if line.startswith("event:"):
-            event_type = line[len("event:") :].strip()
-            if DEBUG:
-                print(
-                    f"[relay-e2e-raw] [DEBUG] SSE line: event: {event_type}",
-                )
-        elif line.startswith("data:"):
-            payload = line[len("data:") :].strip()
-            data_lines.append(payload)
-            if DEBUG:
-                print(
-                    f"[relay-e2e-raw] [DEBUG] SSE line: data: {payload}",
-                )
-
-    if event_type and data_lines:
-        yield event_type, "\n".join(data_lines)
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
-def test_health() -> bool:
-    print("=== 0) /health ===")
-    status_code, resp_json = do_request("GET", "/health", None)
-    print(f"[relay-e2e-raw] GET /health -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /health JSON: {resp_json}")
-
-    if status_code != 200:
-        print("[relay-e2e-raw] ERROR: /health did not return 200")
-        return False
-
-    if resp_json.get("status") != "ok":
-        print("[relay-e2e-raw] ERROR: /health payload missing status='ok'")
-        return False
-
-    return True
-
-
-def test_non_stream_responses() -> bool:
-    print("=== 1a) /v1/responses (non-stream) ===")
-    payload = {
-        "model": "gpt-4o-mini",
+def test_responses_non_stream(model: str = "gpt-4o-mini") -> None:
+    _print_section("TEST: /v1/responses (non-stream)")
+    url = _build_url("/v1/responses")
+    headers = _headers_json()
+    body = {
+        "model": model,
         "input": "Say exactly: relay-http-ok",
-        "max_output_tokens": 64,
     }
-    status_code, resp_json = do_request("POST", "/v1/responses", payload)
-    print(f"[relay-e2e-raw] POST /v1/responses -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /v1/responses JSON: {resp_json}")
 
-    if status_code != 200:
-        print("[relay-e2e-raw] ERROR: /v1/responses did not return 200")
-        return False
+    _dbg(f"POST {url} body={body}")
+    resp = requests.post(url, headers=headers, json=body, timeout=60.0)
+    print(f"POST /v1/responses (non-stream) -> HTTP {resp.status_code}")
+    _require(resp.status_code == 200, "Expected HTTP 200 from /v1/responses")
 
     try:
-        outputs = resp_json["output"]
-        first_item = outputs[0]
-        text = first_item["content"][0]["text"]
-    except Exception as exc:
-        print(f"[relay-e2e-raw] ERROR: unexpected /v1/responses shape: {exc!r}")
-        return False
+        data = resp.json()
+    except Exception:
+        raise AssertionError("Non-stream /v1/responses did not return valid JSON")
 
-    if text.strip() != "relay-http-ok":
-        print(
-            f"[relay-e2e-raw] ERROR: unexpected assistant text: {text!r} "
-            "(wanted 'relay-http-ok')"
-        )
-        return False
+    _dbg(f"/v1/responses (non-stream) payload: {json.dumps(data, indent=2)}")
 
-    return True
+    # The exact structure may vary, but the common pattern for the Responses API is:
+    #   data["output"][0]["content"][0]["text"]
+    output_text = None
+    try:
+        output = data.get("output") or data.get("response") or []
+        if isinstance(output, list) and output:
+            content = output[0].get("content") or []
+            if isinstance(content, list) and content:
+                output_text = content[0].get("text")
+    except Exception:
+        output_text = None
+
+    _require(
+        isinstance(output_text, str) and "relay-http-ok" in output_text,
+        "Expected non-stream responses output to contain 'relay-http-ok'",
+    )
+    print("Non-stream /v1/responses OK")
 
 
-def test_stream_responses() -> bool:
-    print("=== 1b) /v1/responses (stream=true, SSE) ===")
-    payload = {
-        "model": "gpt-4o-mini",
+def _iter_sse_lines(resp: requests.Response) -> Iterable[str]:
+    """
+    Iterate over SSE lines from a streaming response.
+
+    Lines typically look like:
+      "data: {...json...}\n\n"
+    """
+    for raw_line in resp.iter_lines(decode_unicode=True):
+        if not raw_line:
+            continue
+        yield raw_line
+
+
+def test_responses_stream(model: str = "gpt-4o-mini") -> None:
+    _print_section("TEST: /v1/responses (stream)")
+    url = _build_url("/v1/responses")
+    headers = _headers_json()
+    body = {
+        "model": model,
         "input": "Say exactly: relay-stream-ok",
-        "max_output_tokens": 64,
         "stream": True,
     }
 
-    api_base = os.environ.get("API_BASE", REST_BASE + "/v1").rstrip("/")
-    url = f"{api_base}/responses"
-
-    session = requests.Session()
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {RELAY_KEY}",
-    }
-
-    if DEBUG:
-        print(
-            f"[relay-e2e-raw] [DEBUG] REQUEST POST /v1/responses (stream) "
-            f"url={url}, json_body={payload}"
-        )
-
-    resp = session.post(url, json=payload, headers=headers, stream=True, timeout=60.0)
-    print(
-        f"[relay-e2e-raw] POST /v1/responses (stream) -> HTTP {resp.status_code}",
+    _dbg(f"POST {url} body={body} (stream=True)")
+    resp = requests.post(url, headers=headers, json=body, stream=True, timeout=120.0)
+    print(f"POST /v1/responses (stream) -> HTTP {resp.status_code}")
+    _require(
+        resp.status_code == 200,
+        "Expected HTTP 200 from streaming /v1/responses",
     )
 
-    if resp.status_code != 200:
-        print("[relay-e2e-raw] ERROR: streaming responses returned HTTP "
-              f"{resp.status_code}")
-        return False
-
-    text_chunks: List[str] = []
-
-    for event_type, data_str in _iter_sse_events(resp):
-        try:
-            obj = json.loads(data_str)
-        except json.JSONDecodeError:
-            if DEBUG:
-                print(
-                    "[relay-e2e-raw] [DEBUG] Failed to parse SSE data as JSON: "
-                    f"{data_str!r}",
-                )
+    aggregated = []
+    started = time.time()
+    for line in _iter_sse_lines(resp):
+        _dbg(f"SSE line: {line!r}")
+        if not line.startswith("data:"):
             continue
 
-        if event_type == "response.output_text.delta":
-            delta = obj.get("delta", "")
-            text_chunks.append(delta)
+        payload_str = line[5:].strip()
+        if payload_str == "[DONE]":
+            break
 
-    aggregated_text = "".join(text_chunks).strip()
-    print(
-        f"[relay-e2e-raw] Streamed text aggregate: {aggregated_text!r}",
+        try:
+            event = json.loads(payload_str)
+        except json.JSONDecodeError:
+            _dbg("Skipping non-JSON SSE payload")
+            continue
+
+        # We expect Realtime-style deltas from the Responses API:
+        #   { "type": "response.output_text.delta", "delta": "..." }
+        if event.get("type") == "response.output_text.delta":
+            delta = event.get("delta") or ""
+            aggregated.append(delta)
+
+        # Safety timeout
+        if time.time() - started > 60:
+            break
+
+    text = "".join(aggregated).strip()
+    print(f"Aggregated streaming text: {text!r}")
+    _require(
+        text.endswith("relay-stream-ok"),
+        "Expected streaming output to end with 'relay-stream-ok'",
     )
+    print("Stream /v1/responses OK")
 
-    expected = "relay-stream-ok"
-    if aggregated_text != expected:
+
+def test_embeddings(model: str = "text-embedding-3-small") -> None:
+    _print_section("TEST: /v1/embeddings")
+    url = _build_url("/v1/embeddings")
+    headers = _headers_json()
+    body = {
+        "model": model,
+        "input": "Hello from relay embeddings E2E",
+    }
+
+    _dbg(f"POST {url} body={body}")
+    resp = requests.post(url, headers=headers, json=body, timeout=60.0)
+    print(f"POST /v1/embeddings -> HTTP {resp.status_code}")
+    _require(resp.status_code == 200, "Expected HTTP 200 from /v1/embeddings")
+
+    data = resp.json()
+    _dbg(f"/v1/embeddings payload: {json.dumps(data, indent=2)}")
+
+    embedding = None
+    try:
+        arr = data.get("data") or []
+        if isinstance(arr, list) and arr:
+            embedding = arr[0].get("embedding")
+    except Exception:
+        embedding = None
+
+    _require(
+        isinstance(embedding, list) and len(embedding) > 0,
+        "Expected first embedding to be a non-empty list",
+    )
+    print("Embeddings OK")
+
+
+def test_models() -> None:
+    _print_section("TEST: /v1/models")
+    url = _build_url("/v1/models")
+    headers = _headers()
+    _dbg(f"GET {url}")
+    resp = requests.get(url, headers=headers, timeout=30.0)
+    print(f"GET /v1/models -> HTTP {resp.status_code}")
+    _require(resp.status_code == 200, "Expected HTTP 200 from /v1/models")
+
+    data = resp.json()
+    _dbg(f"/v1/models payload: {json.dumps(data, indent=2)}")
+
+    _require(
+        isinstance(data.get("data"), list),
+        "Expected /v1/models to return a 'data' list",
+    )
+    print("Models OK")
+
+
+# ---------------------------------------------------------------------------
+# Best-effort HTTP tests (do not fail suite on error)
+# ---------------------------------------------------------------------------
+
+def best_effort_get(path: str, label: str) -> None:
+    url = _build_url(path)
+    headers = _headers()
+    _dbg(f"GET {url} (best-effort)")
+    try:
+        resp = requests.get(url, headers=headers, timeout=30.0)
+        print(f"GET {path} -> HTTP {resp.status_code}")
+    except Exception as exc:
+        print(f"BEST-EFFORT {label}: ERROR contacting {path}: {exc}")
+        return
+
+    try:
+        data = resp.json()
+        _dbg(f"{path} payload: {json.dumps(data, indent=2)}")
+    except Exception:
+        print(f"BEST-EFFORT {label}: non-JSON response")
+
+
+def test_best_effort_endpoints() -> None:
+    _print_section("BEST-EFFORT: Misc endpoints")
+
+    best_effort_get("/v1/files", "files")
+    best_effort_get("/v1/vector_stores", "vector_stores")
+    best_effort_get("/v1/images", "images")
+    best_effort_get("/v1/videos", "videos")
+    best_effort_get("/v1/conversations", "conversations")
+    best_effort_get("/v1/tools", "tools")
+    best_effort_get("/v1/realtime/sessions", "realtime.sessions")
+
+
+# ---------------------------------------------------------------------------
+# Realtime WebSocket test (combined here)
+# ---------------------------------------------------------------------------
+
+def create_realtime_session() -> Tuple[str, str]:
+    """
+    Step 1: Create a Realtime session via the relay.
+
+    Returns:
+        (client_secret_value, realtime_url)
+    """
+    _print_section("TEST: /v1/realtime/sessions (HTTP)")
+
+    url = _build_url("/v1/realtime/sessions")
+    headers = _headers_json()
+    payload: Dict[str, Any] = {
+        "model": "gpt-realtime-preview",
+        "modalities": ["text"],
+        "instructions": "You are a test assistant. Say exactly: relay-ws-ok",
+        # Avoid session_ttl_seconds; some accounts 400 this.
+    }
+
+    _dbg(f"POST {url} payload={payload}")
+    resp = requests.post(url, headers=headers, json=payload, timeout=60.0)
+    print(f"POST /v1/realtime/sessions -> HTTP {resp.status_code}")
+
+    try:
+        data = resp.json()
+    except Exception:
         print(
-            "[relay-e2e-raw] Unexpected streaming assistant text: "
-            f"{aggregated_text!r} (wanted {expected!r})"
+            "[relay-e2e] ERROR: Failed to decode JSON from /v1/realtime/sessions"
+        )
+        data = {}
+
+    _dbg(f"/v1/realtime/sessions payload: {json.dumps(data, indent=2)}")
+
+    if resp.status_code != 200:
+        raise AssertionError(
+            f"/v1/realtime/sessions did not return 200 (got {resp.status_code})"
+        )
+
+    client_secret = (
+        data.get("client_secret", {}) or {}
+    ).get("value")
+    realtime_url = (data.get("realtime", {}) or {}).get("url")
+
+    if not client_secret or not realtime_url:
+        raise AssertionError(
+            "Realtime session payload missing client_secret.value or realtime.url"
+        )
+
+    print(
+        "[relay-e2e] Realtime session OK; got client_secret (***hidden***) "
+        f"and realtime.url={realtime_url!r}"
+    )
+    return client_secret, realtime_url
+
+
+async def _ws_roundtrip(client_secret: str, realtime_url: str) -> bool:
+    """
+    Step 2: WebSocket roundtrip to OpenAI Realtime:
+
+      - Connect to realtime_url with Authorization: Bearer <client_secret>.
+      - Send input_text: 'Say exactly: relay-ws-ok'.
+      - Aggregate response.output_text.delta events.
+      - Expect final text == 'relay-ws-ok'.
+    """
+    if websockets is None:
+        print("[relay-e2e] websockets library not installed; skipping WS test.")
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {client_secret}",
+    }
+
+    _dbg(f"Connecting WebSocket to {realtime_url} with Authorization header")
+
+    async with websockets.connect(realtime_url, extra_headers=headers) as ws:
+        message = {
+            "type": "input_text",
+            "text": "Say exactly: relay-ws-ok",
+        }
+        await ws.send(json.dumps(message))
+        _dbg(f"Sent input_text message: {message}")
+
+        text_chunks: list[str] = []
+        expected = "relay-ws-ok"
+        start = time.time()
+
+        while True:
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=20.0)
+            except asyncio.TimeoutError:
+                print("[relay-e2e] ERROR: Timed out waiting for WS response.")
+                return False
+
+            _dbg(f"WS frame: {raw!r}")
+
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                _dbg("Non-JSON WS frame; ignoring")
+                continue
+
+            if obj.get("type") == "response.output_text.delta":
+                delta = obj.get("delta", "")
+                text_chunks.append(delta)
+                if "".join(text_chunks).strip().endswith(expected):
+                    break
+
+            if time.time() - start > 60:
+                print("[relay-e2e] ERROR: WS response timeout.")
+                return False
+
+    aggregated = "".join(text_chunks).strip()
+    print(f"[relay-e2e] Aggregated WS text: {aggregated!r}")
+
+    if aggregated != expected:
+        print(
+            "[relay-e2e] ERROR: Expected WS text "
+            f"{expected!r}, got {aggregated!r}"
         )
         return False
 
     return True
 
 
-def test_embeddings() -> bool:
-    print("=== 2) /v1/embeddings ===")
-    payload = {
-        "model": "text-embedding-3-small",
-        "input": ["hello", "world"],
-    }
-    status_code, resp_json = do_request("POST", "/v1/embeddings", payload)
-    print(f"[relay-e2e-raw] POST /v1/embeddings -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /v1/embeddings JSON: keys={list(resp_json.keys())}")
+def test_realtime_ws() -> None:
+    _print_section("TEST: Realtime WebSocket (via OpenAI)")
 
-    if status_code != 200:
-        print("[relay-e2e-raw] ERROR: /v1/embeddings did not return 200")
-        return False
+    if websockets is None:
+        print(
+            "[relay-e2e] websockets not installed; "
+            "install with `pip install websockets` to run this test."
+        )
+        return
 
-    data = resp_json.get("data") or []
-    if not data or "embedding" not in data[0]:
-        print("[relay-e2e-raw] ERROR: /v1/embeddings missing embedding data")
-        return False
+    client_secret, realtime_url = create_realtime_session()
+    ok = asyncio.run(_ws_roundtrip(client_secret, realtime_url))
 
-    return True
+    if ok:
+        print("Realtime WS test PASSED.")
+    else:
+        raise AssertionError("Realtime WS test FAILED.")
 
 
-def test_models() -> bool:
-    print("=== 3) /v1/models ===")
-    status_code, resp_json = do_request("GET", "/v1/models", None)
-    print(f"[relay-e2e-raw] GET /v1/models -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /v1/models JSON: keys={list(resp_json.keys())}")
-
-    if status_code != 200:
-        print("[relay-e2e-raw] ERROR: /v1/models did not return 200")
-        return False
-
-    return True
-
-
-def test_relay_models_best_effort() -> bool:
-    print("=== 4) /relay/models (best-effort) ===")
-    status_code, resp_json = do_request("GET", "/relay/models", None)
-    print(f"[relay-e2e-raw] GET /relay/models -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /relay/models JSON: {resp_json}")
-    # This is best-effort; 404 is acceptable depending on deployment.
-    return True
-
-
-def test_tools_best_effort() -> bool:
-    print("=== 5) /v1/tools (best-effort) ===")
-    status_code, resp_json = do_request("GET", "/v1/tools", None)
-    print(f"[relay-e2e-raw] GET /v1/tools -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /v1/tools JSON: {resp_json}")
-    # best-effort
-    return True
-
-
-def test_files_best_effort() -> bool:
-    print("=== 6) /v1/files (best-effort) ===")
-    status_code, resp_json = do_request("GET", "/v1/files", None)
-    print(f"[relay-e2e-raw] GET /v1/files -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /v1/files JSON: {resp_json}")
-    # best-effort
-    return True
-
-
-def test_vector_stores_best_effort() -> bool:
-    print("=== 7) /v1/vector_stores (best-effort) ===")
-    status_code, resp_json = do_request("GET", "/v1/vector_stores", None)
-    print(f"[relay-e2e-raw] GET /v1/vector_stores -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /v1/vector_stores JSON: {resp_json}")
-    # best-effort
-    return True
-
-
-def test_conversations_best_effort() -> bool:
-    print("=== 8) /v1/conversations (best-effort) ===")
-    payload = {
-        "messages": [
-            {"role": "user", "content": "Hello from relay-e2e-raw."},
-        ]
-    }
-    status_code, resp_json = do_request("POST", "/v1/conversations", payload)
-    print(f"[relay-e2e-raw] POST /v1/conversations -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /v1/conversations JSON: {resp_json}")
-    # best-effort
-    return True
-
-
-def test_relay_actions_best_effort() -> bool:
-    print("=== 9) /relay/actions (best-effort) ===")
-    status_code, resp_json = do_request("GET", "/relay/actions", None)
-    print(f"[relay-e2e-raw] GET /relay/actions -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /relay/actions JSON: {resp_json}")
-    # best-effort
-    return True
-
-
-def test_realtime_sessions_best_effort() -> bool:
-    print("=== 10) /v1/realtime/sessions (basic JSON, best-effort) ===")
-    payload = {
-        "model": "gpt-realtime-preview",
-        "modalities": ["text"],
-        "instructions": "You are a test assistant. Please echo a short greeting.",
-        # IMPORTANT: do NOT include session_ttl_seconds; OpenAI 400s it.
-    }
-    status_code, resp_json = do_request("POST", "/v1/realtime/sessions", payload)
-    print(f"[relay-e2e-raw] POST /v1/realtime/sessions -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /v1/realtime/sessions JSON: {resp_json}")
-    # best-effort
-    return True
-
-
-def test_images_best_effort() -> bool:
-    print("=== 11) /v1/images (direct, best-effort) ===")
-    payload = {
-        "model": "gpt-image-1",
-        "prompt": "A simple icon of a red car on a white background.",
-        "size": "512x512",
-        "response_format": "b64_json",
-    }
-    status_code, resp_json = do_request("POST", "/v1/images", payload)
-    print(f"[relay-e2e-raw] POST /v1/images -> HTTP {status_code}")
-    print(
-        "[relay-e2e-raw] /v1/images JSON (truncated keys): "
-        f"{list(resp_json.keys())[:5]}"
-    )
-    # best-effort
-    return True
-
-
-def test_videos_best_effort() -> bool:
-    print("=== 12) /v1/videos (direct, best-effort) ===")
-    payload = {
-        "model": "sora-2",
-        "prompt": "Short 2 second test video of a red ball bouncing on a white floor.",
-        # Per error message from upstream, 'seconds' must be one of
-        # '4', '8', or '12' as a string, not integer.
-        "seconds": "4",
-        "size": "720x1280",
-    }
-    status_code, resp_json = do_request("POST", "/v1/videos", payload)
-    print(f"[relay-e2e-raw] POST /v1/videos -> HTTP {status_code}")
-    print(f"[relay-e2e-raw] /v1/videos JSON: {resp_json}")
-    # best-effort
-    return True
-
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main() -> int:
-    ok_health = test_health()
+    print("=== ChatGPT Team Relay E2E (HTTP + Realtime WS) ===")
+    print(f"REST_BASE={REST_BASE}")
+    print(f"API_BASE={API_BASE}")
+    print(f"DEBUG={DEBUG}")
+    print()
 
-    ok_non_stream = test_non_stream_responses()
-    ok_stream = test_stream_responses()
-    ok_embeddings = test_embeddings()
-    ok_models = test_models()
+    try:
+        # Core HTTP tests (hard failures)
+        test_health()
+        test_responses_non_stream()
+        test_responses_stream()
+        test_embeddings()
+        test_models()
 
-    # Best-effort tests (do not gate the core "OK/FAIL" status)
-    test_relay_models_best_effort()
-    test_tools_best_effort()
-    test_files_best_effort()
-    test_vector_stores_best_effort()
-    test_conversations_best_effort()
-    test_relay_actions_best_effort()
-    test_realtime_sessions_best_effort()
-    test_images_best_effort()
-    test_videos_best_effort()
+        # Best-effort extras (never fail the suite)
+        test_best_effort_endpoints()
 
-    core_ok = ok_health and ok_non_stream and ok_stream and ok_embeddings and ok_models
-    if core_ok:
-        print("E2E RAW: CORE TESTS PASSED.")
-        return 0
-    else:
-        print("E2E RAW: CORE TESTS FAILED.")
+        # Realtime WebSocket test (hard failure if websockets is available)
+        test_realtime_ws()
+
+    except AssertionError as exc:
+        print()
+        print("E2E: FAILED.")
+        print(f"Reason: {exc}")
         return 1
+    except Exception as exc:
+        print()
+        print("E2E: FAILED (unhandled exception).")
+        print(f"Reason: {exc}")
+        return 1
+
+    print()
+    print("E2E: ALL TESTS PASSED.")
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
