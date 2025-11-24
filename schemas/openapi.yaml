@@ -1,32 +1,22 @@
 openapi: 3.1.0
 info:
-  title: ChatGPT Team Relay
-  version: "1.8.0"
+  title: ChatGPT Team Relay API
+  version: "1.0.0"
   description: |
-    OpenAI-compatible relay for ChatGPT Team.
-
-    This OpenAPI document only describes the local relay endpoints that
-    ChatGPT Actions uses directly:
-      • /v1/health — health check
-      • /v1/tools — list tools
-      • /v1/tools/{tool_id} — retrieve tool definition
-
-    All model-facing endpoints (responses, files, embeddings, vector stores,
-    images, videos, realtime, etc.) are proxied upstream to https://api.openai.com
-    and follow the official OpenAI API reference.
+    A relay that forwards ChatGPT-style requests to the OpenAI REST API.
+    Core routes mirror OpenAI's /v1 endpoints, especially:
+    - /v1/responses for chat-style interactions
+    - /v1/embeddings for vector embeddings
+    - /v1/models, /v1/files, /v1/tools for metadata and tooling
 
 servers:
   - url: https://chatgpt-team-relay.onrender.com
-    description: Production (Render)
-  - url: http://localhost:8000
-    description: Local development
 
 paths:
-  /v1/health:
+  /health:
     get:
       operationId: getHealth
-      summary: Health check
-      description: Lightweight health check for Render and external monitors.
+      summary: Health check for the relay service
       responses:
         "200":
           description: Relay is healthy
@@ -35,115 +25,271 @@ paths:
               schema:
                 type: object
                 properties:
-                  object:
-                    type: string
-                    example: health
                   status:
                     type: string
                     example: ok
-                  environment:
-                    type: string
-                  default_model:
-                    type: string
-                  openai_api_base:
-                    type: string
+
+  /v1/responses:
+    post:
+      operationId: createResponse
+      summary: Create a response (chat-style, tool-calling, etc.)
+      description: >
+        Forwards to OpenAI's /v1/responses endpoint. Use this for chat-style
+        messages, reasoning models, and tool-calling.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: OpenAI Responses payload
+              properties:
+                model:
+                  type: string
+                  example: gpt-4.1-mini
+                input:
+                  anyOf:
+                    - type: string
+                    - type: array
+                      items:
+                        anyOf:
+                          - type: string
+                          - type: object
+                max_output_tokens:
+                  type: integer
+                  nullable: true
+                stream:
+                  type: boolean
+                  description: If true, returns a Server-Sent Events stream.
+                  default: false
+      responses:
+        "200":
+          description: Response from OpenAI's /v1/responses
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseObject"
+
+  /v1/embeddings:
+    post:
+      operationId: createEmbedding
+      summary: Create embeddings
+      description: Forwards to OpenAI's /v1/embeddings endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model:
+                  type: string
+                  example: text-embedding-3-small
+                input:
+                  anyOf:
+                    - type: string
+                    - type: array
+                      items:
+                        type: string
+      responses:
+        "200":
+          description: Embeddings result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmbeddingResponse"
+
+  /v1/models:
+    get:
+      operationId: listModels
+      summary: List available models
+      description: Forwards to OpenAI's /v1/models endpoint.
+      responses:
+        "200":
+          description: List of models
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelList"
 
   /v1/tools:
     get:
-      operationId: listTools
-      summary: List available tools
-      description: |
-        Returns all tools known to this relay. Tools follow an OpenAI-style
-        function tool shape and are backed by the tools_manifest.json file.
+      operationId: listRelayTools
+      summary: List tools exposed by the relay
+      description: >
+        Returns a list of tools that this relay exposes. This is
+        not part of the official OpenAI REST API, but is provided
+        as a convenience for the ChatGPT Team environment.
       responses:
         "200":
-          description: A list of tools
+          description: List of tools
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ToolList"
 
-  /v1/tools/{tool_id}:
+  /v1/files:
     get:
-      operationId: getTool
-      summary: Retrieve a single tool
-      description: Retrieve a single tool definition by its ID or name.
-      parameters:
-        - in: path
-          name: tool_id
-          required: true
-          schema:
-            type: string
-          description: The ID or name of the tool to retrieve.
+      operationId: listFiles
+      summary: List files
+      description: Forwards to OpenAI's /v1/files endpoint.
       responses:
         "200":
-          description: Tool definition
+          description: List of files
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Tool"
-        "404":
-          description: Tool not found
+                $ref: "#/components/schemas/FileList"
+
+  /v1/vector_stores:
+    get:
+      operationId: listVectorStores
+      summary: List vector stores
+      description: Forwards to OpenAI's /v1/vector_stores endpoint.
+      responses:
+        "200":
+          description: List of vector stores
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: object
-                    properties:
-                      message:
-                        type: string
-                      type:
-                        type: string
-                      code:
-                        type: string
-                    required:
-                      - message
-                      - type
+                $ref: "#/components/schemas/VectorStoreList"
 
 components:
   schemas:
-    Tool:
+    ResponseObject:
       type: object
-      description: A function-style tool definition compatible with OpenAI tools.
+      description: >
+        Simplified representation of the OpenAI /v1/responses object.
       properties:
         id:
           type: string
-          description: Stable identifier of the tool.
-        name:
-          type: string
-          description: Function name of the tool.
         object:
           type: string
-          enum: [tool]
-        type:
+          example: response
+        model:
           type: string
-          enum: [function]
-        description:
+        status:
           type: string
-        parameters:
-          type: object
-          description: JSON Schema for the tool's arguments.
-      required:
-        - id
-        - name
-        - object
-        - type
-        - description
-        - parameters
+          example: completed
+        output:
+          type: array
+          description: List of output items (messages, tool calls, etc.)
+          items:
+            type: object
 
-    ToolList:
+    EmbeddingResponse:
       type: object
-      description: List of tool definitions.
       properties:
         object:
           type: string
-          enum: [list]
+          example: list
         data:
           type: array
           items:
-            $ref: "#/components/schemas/Tool"
-      required:
-        - object
-        - data
+            type: object
+            properties:
+              object:
+                type: string
+                example: embedding
+              embedding:
+                type: array
+                items:
+                  type: number
+              index:
+                type: integer
+        model:
+          type: string
+
+    ModelList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              object:
+                type: string
+                example: model
+              created:
+                type: integer
+              owned_by:
+                type: string
+
+    ToolList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                example: web_search
+              name:
+                type: string
+              type:
+                type: string
+                example: function
+              description:
+                type: string
+              parameters:
+                type: object
+
+    FileList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              object:
+                type: string
+                example: file
+              bytes:
+                type: integer
+              created_at:
+                type: integer
+              filename:
+                type: string
+              purpose:
+                type: string
+
+    VectorStoreList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              object:
+                type: string
+                example: vector_store
+              created_at:
+                type: integer
+              name:
+                type: string
+                nullable: true
+              status:
+                type: string

@@ -1,150 +1,116 @@
-"""
-main.py — ChatGPT Team Relay Entry Point
-────────────────────────────────────────
-Unified app bootstrap for the OpenAI-compatible relay.
-
-Focus:
-  • Relay-focus surfaces handled locally:
-      - Responses, Conversations, Files, Vector Stores, Embeddings,
-        Realtime, Models, Images, Videos, Actions, Tools.
-  • /v1/tools is a local tools registry for introspection.
-  • Everything else under /v1/* is orchestrated and generally forwarded
-    to OpenAI via P4OrchestratorMiddleware → forward_openai_request.
-
-This file is designed to be stable and minimal — configuration lives in
-env/.env, routing lives in register_routes.py, and the OpenAI behavior
-follows the official OpenAI API reference.
-"""
-
 from __future__ import annotations
 
 import logging
-import os
-from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
-from starlette.requests import Request
-from starlette.staticfiles import StaticFiles
+from starlette.responses import JSONResponse
 
-from app.routes.register_routes import register_routes
-from app.middleware.validation import SchemaValidationMiddleware
+from app.core.config import settings
 from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
+from app.middleware.validation import SchemaValidationMiddleware
+from app.middleware.error_handler import register_exception_handlers
+from app.core.logger import setup_logging
+from app.middleware.relay_auth import RelayAuthMiddleware  # NEW
+from app.register_routes import register_routes
 
-BASE_DIR = Path(__file__).resolve().parent
-ENV_PATH = BASE_DIR.parent / ".env"
-
-logger = logging.getLogger("relay.main")
-
-
-def _load_dotenv_if_present() -> None:
-    """Load .env if present (simple, no external dependency)."""
-    if not ENV_PATH.is_file():
-        return
-    for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
+logger = logging.getLogger("chatgpt_team_relay")
 
 
 def create_app() -> FastAPI:
-    # Load .env early
-    _load_dotenv_if_present()
-
-    app_mode = os.getenv("APP_MODE", "local")
-    environment = os.getenv("ENVIRONMENT", "local")
-    openai_api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
-    default_model = os.getenv("DEFAULT_MODEL", "gpt-4.1-mini")
-
-    logger.info(
-        "Starting ChatGPT Team Relay (APP_MODE=%s, ENVIRONMENT=%s, OPENAI_API_BASE=%s, DEFAULT_MODEL=%s)",
-        app_mode,
-        environment,
-        openai_api_base,
-        default_model,
-    )
+    setup_logging()
+    logger.info("Starting ChatGPT Team Relay app")
 
     app = FastAPI(
-        title="ChatGPT Team Relay",
-        version="1.0.0",
-        description="OpenAI-compatible relay for ChatGPT Team / P4 agentic workflows.",
-        docs_url=None,
-        redoc_url=None,
-        openapi_url="/schemas/openapi.json",
+        title=settings.RELAY_NAME,
+        version=getattr(settings, "APP_VERSION", "1.0.0"),
+        docs_url=None if settings.APP_MODE == "production" else "/docs",
+        openapi_url=None if settings.APP_MODE == "production" else "/openapi.json",
     )
 
-    # CORS – allow typical frontends to talk to this relay
+    register_exception_handlers(app)
+
+    # 1) JSON schema validation
+    app.add_middleware(SchemaValidationMiddleware)
+
+    # 2) CORS
+    allow_origins = [
+        origin.strip()
+        for origin in settings.CORS_ALLOW_ORIGINS.split(",")
+        if origin.strip()
+    ]
+    allow_methods = [
+        method.strip()
+        for method in settings.CORS_ALLOW_METHODS.split(",")
+        if method.strip()
+    ]
+    allow_headers = [
+        header.strip()
+        for header in settings.CORS_ALLOW_HEADERS.split(",")
+        if header.strip()
+    ]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=allow_origins or ["*"],
+        allow_methods=allow_methods or ["*"],
+        allow_headers=allow_headers or ["*"],
         allow_credentials=True,
     )
 
-    # Validation middleware – schema checks, logging, etc.
-    app.add_middleware(SchemaValidationMiddleware)
+    # 3) Central RELAY_KEY gate (NEW)
+    app.add_middleware(RelayAuthMiddleware)
 
-    # P4 Orchestrator – handles /v1/* fallback and OpenAI proxy logic.
-    app.add_middleware(P4OrchestratorMiddleware)
+    # 4) Orchestrator (local vs upstream OpenAI)
+    app.add_middleware(
+        P4OrchestratorMiddleware,
+        openai_api_base=settings.OPENAI_API_BASE,
+        openai_api_key=settings.OPENAI_API_KEY,
+        default_model=settings.DEFAULT_MODEL,
+        assistants_beta=settings.OPENAI_ASSISTANTS_BETA,
+        realtime_beta=settings.OPENAI_REALTIME_BETA,
+        enable_stream=settings.ENABLE_STREAM,
+        chain_wait_mode=settings.CHAIN_WAIT_MODE,
+        app_mode=settings.APP_MODE,
+        environment=settings.ENVIRONMENT,
+        tools_manifest=settings.TOOLS_MANIFEST,
+        validation_schema_path=settings.VALIDATION_SCHEMA_PATH,
+        proxy_timeout=settings.PROXY_TIMEOUT,
+        relay_timeout=settings.RELAY_TIMEOUT,
+    )
 
-    # Static for .well-known metadata (ChatGPT Actions, etc.)
-    well_known_dir = BASE_DIR / ".well-known"
-    if well_known_dir.is_dir():
-        app.mount("/.well-known", StaticFiles(directory=str(well_known_dir)), name="well_known")
+    # 5) Routes under /v1/*
+    register_routes(app)
 
-    # Root health / info
-    @app.get("/", response_class=PlainTextResponse, include_in_schema=False)
-    async def root() -> str:
-        return "ChatGPT Team Relay is running."
-
-    @app.get("/v1/health", include_in_schema=True)
-    async def health() -> Dict[str, Any]:
-        """
-        Simple health endpoint used by tests and ops.
-
-        test_health_endpoint expects:
-          - HTTP 200
-          - JSON with object == "health"
-        """
+    # 6) Health endpoints (stay public)
+    def _health_payload() -> dict[str, Any]:
         return {
             "object": "health",
             "status": "ok",
-            "app_mode": app_mode,
-            "environment": environment,
-            "openai_api_base": openai_api_base,
-            "default_model": default_model,
+            "app_mode": settings.APP_MODE,
+            "environment": settings.ENVIRONMENT,
+            "openai_api_base": settings.OPENAI_API_BASE,
+            "default_model": settings.DEFAULT_MODEL,
         }
 
-    # OpenAPI YAML export (optional)
-    @app.get("/schemas/openapi.yaml", include_in_schema=False)
-    async def openapi_yaml(request: Request) -> PlainTextResponse:
-        # Generate JSON, then naive convert to YAML-ish.
-        # This is good enough for local inspection / tests.
-        openapi = app.openapi()
-        try:
-            import yaml  # type: ignore
-        except Exception:
-            # Fallback: just return JSON as text if PyYAML is not installed.
-            import json
+    @app.get("/health")
+    async def root_health() -> dict[str, Any]:
+        return _health_payload()
 
-            return PlainTextResponse(json.dumps(openapi, indent=2))
-        yaml_str = yaml.dump(openapi, sort_keys=False)
-        return PlainTextResponse(yaml_str)
+    @app.get("/v1/health")
+    async def v1_health() -> dict[str, Any]:
+        return _health_payload()
 
-    # Central route registration (project tree as compass)
-    register_routes(app)
-
-    # Basic error handler so we return JSON consistently
     @app.exception_handler(Exception)
-    async def generic_exception_handler(request: Request, exc: Exception):
-        logger.exception("Unhandled error: %s", exc)
+    async def fallback_unhandled_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        logger.exception(
+            "Unhandled exception (fallback): %s %s",
+            request.method,
+            request.url.path,
+        )
         return JSONResponse(
             status_code=500,
             content={

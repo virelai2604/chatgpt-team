@@ -10,13 +10,14 @@ Main endpoint (per current OpenAI docs):
 
 Legacy / extended endpoints MAY include:
 
+  • POST /v1/images               → "best-effort" entrypoint some clients call
   • POST /v1/images/edits         → edit existing images
   • POST /v1/images/variations    → generate variations
 
 This router intentionally does NOT encode any business logic or
 parameter validation. All behavior is delegated to
-`forward_openai_request`, so the relay automatically tracks
-changes in the upstream API and openai-python SDK.
+`forward_openai_request`, so the relay automatically tracks changes in
+the upstream API and openai-python SDK.
 """
 
 from __future__ import annotations
@@ -25,11 +26,31 @@ from fastapi import APIRouter, Request
 
 from app.api.forward_openai import forward_openai_request
 from app.utils.logger import relay_log as logger
+from app.utils.auth import verify_relay_key
+
 
 router = APIRouter(
     prefix="/v1",
     tags=["images"],
+    dependencies=[verify_relay_key],
 )
+
+
+@router.post("/images")
+async def create_images_root(request: Request):
+    """
+    POST /v1/images
+
+    "Best-effort" proxy for image generation. This exists primarily to
+    support older clients and tests (e.g. relay_e2e_raw.py) that POST
+    directly to `/v1/images` instead of `/v1/images/generations`.
+
+    The body is forwarded 1:1 to the upstream Images API. If the upstream
+    endpoint does not support this path, the OpenAI error is returned
+    unchanged to the client.
+    """
+    logger.info("→ [images] %s %s (root)", request.method, request.url.path)
+    return await forward_openai_request(request)
 
 
 @router.post("/images/generations")
@@ -58,7 +79,7 @@ async def proxy_images_subpaths(path: str, request: Request):
     /v1/images/{...} — catch-all for image sub-resources.
 
     This route covers any additional or legacy endpoints under
-    /v1/images/*, such as (depending on the API version):
+    /v1/images/*, such as:
 
       • POST /v1/images/edits
       • POST /v1/images/variations

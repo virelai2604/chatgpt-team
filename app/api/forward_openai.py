@@ -1,14 +1,3 @@
-"""
-forward_openai.py
-
-Shared forwarding logic for all /v1/* routes (models, chat, responses,
-files, embeddings, images, videos, etc.).
-
-This keeps behavior aligned with the upstream OpenAI REST API and the
-official openai-python SDK, while letting the relay inject its own
-authentication and logging.
-"""
-
 from __future__ import annotations
 
 import json
@@ -25,7 +14,6 @@ logger = logging.getLogger("relay")
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
 
 # API key used by the relay when contacting upstream.
-# Incoming Authorization header is ignored and replaced.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 
@@ -94,14 +82,6 @@ async def forward_openai_request(
     Used by all the thin routers (models, files, images, videos, embeddings,
     responses, etc.) so behavior stays aligned with the official REST spec
     and the openai-python client.
-
-    This function:
-      - Builds the full upstream URL from OPENAI_API_BASE + request path
-      - Copies query params from the incoming request
-      - Copies headers (except hop-by-hop) and injects Authorization with
-        the relay's OPENAI_API_KEY
-      - Forwards JSON body or raw body as appropriate
-      - Returns a FastAPI Response with upstream status code, body, and headers
     """
     method = upstream_method or request.method
     path = upstream_path or request.url.path
@@ -121,37 +101,27 @@ async def forward_openai_request(
     upstream_headers = _filter_request_headers(request_headers)
     if OPENAI_API_KEY:
         upstream_headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
+    # Force plain JSON (no gzip/br) from upstream to avoid decoding issues
+    upstream_headers["Accept-Encoding"] = "identity"
 
     # Body handling
     raw_body = await request.body()
     json_data: Any | None = None
 
-    # Try JSON decode if Content-Type is JSON-like
     content_type = request_headers.get("content-type", "")
     if raw_body and "application/json" in content_type:
         try:
             json_data = json.loads(raw_body.decode("utf-8"))
         except Exception:
-            # Malformed JSON; just send raw body through
             json_data = None
 
     request_kwargs: Dict[str, Any] = {}
     if json_data is not None:
         request_kwargs["json"] = json_data
     elif raw_body:
-        # Non-JSON body (e.g. multipart/form-data or binary)
         request_kwargs["content"] = raw_body
 
-    # --- Timeout configuration ---
-    #
-    # Images/videos can legitimately take longer than 30 seconds, especially
-    # at higher quality/resolution. A fixed short timeout causes
-    # httpx.RequestError("Timeout") -> 502 "upstream_connection_error".
-    #
-    # We now:
-    #   - Allow longer read timeouts for /v1/images/* and /v1/videos/*
-    #   - Keep a reasonable default timeout for normal calls
-    #
+    # Timeout: allow extra time for images/videos
     if path.startswith("/v1/images") or path.startswith("/v1/videos"):
         timeout = httpx.Timeout(
             connect=30.0,
@@ -160,7 +130,6 @@ async def forward_openai_request(
             pool=30.0,
         )
     else:
-        # Safe default for chat/responses/etc.
         timeout = httpx.Timeout(30.0)
 
     logger.info("forward_openai_request.start method=%s path=%s", method, path)
@@ -176,7 +145,6 @@ async def forward_openai_request(
             )
     except httpx.RequestError as exc:
         logger.warning("forward_openai_request.error %s", exc)
-        # Normalize any connection/timeout issue as a 502 from the relay.
         raise HTTPException(
             status_code=502,
             detail={
