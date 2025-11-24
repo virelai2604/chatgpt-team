@@ -1,48 +1,41 @@
-from __future__ import annotations
+async def _realtime_ws_roundtrip(ws_url: str, client_secret: Optional[str]) -> bool:
+    if websockets is None:
+        log("websockets not installed; skipping realtime WS test.")
+        return False
 
-import os
-from typing import Literal
+    headers: Dict[str, str] = {}
+    if client_secret:
+        headers["Authorization"] = f"Bearer {client_secret}"
 
-from pydantic import BaseSettings, Field
+    debug(f"Connecting WS to {ws_url} with headers={headers!r}")
 
+    try:
+        async with websockets.connect(ws_url, extra_headers=headers) as ws:
+            event = {
+                "type": "input_text",
+                "content": "Say exactly: relay-ws-ok",
+            }
+            await ws.send(json.dumps(event))
 
-class Settings(BaseSettings):
-    # Identity and mode
-    RELAY_NAME: str = Field(default="ChatGPT Team Relay")
-    APP_MODE: Literal["development", "production", "test"] = Field(
-        default="development"
-    )
-    ENVIRONMENT: str = Field(default="local")
+            chunks: list[str] = []
+            for _ in range(100):
+                msg = await ws.recv()
+                debug(f"WS recv: {msg!r}")
+                try:
+                    obj = json.loads(msg)
+                except Exception:
+                    continue
 
-    # OpenAI upstream
-    OPENAI_API_BASE: str = Field(default="https://api.openai.com")
-    OPENAI_API_KEY: str = Field(default="")
-    DEFAULT_MODEL: str = Field(default="gpt-4o-mini")
-    OPENAI_ASSISTANTS_BETA: str = Field(default="assistants=v2")
-    OPENAI_REALTIME_BETA: str = Field(default="realtime=v1")
+                if obj.get("type") == "response.output_text.delta":
+                    delta = obj.get("delta") or ""
+                    if isinstance(delta, str):
+                        chunks.append(delta)
+                if obj.get("type") in ("response.completed", "response.completed.success"):
+                    break
 
-    # Relay behavior
-    ENABLE_STREAM: bool = Field(default=True)
-    CHAIN_WAIT_MODE: str = Field(default="sequential")  # or "concurrent"
-    PROXY_TIMEOUT: int = Field(default=30)
-    RELAY_TIMEOUT: int = Field(default=120)
-
-    # Tools & validation
-    TOOLS_MANIFEST: str = Field(default="app/manifests/tools_manifest.json")
-    VALIDATION_SCHEMA_PATH: str = Field(
-        default="ChatGPT-API_reference_ground_truth-2025-10-29.pdf"
-    )
-
-    # CORS
-    CORS_ALLOW_ORIGINS: str = Field(default="*")
-    CORS_ALLOW_METHODS: str = Field(default="GET,POST,PUT,PATCH,DELETE,OPTIONS")
-    CORS_ALLOW_HEADERS: str = Field(default="Authorization,Content-Type,Accept")
-
-    class Config:
-        # Load from environment by default (dotenv if you use python-dotenv)
-        env_file = os.getenv("ENV_FILE", ".env")
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-
-
-settings = Settings()
+            text = "".join(chunks)
+            log(f"Realtime WS aggregated text: {text!r}")
+            return "relay-ws-ok" in text
+    except Exception as exc:
+        log(f"ERROR during realtime WS: {exc}")
+        return False
