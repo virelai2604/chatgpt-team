@@ -13,10 +13,9 @@ The error payload format follows the OpenAI API convention:
             "code": "optional_machine_readable_code_or_null"
         }
     }
-
-This keeps the relay compatible with openai-python 2.x and other
-OpenAI-compatible SDKs that expect this schema.
 """
+
+from __future__ import annotations
 
 import logging
 import os
@@ -29,11 +28,6 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger("relay")
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 _ENV = os.getenv("ENVIRONMENT", "").lower()
 _APP_MODE = os.getenv("APP_MODE", "").lower()
@@ -55,21 +49,6 @@ def _openai_error_body(
     request: Optional[Request] = None,
     extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """
-    Build an OpenAI-style error envelope.
-
-    OpenAI APIs typically wrap errors as:
-
-        HTTP 4xx/5xx
-        {
-          "error": {
-            "message": "...",
-            "type": "invalid_request_error",
-            "param": "messages[0].content",
-            "code": "invalid_type"
-          }
-        }
-    """
     error_obj: Dict[str, Any] = {
         "message": message,
         "type": err_type,
@@ -78,11 +57,9 @@ def _openai_error_body(
     }
 
     if request is not None:
-        # Non-standard but helpful for debugging on the client side
         error_obj["path"] = str(request.url)
 
     if extra:
-        # Namespaced to avoid clashing with core fields
         error_obj["extra"] = extra
 
     body = {"error": error_obj}
@@ -95,19 +72,7 @@ def _openai_error_body(
     return body
 
 
-# ---------------------------------------------------------------------------
-# Registration
-# ---------------------------------------------------------------------------
-
-
 def register_exception_handlers(app: FastAPI) -> None:
-    """
-    Attach global exception handlers to the FastAPI app.
-
-    This is intended to be called exactly once during app startup
-    (typically from app.main).
-    """
-
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         status = exc.status_code
@@ -179,7 +144,6 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
         if _DEBUG:
-            # In dev/local environments, include a short trace for easier debugging
             lines = tb_str.splitlines()
             body.setdefault("debug", {})["trace_tail"] = lines[-10:]
 

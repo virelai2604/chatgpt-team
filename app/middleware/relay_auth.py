@@ -7,6 +7,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.utils.authy import RELAY_AUTH_ENABLED, check_relay_key
 
+
+# Endpoints that never require relay auth
 PUBLIC_PATHS = {
     "/health",
     "/v1/health",
@@ -23,12 +25,21 @@ def _is_public_path(path: str) -> bool:
 def _is_protected_v1_path(path: str) -> bool:
     if not path.startswith("/v1/"):
         return False
+    # /v1/health is explicitly public
     if path == "/v1/health":
         return False
     return True
 
 
 class RelayAuthMiddleware(BaseHTTPMiddleware):
+    """
+    Simple bearer-key auth for relay endpoints.
+
+    - Globally toggled by RELAY_AUTH_ENABLED (from app.utils.authy).
+    - Public paths bypass auth.
+    - All other /v1/* endpoints require Authorization: Bearer <RELAY_KEY>.
+    """
+
     async def dispatch(
         self,
         request: Request,
@@ -44,6 +55,7 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
 
         if _is_protected_v1_path(path):
             auth_header = request.headers.get("Authorization")
+            # Raises HTTPException(401/403) on failure
             check_relay_key(auth_header)
 
         return await call_next(request)
