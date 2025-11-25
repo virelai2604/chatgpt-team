@@ -1,13 +1,24 @@
 openapi: 3.1.0
 info:
-  title: ChatGPT Team Relay API
+  title: ChatGPT Team Relay
   version: "1.0.0"
   description: |
-    A relay that forwards ChatGPT-style requests to the OpenAI REST API.
-    Core routes mirror OpenAI's /v1 endpoints, especially:
-    - /v1/responses for chat-style interactions
-    - /v1/embeddings for vector embeddings
-    - /v1/models, /v1/files, /v1/tools for metadata and tooling
+    OpenAPI description for the ChatGPT Team Relay.
+
+    This relay exposes a thin, OpenAI-compatible proxy surface:
+
+      • /v1/responses
+      • /v1/embeddings
+      • /v1/models
+      • /v1/files
+      • /v1/vector_stores
+      • /v1/images
+      • /v1/videos
+      • /v1/conversations
+      • /v1/realtime/sessions
+
+    It also provides local utility endpoints under /actions and /v1/actions
+    plus a tools manifest at /v1/tools for ChatGPT Actions.
 
 servers:
   - url: https://chatgpt-team-relay.onrender.com
@@ -16,7 +27,7 @@ paths:
   /health:
     get:
       operationId: getHealth
-      summary: Health check for the relay service
+      summary: Health check
       responses:
         "200":
           description: Relay is healthy
@@ -27,269 +38,519 @@ paths:
                 properties:
                   status:
                     type: string
-                    example: ok
+                  mode:
+                    type: string
+                  environment:
+                    type: string
+
+  /v1/health:
+    get:
+      operationId: getHealthV1
+      summary: v1-style health check
+      responses:
+        "200":
+          description: Relay is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  mode:
+                    type: string
+                  environment:
+                    type: string
 
   /v1/responses:
     post:
       operationId: createResponse
-      summary: Create a response (chat-style, tool-calling, etc.)
-      description: >
-        Forwards to OpenAI's /v1/responses endpoint. Use this for chat-style
-        messages, reasoning models, and tool-calling.
+      summary: Create a response
+      description: |
+        Thin proxy to the OpenAI Responses API.
+        Supports both non-stream and stream=true modes.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              description: OpenAI Responses payload
-              properties:
-                model:
-                  type: string
-                  example: gpt-4.1-mini
-                input:
-                  anyOf:
-                    - type: string
-                    - type: array
-                      items:
-                        anyOf:
-                          - type: string
-                          - type: object
-                max_output_tokens:
-                  type: integer
-                  nullable: true
-                stream:
-                  type: boolean
-                  description: If true, returns a Server-Sent Events stream.
-                  default: false
+              description: OpenAI Responses request payload.
       responses:
         "200":
-          description: Response from OpenAI's /v1/responses
+          description: Response object from the OpenAI Responses API
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ResponseObject"
+                type: object
+
+  /v1/responses/{response_id}:
+    get:
+      operationId: retrieveResponse
+      summary: Retrieve a response by ID
+      parameters:
+        - name: response_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Response object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/responses/{response_id}/cancel:
+    post:
+      operationId: cancelResponse
+      summary: Cancel a running response
+      parameters:
+        - name: response_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cancellation acknowledgement
+          content:
+            application/json:
+              schema:
+                type: object
 
   /v1/embeddings:
     post:
       operationId: createEmbedding
       summary: Create embeddings
-      description: Forwards to OpenAI's /v1/embeddings endpoint.
+      description: Thin proxy to the OpenAI Embeddings API.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              properties:
-                model:
-                  type: string
-                  example: text-embedding-3-small
-                input:
-                  anyOf:
-                    - type: string
-                    - type: array
-                      items:
-                        type: string
       responses:
         "200":
-          description: Embeddings result
+          description: Embedding result
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EmbeddingResponse"
+                type: object
 
   /v1/models:
     get:
       operationId: listModels
-      summary: List available models
-      description: Forwards to OpenAI's /v1/models endpoint.
+      summary: List models
       responses:
         "200":
           description: List of models
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ModelList"
+                type: object
 
-  /v1/tools:
+  /v1/models/{model_id}:
     get:
-      operationId: listRelayTools
-      summary: List tools exposed by the relay
-      description: >
-        Returns a list of tools that this relay exposes. This is
-        not part of the official OpenAI REST API, but is provided
-        as a convenience for the ChatGPT Team environment.
+      operationId: retrieveModel
+      summary: Retrieve a model
+      parameters:
+        - name: model_id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         "200":
-          description: List of tools
+          description: Model details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ToolList"
+                type: object
 
   /v1/files:
     get:
       operationId: listFiles
       summary: List files
-      description: Forwards to OpenAI's /v1/files endpoint.
       responses:
         "200":
           description: List of files
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/FileList"
+                type: object
+    post:
+      operationId: createFile
+      summary: Upload a file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: File metadata
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/files/{file_id}:
+    get:
+      operationId: retrieveFile
+      summary: Retrieve file metadata
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File metadata
+          content:
+            application/json:
+              schema:
+                type: object
+    delete:
+      operationId: deleteFile
+      summary: Delete a file
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File deletion confirmation
+          content:
+            application/json:
+              schema:
+                type: object
 
   /v1/vector_stores:
     get:
       operationId: listVectorStores
       summary: List vector stores
-      description: Forwards to OpenAI's /v1/vector_stores endpoint.
       responses:
         "200":
           description: List of vector stores
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/VectorStoreList"
-
-components:
-  schemas:
-    ResponseObject:
-      type: object
-      description: >
-        Simplified representation of the OpenAI /v1/responses object.
-      properties:
-        id:
-          type: string
-        object:
-          type: string
-          example: response
-        model:
-          type: string
-        status:
-          type: string
-          example: completed
-        output:
-          type: array
-          description: List of output items (messages, tool calls, etc.)
-          items:
-            type: object
-
-    EmbeddingResponse:
-      type: object
-      properties:
-        object:
-          type: string
-          example: list
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              object:
-                type: string
-                example: embedding
-              embedding:
-                type: array
-                items:
-                  type: number
-              index:
-                type: integer
-        model:
-          type: string
-
-    ModelList:
-      type: object
-      properties:
-        object:
-          type: string
-          example: list
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-              object:
-                type: string
-                example: model
-              created:
-                type: integer
-              owned_by:
-                type: string
-
-    ToolList:
-      type: object
-      properties:
-        object:
-          type: string
-          example: list
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-                example: web_search
-              name:
-                type: string
-              type:
-                type: string
-                example: function
-              description:
-                type: string
-              parameters:
+                type: object
+    post:
+      operationId: createVectorStore
+      summary: Create a vector store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Vector store object
+          content:
+            application/json:
+              schema:
                 type: object
 
-    FileList:
-      type: object
-      properties:
-        object:
-          type: string
-          example: list
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-              object:
-                type: string
-                example: file
-              bytes:
-                type: integer
-              created_at:
-                type: integer
-              filename:
-                type: string
-              purpose:
-                type: string
+  /v1/vector_stores/{vector_store_id}:
+    get:
+      operationId: retrieveVectorStore
+      summary: Retrieve a vector store
+      parameters:
+        - name: vector_store_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Vector store object
+          content:
+            application/json:
+              schema:
+                type: object
 
-    VectorStoreList:
-      type: object
-      properties:
-        object:
-          type: string
-          example: list
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-              object:
-                type: string
-                example: vector_store
-              created_at:
-                type: integer
-              name:
-                type: string
-                nullable: true
-              status:
-                type: string
+  /v1/images:
+    post:
+      operationId: createImagesRoot
+      summary: Best-effort image generation entrypoint
+      description: Thin proxy to the OpenAI Images API for legacy clients.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Image generation response
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/images/generations:
+    post:
+      operationId: createImageGenerations
+      summary: Generate images from a prompt
+      description: Thin proxy to the OpenAI Images /images/generations endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Image generation response
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/videos:
+    post:
+      operationId: createVideoJob
+      summary: Create a video generation job
+      description: Thin proxy to the OpenAI Videos API (job creation).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Video job object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/videos/{video_path}:
+    get:
+      operationId: getVideoJobOrContent
+      summary: Retrieve a video job or content
+      parameters:
+        - name: video_path
+          in: path
+          required: true
+          schema:
+            type: string
+          description: |
+            Path under /v1/videos, e.g. "jobs/{id}", "jobs/{id}/content".
+      responses:
+        "200":
+          description: Video job or content
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/conversations:
+    get:
+      operationId: listConversations
+      summary: List conversations
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      operationId: createConversation
+      summary: Create a conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Conversation object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/conversations/{conversation_id}:
+    get:
+      operationId: retrieveConversation
+      summary: Retrieve a conversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Conversation object
+          content:
+            application/json:
+              schema:
+                type: object
+    delete:
+      operationId: deleteConversation
+      summary: Delete a conversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deletion confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/conversations/{conversation_id}/messages:
+    get:
+      operationId: listConversationMessages
+      summary: List messages in a conversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      operationId: createConversationMessage
+      summary: Add a message to a conversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Message object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/realtime/sessions:
+    post:
+      operationId: createRealtimeSession
+      summary: Create a Realtime session
+      description: Thin proxy to the OpenAI Realtime Sessions API.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Realtime session object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/tools:
+    get:
+      operationId: listTools
+      summary: List tools from the tools manifest
+      responses:
+        "200":
+          description: List of tools
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/tools/{tool_id}:
+    get:
+      operationId: retrieveTool
+      summary: Retrieve a single tool definition
+      parameters:
+        - name: tool_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tool definition
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /actions/ping:
+    get:
+      operationId: actionsPing
+      summary: Simple ping at /actions
+      responses:
+        "200":
+          description: Ping OK
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/actions/ping:
+    get:
+      operationId: v1ActionsPing
+      summary: Simple ping at /v1/actions
+      responses:
+        "200":
+          description: Ping OK
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /actions/relay_info:
+    get:
+      operationId: actionsRelayInfo
+      summary: Relay information (actions)
+      responses:
+        "200":
+          description: Relay info object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/actions/relay_info:
+    get:
+      operationId: v1ActionsRelayInfo
+      summary: Relay information (v1/actions)
+      responses:
+        "200":
+          description: Relay info object
+          content:
+            application/json:
+              schema:
+                type: object
+
+components: {}

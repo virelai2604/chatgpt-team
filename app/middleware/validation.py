@@ -1,79 +1,61 @@
-"""
-validation.py — Schema Validation Middleware
-─────────────────────────────────────────────
-Performs lightweight JSON validation and request sanity checking
-before passing to the orchestrator. Ensures requests are well-formed
-and OpenAI-compatible without adding significant latency.
-"""
+from __future__ import annotations
 
-import json
 import logging
+from typing import Awaitable, Callable
 
+from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.types import ASGIApp
 
-logger = logging.getLogger("relay.validation")
+logger = logging.getLogger("schema_validation")
 
 
 class SchemaValidationMiddleware(BaseHTTPMiddleware):
     """
-    Intercepts incoming requests and performs basic validation:
+    Lightweight request logger / future hook for schema validation.
 
-      • Allows GET, DELETE, OPTIONS, HEAD to pass through untouched.
-      • For POST/PUT/PATCH:
-          - If Content-Type is application/json, attempts to parse the body.
-          - Returns 400 if JSON is invalid.
-          - Logs a warning for non-JSON bodies.
-
-    This is intentionally minimal to keep latency low while still protecting
-    the relay from malformed requests.
+    - For GET/HEAD/OPTIONS: pass through without inspecting the body.
+    - For other methods: read body once, log payload size, then forward.
     """
 
-    async def dispatch(self, request: Request, call_next):
-        # Allow non-body methods to pass straight through
-        if request.method in ("GET", "DELETE", "OPTIONS", "HEAD"):
+    def __init__(self, app: ASGIApp, schema_path: str | None = None) -> None:
+        super().__init__(app)
+        self.schema_path = schema_path
+
+        if self.schema_path:
+            logger.info(
+                "SchemaValidationMiddleware enabled with schema: %s",
+                self.schema_path,
+            )
+        else:
+            logger.info(
+                "SchemaValidationMiddleware enabled (no schema file configured)"
+            )
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        # No validation for read-only operations
+        if request.method in {"GET", "HEAD", "OPTIONS"}:
             return await call_next(request)
 
-        # Validate JSON for typical body-bearing methods
-        if request.method in ("POST", "PUT", "PATCH"):
-            try:
-                content_type = request.headers.get("content-type", "")
-                if content_type.startswith("application/json"):
-                    # Ensure the JSON body is syntactically valid
-                    _ = await request.json()
-                else:
-                    logger.warning(
-                        "[validation] Non-JSON request to %s with Content-Type: %s",
-                        request.url.path,
-                        content_type,
-                    )
-            except json.JSONDecodeError:
-                logger.error("[validation] Invalid JSON on %s", request.url.path)
-                return JSONResponse(
-                    {
-                        "error": {
-                            "message": "Invalid JSON in request body.",
-                            "type": "invalid_request_error",
-                        }
-                    },
-                    status_code=400,
-                )
-            except Exception as exc:  # pragma: no cover (defensive)
-                logger.exception(
-                    "[validation] Unexpected validation error on %s: %s",
-                    request.url.path,
-                    exc,
-                )
-                return JSONResponse(
-                    {
-                        "error": {
-                            "message": f"Unexpected validation error: {str(exc)}",
-                            "type": "validation_error",
-                        }
-                    },
-                    status_code=400,
-                )
+        # Stub for future PDF / OpenAPI-based validation
+        try:
+            body_bytes = await request.body()
+            logger.debug(
+                "SchemaValidationMiddleware: %s %s, payload_bytes=%d",
+                request.method,
+                request.url.path,
+                len(body_bytes),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "SchemaValidationMiddleware: failed to read body for %s %s: %r",
+                request.method,
+                request.url.path,
+                exc,
+            )
 
-        # All clear — continue downstream
         return await call_next(request)

@@ -34,6 +34,7 @@ def _filter_request_headers(headers: Mapping[str, str]) -> Dict[str, str]:
         if kl in blocked:
             continue
         if kl == "authorization":
+            # Always replace with our own Authorization header
             continue
         out[k] = v
     return out
@@ -49,7 +50,7 @@ def _filter_response_headers(headers: Mapping[str, str]) -> Dict[str, str]:
         "trailers",
         "transfer-encoding",
         "upgrade",
-        "content-encoding",  # let ASGI/server handle compression
+        "content-encoding",  # let ASGI / server handle compression
     }
 
     out: Dict[str, str] = {}
@@ -66,6 +67,15 @@ async def forward_openai_request(
     upstream_path: str | None = None,
     upstream_method: str | None = None,
 ) -> Response:
+    """
+    Generic OpenAI HTTP proxy for /v1/* requests.
+
+    - Copies method, path, query params.
+    - Copies headers except hop-by-hop + Authorization.
+    - Sends JSON body when Content-Type is application/json, raw bytes otherwise.
+    - Injects Authorization: Bearer <OPENAI_API_KEY> if configured.
+    - Forces Accept-Encoding=identity so upstream never sends gzipped/brotli data.
+    """
     method = upstream_method or request.method
     path = upstream_path or request.url.path
 
@@ -88,6 +98,7 @@ async def forward_openai_request(
         try:
             json_data = json.loads(raw_body.decode("utf-8"))
         except Exception:
+            # If JSON parsing fails, fall back to raw bytes
             json_data = None
 
     request_kwargs: Dict[str, Any] = {}
@@ -96,6 +107,7 @@ async def forward_openai_request(
     elif raw_body:
         request_kwargs["content"] = raw_body
 
+    # Longer timeouts for images/videos generation
     if path.startswith("/v1/images") or path.startswith("/v1/videos"):
         timeout = httpx.Timeout(connect=30.0, read=120.0, write=120.0, pool=30.0)
     else:
