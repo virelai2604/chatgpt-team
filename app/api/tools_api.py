@@ -1,159 +1,125 @@
+# app/api/tools_api.py
+
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
 
-from app.utils.logger import relay_log as logger
+from app.core.config import settings
+from app.utils.logger import get_logger
 
-router = APIRouter(
-    prefix="/v1",
-    tags=["tools"],
-)
+logger = get_logger("tools_api")
 
-DEFAULT_TOOLS_MANIFEST_PATH = Path("app/manifests/tools_manifest.json")
+router = APIRouter(prefix="", tags=["tools"])
+
+_tools_cache: List[Dict[str, Any]] | None = None
 
 
-def _load_tools_manifest() -> List[dict[str, Any]]:
+def _load_tools_manifest() -> List[Dict[str, Any]]:
     """
-    Load the tools manifest from one of:
+    Load and cache the tools manifest from disk.
 
-      1) TOOLS_MANIFEST env var:
-         - If it parses as JSON → use that.
-         - Else treat it as a file path.
-      2) TOOLS_MANIFEST_PATH env var → file path.
-      3) Default `app/manifests/tools_manifest.json`.
+    settings.TOOLS_MANIFEST should be a relative or absolute path
+    like "app/manifests/tools_manifest.json".
 
-    The JSON file can be in one of several shapes:
-
-      - { "object": "list", "data": [ ...tools... ] }
-      - { "tools": [ ...tools... ] }
-      - [ ...tools... ]
-
-    Returns a simple Python list of tool dicts.
+    Accepts either:
+      - {"object":"list","data":[...]} (OpenAI-style list)
+      - {"tools":[...]}              (custom wrapper)
+      - [ ... ]                      (bare list of tools)
     """
-    env_manifest = os.getenv("TOOLS_MANIFEST")
-    manifest_path_env = os.getenv("TOOLS_MANIFEST_PATH")
+    global _tools_cache
+    if _tools_cache is not None:
+        return _tools_cache
 
-    raw: Any
+    manifest_path = Path(settings.TOOLS_MANIFEST)
+    if not manifest_path.is_file():
+        logger.warning("Tools manifest not found at %s", manifest_path)
+        _tools_cache = []
+        return _tools_cache
 
-    if env_manifest:
-        # Try to parse inline JSON first
-        try:
-            raw = json.loads(env_manifest)
-            logger.info("Loaded tools manifest from TOOLS_MANIFEST (inline JSON).")
-        except json.JSONDecodeError:
-            # If not JSON, treat as path
-            path = Path(env_manifest)
-            if not path.is_file():
-                raise RuntimeError(
-                    f"TOOLS_MANIFEST env is neither valid JSON nor a file: {env_manifest!r}"
-                )
-            raw = json.loads(path.read_text(encoding="utf-8"))
-            logger.info("Loaded tools manifest from TOOLS_MANIFEST file=%s", path)
-    elif manifest_path_env:
-        path = Path(manifest_path_env)
-        if not path.is_file():
-            raise RuntimeError(f"TOOLS_MANIFEST_PATH file not found: {path}")
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        logger.info("Loaded tools manifest from TOOLS_MANIFEST_PATH=%s", path)
-    else:
-        path = DEFAULT_TOOLS_MANIFEST_PATH
-        if not path.is_file():
-            raise RuntimeError(f"Default tools_manifest.json not found at {path}")
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        logger.info("Loaded tools manifest from default: %s", path)
+    try:
+        content = manifest_path.read_text(encoding="utf-8")
+        data: Any = json.loads(content)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error("Failed to read tools manifest: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to load tools manifest")
 
-    # Normalize to list
-    if isinstance(raw, dict):
-        if raw.get("object") == "list" and isinstance(raw.get("data"), list):
-            tools = raw["data"]
-        elif isinstance(raw.get("tools"), list):
-            tools = raw["tools"]
+    # Accept { "object":"list", "data":[...]} or {"tools":[...]} or a bare list
+    if isinstance(data, dict):
+        if "tools" in data:
+            tools = data["tools"]
+        elif data.get("object") == "list" and "data" in data:
+            tools = data["data"]
         else:
-            raise RuntimeError(
-                "Unsupported tools manifest dict format; expected "
-                "`{object:'list',data:[...]}` or `{tools:[...]}`."
-            )
-    elif isinstance(raw, list):
-        tools = raw
+            tools = data
     else:
-        raise RuntimeError("Unsupported tools manifest format; expected list or dict.")
+        tools = data
 
     if not isinstance(tools, list):
-        raise RuntimeError("Tools manifest normalization did not produce a list.")
+        logger.error("Invalid tools manifest format; expected list.")
+        raise HTTPException(status_code=500, detail="Invalid tools manifest format")
 
-    return tools
+    _tools_cache = tools
+    return _tools_cache
 
 
-@router.get("/tools")
-async def list_tools() -> JSONResponse:
+@router.get("/v1/tools")
+async def list_tools() -> Dict[str, Any]:
     """
-    GET /v1/tools
+    OpenAI-style tools registry for ChatGPT Actions / Platform.
 
-    Return:
+    Response shape is intentionally simple:
       {
         "object": "list",
-        "data": [ ... tools from tools_manifest.json ... ]
+        "data": [ {tool}, {tool}, ... ]
       }
     """
-    try:
-        tools = _load_tools_manifest()
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Failed to load tools manifest: %s", exc)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": {
-                    "message": "Failed to load tools manifest",
-                    "type": "server_error",
-                }
-            },
-        ) from exc
-
-    return JSONResponse(
-        status_code=200,
-        content={"object": "list", "data": tools},
-    )
+    tools = _load_tools_manifest()
+    return {"object": "list", "data": tools}
 
 
-@router.get("/tools/{tool_id}")
-async def get_tool(tool_id: str) -> JSONResponse:
+@router.get("/relay/actions")
+async def list_actions() -> Dict[str, Any]:
     """
-    GET /v1/tools/{tool_id}
-
-    Return a single tool definition by its `id`. Responds with 404 if
-    the tool does not exist in the manifest.
+    Convenience endpoint mirroring `/v1/tools`, suitable for internal
+    diagnostics or custom clients that think in terms of “actions”.
     """
-    try:
-        tools = _load_tools_manifest()
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Failed to load tools manifest: %s", exc)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": {
-                    "message": "Failed to load tools manifest",
-                    "type": "server_error",
-                }
-            },
-        ) from exc
+    tools = _load_tools_manifest()
+    return {"object": "list", "data": tools}
 
-    for tool in tools:
-        if tool.get("id") == tool_id:
-            return JSONResponse(status_code=200, content=tool)
 
-    raise HTTPException(
-        status_code=404,
-        detail={
-            "error": {
-                "message": f"Tool '{tool_id}' not found",
-                "type": "invalid_request_error",
-                "param": "tool_id",
+@router.get("/relay/models")
+async def list_relay_models() -> Dict[str, Any]:
+    """
+    Lightweight "virtual model" registry.
+
+    This is NOT the upstream OpenAI `/v1/models`; it's a relay-specific
+    description of which models the relay is configured to use, based on
+    app.core.config.Settings.
+    """
+    default_model = settings.DEFAULT_MODEL
+    realtime_model = getattr(settings, "REALTIME_MODEL", None)
+
+    models: List[Dict[str, Any]] = [
+        {
+            "id": default_model,
+            "object": "model",
+            "owned_by": "relay",
+            "relay_default": True,
+        }
+    ]
+
+    if realtime_model:
+        models.append(
+            {
+                "id": realtime_model,
+                "object": "model",
+                "owned_by": "relay",
+                "realtime": True,
             }
-        },
-    )
+        )
+
+    return {"object": "list", "data": models}

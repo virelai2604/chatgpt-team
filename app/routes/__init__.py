@@ -1,9 +1,9 @@
-# ==========================================================
-# app/routes/__init__.py — Route Package Initialization
-# ==========================================================
-# Avoids circular imports between register_routes.py and
-# other route modules by keeping this file minimal.
-# ==========================================================
+"""
+app.routes package
 
-# Leave intentionally empty or only set __all__.
-__all__ = []
+Keep this file minimal to avoid circular imports.
+Routers are imported explicitly in app.routes.register_routes.
+"""
+
+# Intentionally do not import submodules here.
+# register_routes.py will import concrete route modules directly.

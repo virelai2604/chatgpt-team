@@ -1,93 +1,51 @@
+# app/routes/register_routes.py
+
 from __future__ import annotations
 
 from fastapi import FastAPI
 
-# Import routers from the app.routes package.
-# These module names must match your actual package layout on disk:
-#   app/routes/models.py
-#   app/routes/embeddings.py
-#   app/routes/files.py
-#   app/routes/images.py
-#   app/routes/videos.py
-#   app/routes/vector_stores.py
-#   app/routes/responses.py
-#   app/routes/realtime.py
-#   app/routes/conversations.py
-#   app/routes/actions.py
-#   app/routes/tools_api.py
-from app.routes import (
-    models,
-    embeddings,
-    files,
-    images,
-    videos,
-    vector_stores,
-    responses,
-    realtime,
-    conversations,
-    actions,
-    tools_api,
-)
+# Health routes
+from app.routes.health import router as health_router
+
+# Core OpenAI-compatible endpoints
+from app.routes.responses import router as responses_router
+from app.routes.embeddings import router as embeddings_router
+from app.routes.files import router as files_router
+from app.routes.models import router as models_router
+from app.routes.images import router as images_router
+from app.routes.videos import router as videos_router
+from app.routes.vector_stores import router as vector_stores_router
+from app.routes.conversations import router as conversations_router
+from app.routes.realtime import router as realtime_router
+
+# Tools + relay metadata
+from app.api.tools_api import router as tools_router
+from app.routes.actions import router as actions_router
 
 
 def register_routes(app: FastAPI) -> None:
     """
-    Attach all OpenAI-compatible and relay-local routers to the app.
+    Attach all routers to the FastAPI app.
 
-    All of these routers expose paths that the E2E script probes:
-
-      Core OpenAI-style surfaces:
-        - GET  /v1/models
-        - GET  /v1/models/{id}
-        - POST /v1/embeddings
-        - GET/POST/DELETE /v1/files, /v1/files/{id}
-        - POST /v1/images, /v1/images/generations, etc.
-        - POST/GET /v1/videos, /v1/videos/{id}, ...
-        - GET/POST /v1/vector_stores, /v1/vector_stores/{id}
-        - POST/GET /v1/responses, /v1/responses/{id}, ...
-        - GET/POST /v1/conversations, /v1/conversations/{id}, ...
-        - POST /v1/realtime/sessions
-
-      Relay-local surfaces:
-        - GET /relay/actions
-        - GET /relay/models
-        - GET /v1/actions/relay_info
-        - GET /v1/tools
-        - GET /v1/tools/{tool_id}
+    Health endpoints are kept separate to remain publicly accessible
+    (RelayAuthMiddleware skips /health and /v1/health). All /v1/*
+    and /relay/* endpoints are otherwise protected by the relay key.
     """
 
-    # ------- Core OpenAI-proxy surfaces -------
+    # -------- Health (public) --------
+    app.include_router(health_router)
 
-    # /v1/models, /v1/models/{model_id}
-    app.include_router(models.router)
+    # -------- OpenAI-compatible endpoints --------
+    app.include_router(responses_router)
+    app.include_router(embeddings_router)
+    app.include_router(files_router)
+    app.include_router(models_router)
+    app.include_router(images_router)
+    app.include_router(videos_router)
+    app.include_router(vector_stores_router)
+    app.include_router(conversations_router)
+    app.include_router(realtime_router)
 
-    # /v1/embeddings
-    app.include_router(embeddings.router)
-
-    # /v1/files*, /v1/files/{file_id}
-    app.include_router(files.router)
-
-    # /v1/images*, /v1/images/...
-    app.include_router(images.router)
-
-    # /v1/videos*, /v1/videos/{id}, ...
-    app.include_router(videos.router)
-
-    # /v1/vector_stores*, /v1/vector_stores/{id}
-    app.include_router(vector_stores.router)
-
-    # /v1/responses*, streaming, cancel, etc.
-    app.include_router(responses.router)
-
-    # /v1/realtime/sessions + WebSocket upgrader
-    app.include_router(realtime.router)
-
-    # /v1/conversations*, local CSV cache, etc.
-    app.include_router(conversations.router)
-
-    # ------- Local relay info / actions --------
-    # /relay/actions, /relay/models, /v1/actions/relay_info
-    app.include_router(actions.router)
-
-    # /v1/tools, /v1/tools/{tool_id}
-    app.include_router(tools_api.router)
+    # -------- Tools + relay metadata --------
+    app.include_router(tools_router)
+    app.include_router(actions_router)

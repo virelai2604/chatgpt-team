@@ -1,20 +1,31 @@
+# app/api/forward_openai.py
+
 from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any, Dict, Mapping
 
 import httpx
 from fastapi import HTTPException, Request, Response
 
+from app.core.config import settings
+
 logger = logging.getLogger("relay")
 
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# Single source of truth – use Pydantic settings (P4 core plan)
+OPENAI_API_BASE: str = str(settings.OPENAI_API_BASE).rstrip("/")
+OPENAI_API_KEY: str = settings.OPENAI_API_KEY
 
 
 def _filter_request_headers(headers: Mapping[str, str]) -> Dict[str, str]:
+    """
+    Drop hop-by-hop headers and downstream Authorization before forwarding.
+
+    We will always inject our own Authorization header, derived from
+    OPENAI_API_KEY, so the relay never forwards arbitrary client secrets
+    upstream.
+    """
     blocked = {
         "host",
         "content-length",
@@ -41,6 +52,12 @@ def _filter_request_headers(headers: Mapping[str, str]) -> Dict[str, str]:
 
 
 def _filter_response_headers(headers: Mapping[str, str]) -> Dict[str, str]:
+    """
+    Drop hop-by-hop headers and content-encoding from the upstream response.
+
+    We let the ASGI server handle compression; we want to avoid re-exposing
+    gzip/brotli directly and keep the downstream JSON/text simple.
+    """
     blocked = {
         "connection",
         "keep-alive",
@@ -79,17 +96,20 @@ async def forward_openai_request(
     method = upstream_method or request.method
     path = upstream_path or request.url.path
 
-    base = OPENAI_API_BASE.rstrip("/")
-    target_url = f"{base}{path}"
+    target_url = f"{OPENAI_API_BASE}{path}"
 
     params = dict(request.query_params)
 
+    # Start from incoming headers
     request_headers = request.headers
     upstream_headers = _filter_request_headers(request_headers)
+
+    # Inject our own Authorization and override Accept-Encoding
     if OPENAI_API_KEY:
         upstream_headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
     upstream_headers["Accept-Encoding"] = "identity"
 
+    # Read body once and decide whether to send JSON or raw bytes
     raw_body = await request.body()
     json_data: Any | None = None
 
@@ -97,7 +117,7 @@ async def forward_openai_request(
     if raw_body and "application/json" in content_type:
         try:
             json_data = json.loads(raw_body.decode("utf-8"))
-        except Exception:
+        except Exception:  # noqa: BLE001
             # If JSON parsing fails, fall back to raw bytes
             json_data = None
 
@@ -108,10 +128,16 @@ async def forward_openai_request(
         request_kwargs["content"] = raw_body
 
     # Longer timeouts for images/videos generation
+    # Use settings.PROXY_TIMEOUT as baseline
     if path.startswith("/v1/images") or path.startswith("/v1/videos"):
-        timeout = httpx.Timeout(connect=30.0, read=120.0, write=120.0, pool=30.0)
+        timeout = httpx.Timeout(
+            connect=30.0,
+            read=float(settings.PROXY_TIMEOUT),
+            write=float(settings.PROXY_TIMEOUT),
+            pool=30.0,
+        )
     else:
-        timeout = httpx.Timeout(30.0)
+        timeout = httpx.Timeout(float(settings.PROXY_TIMEOUT))
 
     logger.info("forward_openai_request.start method=%s path=%s", method, path)
 
@@ -126,6 +152,7 @@ async def forward_openai_request(
             )
     except httpx.RequestError as exc:
         logger.warning("forward_openai_request.error %s", exc)
+        # Map connection errors to a clear OpenAI-style error envelope
         raise HTTPException(
             status_code=502,
             detail={

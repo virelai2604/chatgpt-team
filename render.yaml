@@ -62,15 +62,15 @@ services:
       - key: ENABLE_STREAM
         value: "true"
       - key: CHAIN_WAIT_MODE
-        value: "true"
+        value: "sequential"
 
       # -------- CORS config (for ChatGPT + Platform UI) --------
       - key: CORS_ALLOW_ORIGINS
-        value: https://chat.openai.com,https://platform.openai.com
+        value: '["https://chat.openai.com","https://platform.openai.com"]'
       - key: CORS_ALLOW_METHODS
-        value: GET,POST,PUT,PATCH,DELETE,OPTIONS
+        value: '["GET","POST","PUT","PATCH","DELETE","OPTIONS"]'
       - key: CORS_ALLOW_HEADERS
-        value: "Authorization,Content-Type,Accept"
+        value: '["Authorization","Content-Type","Accept"]'
 
       # -------- Tools & validation schema --------
       - key: TOOLS_MANIFEST
