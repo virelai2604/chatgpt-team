@@ -13,13 +13,13 @@
   📄 requirements.txt
   📁 app
     📄 __init__.py
-    📄 app.zip
     📄 main.py
     📁 api
       📄 __init__.py
       📄 forward_openai.py
       📄 tools_api.py
     📁 core
+      📄 __init__.py
       📄 config.py
     📁 manifests
       📄 __init__.py
@@ -103,5 +103,4 @@
     📄 test_tools_and_actions_routes.py
     📄 test_validation_middleware.py
     📄 test_videos_realtime_tools_agentic.py
-    📄 tests.zip
     📁 downloads

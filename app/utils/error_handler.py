@@ -1,150 +1,120 @@
-"""
-error_handler.py — Global Exception and Error Registration
-───────────────────────────────────────────────────────────
-Handles unexpected exceptions and registers FastAPI error events.
-
-The error payload format follows the OpenAI API convention:
-
-    {
-        "error": {
-            "message": "...",
-            "type": "invalid_request_error | server_error | ...",
-            "param": "optional_param_name_or_null",
-            "code": "optional_machine_readable_code_or_null"
-        }
-    }
-"""
+# app/utils/error_handler.py
 
 from __future__ import annotations
 
 import logging
-import os
-import traceback
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger("relay")
 
-_ENV = os.getenv("ENVIRONMENT", "").lower()
-_APP_MODE = os.getenv("APP_MODE", "").lower()
-_DEBUG = _ENV in {"dev", "development", "local", "test"} or _APP_MODE in {
-    "dev",
-    "development",
-    "local",
-    "test",
-}
 
-
-def _openai_error_body(
-    *,
+def _build_openai_error(
     message: str,
-    err_type: str,
+    *,
     status_code: int,
-    param: Optional[str] = None,
     code: Optional[str] = None,
-    request: Optional[Request] = None,
-    extra: Optional[Dict[str, Any]] = None,
+    path: Optional[str] = None,
+    exc: Optional[BaseException] = None,
 ) -> Dict[str, Any]:
-    error_obj: Dict[str, Any] = {
-        "message": message,
-        "type": err_type,
-        "param": param,
-        "code": code,
+    """
+    Build an OpenAI-style error envelope.
+    Shape:
+      {
+        "error": {
+          "message": "...",
+          "type": "invalid_request_error" | "authentication_error" | "server_error",
+          "param": null,
+          "code": "some_code" | null,
+          "path": "http://...",
+          "extra": { ... }   # optional
+        }
+      }
+    """
+    if status_code in (401, 403):
+        error_type = "authentication_error"
+    elif status_code == 404 or (400 <= status_code < 500):
+        error_type = "invalid_request_error"
+    else:
+        error_type = "server_error"
+
+    payload: Dict[str, Any] = {
+        "error": {
+            "message": message,
+            "type": error_type,
+            "param": None,
+            "code": code,
+        }
     }
 
-    if request is not None:
-        error_obj["path"] = str(request.url)
+    if path:
+        payload["error"]["path"] = path
 
-    if extra:
-        error_obj["extra"] = extra
+    if exc is not None:
+        payload["error"]["extra"] = {"exception": str(exc)}
 
-    body = {"error": error_obj}
-
-    if _DEBUG:
-        body["debug"] = {
-            "status_code": status_code,
-        }
-
-    return body
+    return payload
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    @app.exception_handler(StarletteHTTPException)
-    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-        status = exc.status_code
-        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    """
+    Register global exception handlers that return OpenAI-style error
+    envelopes instead of the default FastAPI error format.
+    """
 
-        if status >= 500:
-            err_type = "server_error"
-            code = f"http_{status}"
-            log_method = logger.error
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        """
+        Handle FastAPI HTTPException explicitly so we don't treat normal
+        4xx responses (auth errors, invalid params, etc.) as 500s.
+        """
+        path = str(request.url)
+
+        # If the detail is already an OpenAI-style error envelope, just pass it through.
+        if isinstance(exc.detail, dict) and "error" in exc.detail:
+            logger.warning(
+                "HTTPException in relay (passthrough)",
+                extra={
+                    "path": path,
+                    "status_code": exc.status_code,
+                    "detail": exc.detail,
+                },
+            )
+            return JSONResponse(status_code=exc.status_code, content=exc.detail)
+
+        # Otherwise, wrap the detail into an OpenAI-style error.
+        if isinstance(exc.detail, str):
+            message = exc.detail
         else:
-            err_type = "invalid_request_error"
-            code = f"http_{status}"
-            log_method = logger.warning
+            message = str(exc.detail)
 
-        log_method(
-            "HTTPException in relay",
-            extra={"path": str(request.url), "status_code": status},
-        )
-
-        body = _openai_error_body(
-            message=detail or "Request failed.",
-            err_type=err_type,
-            status_code=status,
-            param=None,
-            code=code,
-            request=request,
-            extra={"detail": detail},
-        )
-        return JSONResponse(status_code=status, content=body)
-
-    @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        status = 422
         logger.warning(
-            "Request validation error",
-            extra={"path": str(request.url), "status_code": status},
+            "HTTPException in relay",
+            extra={"path": path, "status_code": exc.status_code, "detail": exc.detail},
         )
 
-        body = _openai_error_body(
-            message="Request validation failed.",
-            err_type="invalid_request_error",
-            status_code=status,
-            param=None,
-            code="validation_error",
-            request=request,
-            extra={"errors": exc.errors()},
+        payload = _build_openai_error(
+            message=message,
+            status_code=exc.status_code,
+            path=path,
         )
-        return JSONResponse(status_code=status, content=body)
+        return JSONResponse(status_code=exc.status_code, content=payload)
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
-        status = 500
-        logger.exception(
-            "Unhandled exception in relay",
-            extra={"path": str(request.url), "status_code": status},
-        )
+        """
+        Catch-all handler for unexpected server-side errors (true 5xx bugs).
+        """
+        path = str(request.url)
+        logger.exception("Unhandled exception in relay", extra={"path": path})
 
-        tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-
-        message = "An unexpected error occurred on the relay."
-        body = _openai_error_body(
-            message=message,
-            err_type="server_error",
-            status_code=status,
-            param=None,
+        payload = _build_openai_error(
+            message="An unexpected error occurred on the relay.",
+            status_code=500,
             code="internal_error",
-            request=request,
-            extra={"exception": str(exc)},
+            path=path,
+            exc=exc,
         )
-
-        if _DEBUG:
-            lines = tb_str.splitlines()
-            body.setdefault("debug", {})["trace_tail"] = lines[-10:]
-
-        return JSONResponse(status_code=status, content=body)
+        return JSONResponse(status_code=500, content=payload)
