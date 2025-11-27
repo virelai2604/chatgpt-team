@@ -1,12 +1,17 @@
+# app/routes/actions.py
+
 from __future__ import annotations
 
 import os
 import platform
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Literal, Optional
 
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
+
+from app.api.forward_openai import forward_openai_from_parts
 
 router = APIRouter(tags=["actions"])
 
@@ -35,15 +40,7 @@ def _base_env() -> Dict[str, str]:
 
 def _flat_relay_info() -> Dict[str, Any]:
     """
-    Flat relay info used by /actions/relay_info.
-
-    tests/test_tools_and_actions_routes.py expects the following top-level
-    keys to be present:
-
-      - relay_name
-      - environment
-      - app_mode
-      - base_openai_api
+    Flat relay info used primarily by test_tools_and_actions_routes.py.
     """
     base = _base_env()
     relay_name = os.getenv("RELAY_NAME", "ChatGPT Team Relay (pytest)")
@@ -59,14 +56,6 @@ def _flat_relay_info() -> Dict[str, Any]:
 def _structured_relay_info() -> Dict[str, Any]:
     """
     Structured relay info used by /v1/actions/relay_info.
-
-    tests/test_actions_and_orchestrator.py expects:
-
-      - info["type"] == "relay.info"
-      - info["relay"]["name"] is a non-empty str
-      - info["relay"]["app_mode"] is a non-empty str
-      - info["relay"]["environment"] is a non-empty str
-      - info["upstream"]["base_url"] and ["default_model"] are non-empty str
     """
     base = _base_env()
 
@@ -100,30 +89,17 @@ def _structured_relay_info() -> Dict[str, Any]:
         "upstream": upstream,
         "system": system,
         "build": build,
-        # Extra top-level fields; tests may or may not use these.
         "app_mode": base["app_mode"],
         "environment": base["environment"],
         "base_openai_api": base["base_openai_api"],
     }
 
 
-# ---------------------------------------------------------------------------
-# /actions/ping and /v1/actions/ping
-# ---------------------------------------------------------------------------
-
 @router.get("/actions/ping")
 @router.get("/v1/actions/ping")
 async def actions_ping() -> JSONResponse:
     """
-    Lightweight health endpoint used by tests.
-
-    Contract:
-      - HTTP 200
-      - JSON with:
-          source == "chatgpt-team-relay"
-          status == "ok"
-          app_mode: non-empty str
-          environment: non-empty str
+    Simple liveness endpoint used by tests and external monitors.
     """
     base = _base_env()
     payload = {
@@ -135,10 +111,6 @@ async def actions_ping() -> JSONResponse:
     }
     return JSONResponse(payload, status_code=200)
 
-
-# ---------------------------------------------------------------------------
-# /actions/relay_info (flat) and /v1/actions/relay_info (structured)
-# ---------------------------------------------------------------------------
 
 @router.get("/actions/relay_info", summary="Flat relay environment info")
 async def actions_relay_info_flat() -> Dict[str, Any]:
@@ -158,3 +130,83 @@ async def actions_relay_info_v1() -> Dict[str, Any]:
     Structured info used by Actions / orchestrator tests.
     """
     return _structured_relay_info()
+
+
+class OpenAIForwardPayload(BaseModel):
+    """
+    Payload for the generic Forward API endpoint.
+
+    This is designed to be used as a ChatGPT Action / tool:
+
+      {
+        "method": "POST",
+        "path": "/v1/responses",
+        "query": {"stream": true},
+        "body": { ... arbitrary OpenAI request body ... }
+      }
+    """
+
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"] = Field(
+        ...,
+        description="HTTP method to use for the upstream OpenAI request.",
+    )
+    path: str = Field(
+        ...,
+        description="Path to call on the upstream OpenAI API, e.g. '/v1/models'.",
+        examples=["/v1/models", "/v1/responses"],
+    )
+    query: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional query parameters to append to the upstream request.",
+    )
+    body: Optional[Any] = Field(
+        default=None,
+        description="Optional JSON body to send to the upstream request.",
+    )
+    headers: Optional[Dict[str, str]] = Field(
+        default=None,
+        description=(
+            "Optional additional headers to send. "
+            "Authorization headers are always ignored; the relay injects its own."
+        ),
+    )
+
+
+@router.post(
+    "/v1/actions/openai/forward",
+    summary="Generic Forward API for OpenAI endpoints",
+)
+async def actions_openai_forward(
+    payload: OpenAIForwardPayload,
+    request: Request,
+) -> Response:
+    """
+    Generic Forward API endpoint primarily for ChatGPT Actions / Agents.
+
+    It allows a single tool (`openai_forward`) to reach any upstream OpenAI
+    endpoint through this relay without creating a new action for each path.
+
+    Security notes:
+      - Client-provided Authorization headers are ignored by the core forwarder.
+      - The relay always injects its own OPENAI_API_KEY for upstream calls.
+    """
+    # Optional guardrail: prevent forwarding *this* endpoint to itself
+    if payload.path.startswith("/v1/actions/openai/forward"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "message": "Recursive calls to /v1/actions/openai/forward are not allowed.",
+                    "type": "invalid_request_error",
+                    "code": "recursive_forward",
+                }
+            },
+        )
+
+    return await forward_openai_from_parts(
+        method=payload.method,
+        path=payload.path,
+        query=payload.query,
+        body=payload.body,
+        headers=payload.headers,
+    )

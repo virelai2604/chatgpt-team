@@ -24,10 +24,6 @@ router = APIRouter(
     tags=["realtime"],
 )
 
-# ---------------------------------------------------------------------------
-# HTTP Realtime Sessions
-# ---------------------------------------------------------------------------
-
 
 def _build_headers(request: Request) -> Dict[str, str]:
     if not OPENAI_API_KEY:
@@ -105,12 +101,6 @@ async def _post_realtime_sessions(
 
 @router.post("/realtime/sessions", summary="Create a Realtime session (HTTP)")
 async def create_realtime_session(request: Request) -> JSONResponse:
-    """
-    POST /v1/realtime/sessions
-
-    Proxies to OpenAI's /v1/realtime/sessions and returns the JSON descriptor.
-    Typically used to obtain a client_secret and ws URL for Realtime.
-    """
     try:
         body = await request.json()
     except Exception:
@@ -120,21 +110,10 @@ async def create_realtime_session(request: Request) -> JSONResponse:
     return JSONResponse(payload, status_code=200)
 
 
-# ---------------------------------------------------------------------------
-# WebSocket Relay Endpoint
-# ---------------------------------------------------------------------------
-
-
 async def _create_session_for_ws(
     model: str,
     session_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """
-    Create a Realtime session for the WS relay itself.
-
-    Similar to _post_realtime_sessions, but independent of FastAPI Request.
-    Uses OPENAI_REALTIME_BETA from env and injects "model" + session_config.
-    """
     if not OPENAI_API_KEY:
         raise HTTPException(
             status_code=500,
@@ -205,13 +184,6 @@ async def _create_session_for_ws(
 
 
 def _extract_ws_auth(payload: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
-    """
-    Extract the websocket URL and auth headers from a Realtime sessions payload.
-
-    Handles shapes like:
-      { "url": "...", "client_secret": {"value": "..."} }
-      { "session": { "url": "...", "client_secret": {"value": "..."} } }
-    """
     ws_url = payload.get("url") or payload.get("ws_url")
 
     if not ws_url and isinstance(payload.get("session"), dict):
@@ -232,7 +204,6 @@ def _extract_ws_auth(payload: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
 
     auth_headers: Dict[str, str] = {}
 
-    # Look for client_secret in various shapes
     cs = payload.get("client_secret")
     if isinstance(cs, dict):
         token = cs.get("value")
@@ -257,38 +228,13 @@ def _extract_ws_auth(payload: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
 
 @router.websocket("/realtime/ws")
 async def realtime_ws_relay(websocket: WebSocket):
-    """
-    WebSocket endpoint: /v1/realtime/ws
-
-    Protocol:
-
-      - Client connects to ws://relay/v1/realtime/ws?model=...
-      - OPTIONAL: first message is JSON config:
-            {
-              "model": "gpt-4.1-mini",
-              "session_config": { ... optional Realtime session parameters ... }
-            }
-        If JSON parse fails *or* it has no "model"/"session_config",
-        the first message is treated as a normal Realtime event and
-        forwarded to upstream.
-
-      - Relay:
-          1. Creates a Realtime session via HTTP.
-          2. Connects to OpenAI's Realtime websocket URL.
-          3. Pipes messages bidirectionally between client and upstream.
-
-    This keeps the client blind to the upstream OpenAI URL and credentials;
-    only the relay holds OPENAI_API_KEY / client_secret.
-    """
     await websocket.accept()
 
-    # 1) Determine model & optional session_config
     model = websocket.query_params.get("model") or DEFAULT_REALTIME_MODEL
     session_config: Optional[Dict[str, Any]] = None
 
     initial_to_forward: Optional[str] = None
 
-    # Try to read an optional config message
     try:
         initial_text = await websocket.receive_text()
     except WebSocketDisconnect:
@@ -301,22 +247,17 @@ async def realtime_ws_relay(websocket: WebSocket):
         try:
             cfg = json.loads(initial_text)
         except json.JSONDecodeError:
-            # Not JSON → treat as first upstream message
             cfg = None
 
         if isinstance(cfg, dict) and ("model" in cfg or "session_config" in cfg):
-            # Treat as configuration
             if isinstance(cfg.get("model"), str):
                 model = cfg["model"]
             if isinstance(cfg.get("session_config"), dict):
                 session_config = cfg["session_config"]
-            # Do not forward this config message
             initial_to_forward = None
         else:
-            # No config keys → treat as first upstream message
             initial_to_forward = initial_text
 
-    # 2) Create a Realtime session for this WS
     payload = await _create_session_for_ws(model, session_config)
     ws_url, upstream_headers = _extract_ws_auth(payload)
 
@@ -327,15 +268,10 @@ async def realtime_ws_relay(websocket: WebSocket):
         bool(upstream_headers),
     )
 
-    # 3) Connect to upstream WebSocket and relay messages
     try:
         async with ws_connect(ws_url, extra_headers=upstream_headers) as upstream:
 
             async def client_to_upstream():
-                """
-                Forward messages from client → upstream Realtime WS.
-                """
-                # If we had a non-config first message, forward it
                 if initial_to_forward is not None:
                     await upstream.send(initial_to_forward)
 
@@ -347,7 +283,6 @@ async def realtime_ws_relay(websocket: WebSocket):
                         elif "bytes" in msg and msg["bytes"] is not None:
                             await upstream.send(msg["bytes"])
                         else:
-                            # ignore ping/close frames here; upstream_to_client will handle closure
                             continue
                 except WebSocketDisconnect:
                     await upstream.close()
@@ -359,9 +294,6 @@ async def realtime_ws_relay(websocket: WebSocket):
                         pass
 
             async def upstream_to_client():
-                """
-                Forward messages from upstream Realtime WS → client.
-                """
                 try:
                     async for msg in upstream:
                         if isinstance(msg, (bytes, bytearray)):

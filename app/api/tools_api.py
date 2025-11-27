@@ -15,6 +15,11 @@ logger = get_logger("tools_api")
 
 router = APIRouter(prefix="", tags=["tools"])
 
+
+# ---------------------------------------------------------------------------
+# Tools manifest loader
+# ---------------------------------------------------------------------------
+
 _tools_cache: List[Dict[str, Any]] | None = None
 
 
@@ -64,6 +69,11 @@ def _load_tools_manifest() -> List[Dict[str, Any]]:
 
     _tools_cache = tools
     return _tools_cache
+
+
+# ---------------------------------------------------------------------------
+# Public endpoints
+# ---------------------------------------------------------------------------
 
 
 @router.get("/v1/tools")

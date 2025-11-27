@@ -25,14 +25,12 @@ from app.routes.actions import router as actions_router
 
 def register_routes(app: FastAPI) -> None:
     """
-    Attach all routers to the FastAPI app.
+    Register all FastAPI routers on the main application.
 
-    Health endpoints are kept separate to remain publicly accessible
-    (RelayAuthMiddleware skips /health and /v1/health). All /v1/*
-    and /relay/* endpoints are otherwise protected by the relay key.
+    This is the central wiring layer – any new route module should be added here.
     """
 
-    # -------- Health (public) --------
+    # -------- Health --------
     app.include_router(health_router)
 
     # -------- OpenAI-compatible endpoints --------

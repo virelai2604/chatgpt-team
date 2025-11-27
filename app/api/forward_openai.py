@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Mapping, Optional
 
 import httpx
 from fastapi import HTTPException, Request, Response
@@ -78,52 +78,48 @@ def _filter_response_headers(headers: Mapping[str, str]) -> Dict[str, str]:
     return out
 
 
-async def forward_openai_request(
-    request: Request,
+async def _do_forward(
     *,
-    upstream_path: str | None = None,
-    upstream_method: str | None = None,
+    method: str,
+    path: str,
+    query_params: Optional[Dict[str, Any]],
+    incoming_headers: Mapping[str, str],
+    raw_body: Optional[bytes],
+    json_body: Any,
 ) -> Response:
     """
-    Generic OpenAI HTTP proxy for /v1/* requests.
+    Core HTTP proxy implementation used by both:
 
-    - Copies method, path, query params.
-    - Copies headers except hop-by-hop + Authorization.
-    - Sends JSON body when Content-Type is application/json, raw bytes otherwise.
-    - Injects Authorization: Bearer <OPENAI_API_KEY> if configured.
-    - Forces Accept-Encoding=identity so upstream never sends gzipped/brotli data.
+      - forward_openai_request (Request → upstream)
+      - forward_openai_from_parts (payload → upstream)
     """
-    method = upstream_method or request.method
-    path = upstream_path or request.url.path
+    if not path.startswith("/"):
+        path = "/" + path
 
     target_url = f"{OPENAI_API_BASE}{path}"
 
-    params = dict(request.query_params)
+    if not OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": "OPENAI_API_KEY is not configured",
+                    "type": "config_error",
+                    "code": "no_api_key",
+                }
+            },
+        )
 
-    # Start from incoming headers
-    request_headers = request.headers
-    upstream_headers = _filter_request_headers(request_headers)
+    params = query_params or {}
 
-    # Inject our own Authorization and override Accept-Encoding
-    if OPENAI_API_KEY:
-        upstream_headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
+    upstream_headers = _filter_request_headers(incoming_headers)
+
+    upstream_headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
     upstream_headers["Accept-Encoding"] = "identity"
 
-    # Read body once and decide whether to send JSON or raw bytes
-    raw_body = await request.body()
-    json_data: Any | None = None
-
-    content_type = request_headers.get("content-type", "")
-    if raw_body and "application/json" in content_type:
-        try:
-            json_data = json.loads(raw_body.decode("utf-8"))
-        except Exception:  # noqa: BLE001
-            # If JSON parsing fails, fall back to raw bytes
-            json_data = None
-
     request_kwargs: Dict[str, Any] = {}
-    if json_data is not None:
-        request_kwargs["json"] = json_data
+    if json_body is not None:
+        request_kwargs["json"] = json_body
     elif raw_body:
         request_kwargs["content"] = raw_body
 
@@ -139,7 +135,12 @@ async def forward_openai_request(
     else:
         timeout = httpx.Timeout(float(settings.PROXY_TIMEOUT))
 
-    logger.info("forward_openai_request.start method=%s path=%s", method, path)
+    logger.info(
+        "forward_openai_core.start method=%s path=%s params=%s",
+        method,
+        path,
+        params,
+    )
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -151,7 +152,7 @@ async def forward_openai_request(
                 **request_kwargs,
             )
     except httpx.RequestError as exc:
-        logger.warning("forward_openai_request.error %s", exc)
+        logger.warning("forward_openai_core.error %s", exc)
         # Map connection errors to a clear OpenAI-style error envelope
         raise HTTPException(
             status_code=502,
@@ -164,7 +165,7 @@ async def forward_openai_request(
         ) from exc
 
     logger.info(
-        "forward_openai_request.done method=%s path=%s status=%s",
+        "forward_openai_core.done method=%s path=%s status=%s",
         method,
         path,
         upstream_resp.status_code,
@@ -176,4 +177,81 @@ async def forward_openai_request(
         content=upstream_resp.content,
         status_code=upstream_resp.status_code,
         headers=response_headers,
+    )
+
+
+async def forward_openai_request(
+    request: Request,
+    *,
+    upstream_path: str | None = None,
+    upstream_method: str | None = None,
+) -> Response:
+    """
+    Generic OpenAI HTTP proxy for /v1/* requests.
+
+    - Copies method, path, query params.
+    - Copies headers except hop-by-hop + Authorization.
+    - Sends JSON body when Content-Type is application/json, raw bytes otherwise.
+    - Injects Authorization: Bearer <OPENAI_API_KEY>.
+    - Forces Accept-Encoding=identity so upstream never sends gzipped/brotli data.
+    """
+    method = (upstream_method or request.method).upper()
+    path = upstream_path or request.url.path
+
+    query_params = dict(request.query_params)
+    incoming_headers = request.headers
+
+    raw_body = await request.body()
+    json_body: Any = None
+
+    content_type = incoming_headers.get("content-type", "")
+    if raw_body and "application/json" in content_type:
+        try:
+            json_body = json.loads(raw_body.decode("utf-8"))
+            raw_body = None
+        except Exception:
+            # Fallback to sending raw bytes if JSON parsing fails
+            json_body = None
+
+    return await _do_forward(
+        method=method,
+        path=path,
+        query_params=query_params,
+        incoming_headers=incoming_headers,
+        raw_body=raw_body,
+        json_body=json_body,
+    )
+
+
+async def forward_openai_from_parts(
+    *,
+    method: str,
+    path: str,
+    query: Optional[Dict[str, Any]] = None,
+    body: Any | None = None,
+    headers: Optional[Mapping[str, str]] = None,
+) -> Response:
+    """
+    Forwarder for ChatGPT Actions / agent tools that send:
+
+      {
+        "method": "GET" | "POST" | ...,
+        "path": "/v1/models",
+        "query": {...},
+        "body": {...}
+      }
+
+    This does NOT trust arbitrary Authorization headers; any provided
+    headers are filtered through the same rules as forward_openai_request.
+    """
+    method = method.upper()
+    incoming_headers: Mapping[str, str] = headers or {}
+
+    return await _do_forward(
+        method=method,
+        path=path,
+        query_params=query or {},
+        incoming_headers=incoming_headers,
+        raw_body=None,
+        json_body=body,
     )
