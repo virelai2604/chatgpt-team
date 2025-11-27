@@ -30,7 +30,7 @@ services:
 
       # -------- OpenAI upstream config --------
       - key: OPENAI_API_BASE
-        value: https://api.openai.com
+        value: https://api.openai.com      # no /v1
       # IMPORTANT: set the real API key in the Render dashboard (do NOT commit it)
       - key: OPENAI_API_KEY
         value: ""   # override in Render UI
@@ -41,10 +41,11 @@ services:
       - key: RELAY_AUTH_ENABLED
         value: "true"
 
-
-      # -------- Default model --------
+      # -------- Default models --------
       - key: DEFAULT_MODEL
         value: gpt-4o-mini
+      - key: REALTIME_MODEL
+        value: gpt-4o-realtime-preview
 
       # -------- Relay identity / runtime --------
       - key: RELAY_HOST
@@ -64,13 +65,13 @@ services:
       - key: CHAIN_WAIT_MODE
         value: "sequential"
 
-      # -------- CORS config (for ChatGPT + Platform UI) --------
+      # -------- CORS config (CSV, not JSON array) --------
       - key: CORS_ALLOW_ORIGINS
-        value: '["https://chat.openai.com","https://platform.openai.com"]'
+        value: https://chat.openai.com,https://platform.openai.com
       - key: CORS_ALLOW_METHODS
-        value: '["GET","POST","PUT","PATCH","DELETE","OPTIONS"]'
+        value: GET,POST,PUT,PATCH,DELETE,OPTIONS
       - key: CORS_ALLOW_HEADERS
-        value: '["Authorization","Content-Type","Accept"]'
+        value: Authorization,Content-Type,Accept
 
       # -------- Tools & validation schema --------
       - key: TOOLS_MANIFEST
@@ -94,10 +95,6 @@ services:
       - key: CHATGPT_ACTIONS_SECRET
         value: ""   # override in Render UI
 
-      # -------- Feature flags for ChatGPT Actions --------
-      - key: ENABLE_STREAM
-        value: "true"
-
     # (Optional) If you use static assets or schemas, keep them in repo:
     #   - render.yaml
     #   - .env                # not committed; use Render "Secret Files" for this
@@ -113,4 +110,3 @@ services:
 #   embeddings, vector stores, realtime, images, videos, etc.) and
 #   a local tools registry at /v1/tools for ChatGPT Actions.
 # ==============================================================
-

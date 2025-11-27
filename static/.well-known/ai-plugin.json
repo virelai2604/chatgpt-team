@@ -3,7 +3,7 @@
   "name_for_human": "ChatGPT Team Relay",
   "name_for_model": "chatgpt_team_relay",
   "description_for_human": "A relay that forwards ChatGPT-style requests to the OpenAI API with custom routing, logging, and tools.",
-  "description_for_model": "You are calling a relay service that forwards requests to the OpenAI API. Use it to run responses, embeddings, and related operations just like the official OpenAI REST API. Prefer the /v1/responses endpoint for chat-style interactions.",
+  "description_for_model": "You are calling a relay service that forwards requests to the OpenAI API. Prefer the /v1/responses endpoint for chat-style interactions. Use /v1/tools to discover available actions and /v1/realtime/sessions only when you need a realtime session.",
   "auth": {
     "type": "none"
   },

@@ -6,6 +6,7 @@
   📄 __init__.py
   📄 generate_tree.py
   📄 openai_models_2025-11.csv
+  📄 print_component_map.py
   📄 project-tree.md
   📄 pytest.ini
   📄 relay_e2e_raw.py
@@ -35,6 +36,7 @@
       📄 conversations.py
       📄 embeddings.py
       📄 files.py
+      📄 health.py
       📄 images.py
       📄 models.py
       📄 realtime.py
@@ -80,6 +82,8 @@
   📁 schemas
     📄 __init__.py
     📄 openapi.yaml
+  📁 scripts
+    📄 check_relay_health.py
   📁 static
     📁 .well-known
       📄 __init__.py

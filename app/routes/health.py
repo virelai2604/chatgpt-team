@@ -1,5 +1,3 @@
-# app/routes/health.py
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -13,13 +11,6 @@ router = APIRouter(tags=["health"])
 
 
 def _base_status() -> Dict[str, Any]:
-    """
-    Minimal but informative relay health payload.
-
-    - 'status' is the primary flag (used by Render / load balancers).
-    - 'relay' and 'upstream' provide quick debugging context.
-    - Does NOT call upstream OpenAI; stays cheap and reliable.
-    """
     return {
         "status": "ok",
         "relay": {
@@ -43,17 +34,9 @@ def _base_status() -> Dict[str, Any]:
 
 @router.get("/health")
 async def health_root() -> Dict[str, Any]:
-    """
-    Basic health endpoint for local checks and load balancers.
-    Public: RelayAuthMiddleware explicitly exempts this path.
-    """
     return _base_status()
 
 
 @router.get("/v1/health")
 async def health_v1() -> Dict[str, Any]:
-    """
-    Versioned health endpoint. Render health checks are configured
-    to hit this path according to render.yaml.
-    """
     return _base_status()
