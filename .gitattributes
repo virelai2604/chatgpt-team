@@ -1,1 +1,14 @@
+# Normalize all text files; repo = LF, working tree = platform default
+* text=auto
+
+# Force LF for files that must be Unix-style (scripts, configs)
+*.sh   text eol=lf
+*.ps1  text eol=lf
+*.py   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+
+# PDF stays binary, no EOL conversion
 *.pdf filter=lfs diff=lfs merge=lfs -text
