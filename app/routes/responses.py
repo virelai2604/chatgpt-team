@@ -1,10 +1,11 @@
-# app/routes/responses.py (simplified skeleton)
+# app/routes/responses.py
 
 from fastapi import APIRouter, Request, Response
 from app.api.forward_openai import forward_openai_request
 from app.utils.logger import relay_log as logger
 
 router = APIRouter(prefix="/v1", tags=["responses"])
+
 
 @router.post("/responses")
 async def create_response(request: Request) -> Response:

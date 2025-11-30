@@ -36,60 +36,17 @@ router = APIRouter(
 
 @router.post("/images")
 async def create_images_root(request: Request):
-    """
-    POST /v1/images
-
-    "Best-effort" proxy for image generation. This exists primarily to
-    support older clients and tests (e.g. relay_e2e_raw.py) that POST
-    directly to `/v1/images` instead of `/v1/images/generations`.
-
-    The body is forwarded 1:1 to the upstream Images API. If the upstream
-    endpoint does not support this path, the OpenAI error is returned
-    unchanged to the client.
-    """
-    logger.info("→ [images] %s %s (root)", request.method, request.url.path)
+    ...
     return await forward_openai_request(request)
 
 
 @router.post("/images/generations")
 async def create_image_generations(request: Request):
-    """
-    POST /v1/images/generations
-
-    Generates one or more images from a text prompt, equivalent to:
-
-        client.images.generate({
-          "model": "gpt-image-1",
-          "prompt": "...",
-          ...
-        })
-
-    The request body and response payload are forwarded 1:1 to/from
-    the upstream OpenAI Images API by `forward_openai_request`.
-    """
-    logger.info("→ [images] %s %s", request.method, request.url.path)
+    ...
     return await forward_openai_request(request)
 
 
 @router.api_route("/images/{path:path}", methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"])
 async def proxy_images_subpaths(path: str, request: Request):
-    """
-    /v1/images/{...} — catch-all for image sub-resources.
-
-    This route covers any additional or legacy endpoints under
-    /v1/images/*, such as:
-
-      • POST /v1/images/edits
-      • POST /v1/images/variations
-      • Any future subpaths introduced by OpenAI.
-
-    We simply forward the HTTP method, path, headers, and body to
-    the upstream API via `forward_openai_request`.
-    """
-    logger.info(
-        "→ [images] %s %s (subpath=%s)",
-        request.method,
-        request.url.path,
-        path,
-    )
+    ...
     return await forward_openai_request(request)

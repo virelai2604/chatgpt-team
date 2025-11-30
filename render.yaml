@@ -43,7 +43,7 @@ services:
 
       # -------- Default models --------
       - key: DEFAULT_MODEL
-        value: gpt-4o-mini
+        value: gpt-5.1
       - key: REALTIME_MODEL
         value: gpt-4o-realtime-preview
 

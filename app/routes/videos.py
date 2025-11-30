@@ -10,12 +10,14 @@ router = APIRouter(
     tags=["videos"],
 )
 
-@router.api_route("/videos", methods=["GET","POST","HEAD","OPTIONS"])
+
+@router.api_route("/videos", methods=["GET", "POST", "HEAD", "OPTIONS"])
 async def proxy_videos_root(request: Request):
     logger.info("→ [videos] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
-@router.api_route("/videos/{path:path}", methods=["GET","POST","DELETE","HEAD","OPTIONS"])
+
+@router.api_route("/videos/{path:path}", methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"])
 async def proxy_videos_subpaths(path: str, request: Request):
     logger.info("→ [videos/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
