@@ -20,8 +20,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 
+from app.core.config import settings
 from app.middleware.validation import SchemaValidationMiddleware
 from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
+from app.middleware.relay_auth import RelayAuthMiddleware
 
 from app.api.tools_api import router as tools_router
 from app.routes import (
@@ -98,6 +100,8 @@ def create_app() -> FastAPI:
     # Middleware stack: validation → orchestrator → routes
     # ------------------------------------------------------------
     app.add_middleware(SchemaValidationMiddleware)
+    if settings.RELAY_AUTH_ENABLED:
+        app.add_middleware(RelayAuthMiddleware, relay_key=settings.RELAY_KEY)
     app.add_middleware(P4OrchestratorMiddleware)
 
     # ------------------------------------------------------------
