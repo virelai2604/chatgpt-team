@@ -1,12 +1,12 @@
 # app/middleware/relay_auth.py
 
-from __future__ import annotations
 
-from fastapi import Request
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from app.utils.authy import check_relay_key
+
 
 
 class RelayAuthMiddleware(BaseHTTPMiddleware):
@@ -25,6 +25,13 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
         # health endpoints should remain open
         if path not in ("/health", "/v1/health"):
             auth_header = request.headers.get("Authorization")
-            check_relay_key(auth_header)
+            try:
+                check_relay_key(auth_header)
+            except HTTPException as exc:  # pragma: no cover - handled in tests
+                return JSONResponse(
+                    status_code=exc.status_code,
+                    content={"detail": exc.detail},
+                    headers=exc.headers,
+                )
 
         return await call_next(request)
