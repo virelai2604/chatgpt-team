@@ -21,6 +21,7 @@ def check_relay_key(auth_header: str | None) -> None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing Authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     token = auth_header.split(" ", 1)[1].strip()
@@ -28,4 +29,5 @@ def check_relay_key(auth_header: str | None) -> None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid relay key",
+             headers={"WWW-Authenticate": "Bearer"},
         )
