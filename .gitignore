@@ -47,7 +47,6 @@ Thumbs.db
 *.pyc
 __pycache__/
 .venv/
-test*
 .env
 *.env
 __pycache__/
@@ -80,7 +79,7 @@ __pycache__/
 .vscode/
 .idea/
 *.log
-pytest_cache/ 
+
 *data
 data
 Downloads
