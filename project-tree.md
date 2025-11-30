@@ -6,25 +6,56 @@
   📄 __init__.py
   📄 generate_tree.py
   📄 openai_models_2025-11.csv
-  📄 print_component_map.py
   📄 project-tree.md
   📄 pytest.ini
   📄 relay_e2e_raw.py
   📄 render.yaml
   📄 requirements.txt
+  📁 scripts
+    📄 check_relay_health.py
+  📁 static
+    📁 .well-known
+      📄 __init__.py
+      📄 ai-plugin.json
+  📁 logs
+    📄 smoke_routes_local_20251120-192805.json
+  📁 data
+    📄 conversations.csv
+    📄 conversations.db
+    📁 conversations
+      📄 conversations.db
+    📁 videos
+      📄 videos.db
+    📁 embeddings
+      📄 embeddings.db
+    📁 uploads
+      📄 attachments.db
+      📄 file_9aa498e1dbb0
+    📁 jobs
+      📄 jobs.db
+    📁 usage
+      📄 usage.db
+    📁 images
+      📄 images.db
+    📁 files
+      📄 files.db
+    📁 vector_stores
+      📄 vectors.db
+    📁 models
+      📄 models.db
+      📄 openai_models_categorized.csv
+      📄 openai_models_categorized.json
+  📁 schemas
+    📄 __init__.py
+    📄 openapi.yaml
   📁 app
     📄 __init__.py
     📄 main.py
-    📁 api
+    📁 utils
       📄 __init__.py
-      📄 forward_openai.py
-      📄 tools_api.py
-    📁 core
-      📄 __init__.py
-      📄 config.py
-    📁 manifests
-      📄 __init__.py
-      📄 tools_manifest.json
+      📄 authy.py
+      📄 error_handler.py
+      📄 logger.py
     📁 middleware
       📄 __init__.py
       📄 p4_orchestrator.py
@@ -44,50 +75,18 @@
       📄 responses.py
       📄 vector_stores.py
       📄 videos.py
-    📁 utils
+    📁 manifests
       📄 __init__.py
-      📄 authy.py
-      📄 error_handler.py
-      📄 logger.py
-  📁 data
-    📄 conversations.csv
-    📄 conversations.db
-    📁 conversations
-      📄 conversations.db
-    📁 embeddings
-      📄 embeddings.db
-    📁 files
-      📄 files.db
-    📁 images
-      📄 images.db
-    📁 jobs
-      📄 jobs.db
-    📁 models
-      📄 models.db
-      📄 openai_models_categorized.csv
-      📄 openai_models_categorized.json
-    📁 uploads
-      📄 attachments.db
-      📄 file_9aa498e1dbb0
-    📁 usage
-      📄 usage.db
-    📁 vector_stores
-      📄 vectors.db
-    📁 videos
-      📄 videos.db
+      📄 tools_manifest.json
+    📁 core
+      📄 __init__.py
+      📄 config.py
+    📁 api
+      📄 __init__.py
+      📄 forward_openai.py
+      📄 tools_api.py
   📁 docs
     📄 README.md
-  📁 logs
-    📄 smoke_routes_local_20251120-192805.json
-  📁 schemas
-    📄 __init__.py
-    📄 openapi.yaml
-  📁 scripts
-    📄 check_relay_health.py
-  📁 static
-    📁 .well-known
-      📄 __init__.py
-      📄 ai-plugin.json
   📁 tests
     📄 __init__.py
     📄 client.py

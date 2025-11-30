@@ -87,3 +87,5 @@ Downloads
 .env
 
 logs/
+.venv/
+venv/
