@@ -9,12 +9,14 @@
  
  from app.utils.authy import check_relay_key
  
+ __all__ = ["RelayAuthMiddleware"]
  
  class RelayAuthMiddleware(BaseHTTPMiddleware):
      """
      Enforce a relay Authorization header on `/v1/*` and `/relay/*` endpoints
      while keeping health checks open to unauthenticated probes.
      """
+ 
  
      def __init__(self, app: ASGIApp, *, relay_key: str) -> None:
          super().__init__(app)
@@ -29,7 +31,6 @@
          health_path = path in {"/health", "/v1/health"}
 
          if protected_path and not health_path:
-             
              auth_header = request.headers.get("Authorization")
              try:
                  check_relay_key(auth_header)
