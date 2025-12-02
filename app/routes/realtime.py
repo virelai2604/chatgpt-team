@@ -1,9 +1,9 @@
+# app/routes/realtime.py
 from __future__ import annotations
 
 import asyncio
-import json
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -13,8 +13,8 @@ from websockets.exceptions import ConnectionClosed  # type: ignore
 
 from app.utils.logger import relay_log as logger
 
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com").rstrip("/")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_REALTIME_BETA = os.getenv("OPENAI_REALTIME_BETA", "realtime=v1")
 PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120")))
 DEFAULT_REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-4.1-mini")
@@ -25,13 +25,13 @@ router = APIRouter(
 )
 
 
-def _build_headers(request: Request) -> Dict[str, str]:
+def _build_headers(request: Optional[Request] = None) -> Dict[str, str]:
     if not OPENAI_API_KEY:
         raise HTTPException(
             status_code=500,
             detail={
                 "error": {
-                    "message": "OPENAI_API_KEY is not configured for Realtime sessions",
+                    "message": "OPENAI_API_KEY is not configured for Realtime",
                     "type": "config_error",
                     "code": "no_api_key",
                 }
@@ -43,7 +43,10 @@ def _build_headers(request: Request) -> Dict[str, str]:
         "Content-Type": "application/json",
     }
 
-    incoming_beta = request.headers.get("OpenAI-Beta")
+    # Allow clients to override OpenAI-Beta header, but fall back to env default
+    incoming_beta: Optional[str] = None
+    if request is not None:
+        incoming_beta = request.headers.get("OpenAI-Beta")
     beta = incoming_beta or OPENAI_REALTIME_BETA
     if beta:
         headers["OpenAI-Beta"] = beta
@@ -55,9 +58,10 @@ async def _post_realtime_sessions(
     request: Request,
     body: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    base = OPENAI_API_BASE.rstrip("/")
-    url = f"{base}/v1/realtime/sessions"
-
+    """
+    POST /v1/realtime/sessions → OpenAI Realtime Sessions API.
+    """
+    url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
     headers = _build_headers(request)
     logger.info("→ [realtime] POST %s", url)
 
@@ -101,180 +105,79 @@ async def _post_realtime_sessions(
 
 @router.post("/realtime/sessions", summary="Create a Realtime session (HTTP)")
 async def create_realtime_session(request: Request) -> JSONResponse:
+    """
+    HTTP helper for creating Realtime sessions.
+
+    Mirrors:
+      POST https://api.openai.com/v1/realtime/sessions
+    """
     try:
         body = await request.json()
     except Exception:
         body = None
 
+    if isinstance(body, dict) and "model" not in body:
+        body.setdefault("model", DEFAULT_REALTIME_MODEL)
+
     payload = await _post_realtime_sessions(request, body)
     return JSONResponse(payload, status_code=200)
 
 
-async def _create_session_for_ws(
-    model: str,
-    session_config: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+@router.websocket("/realtime/ws")
+async def realtime_websocket(
+    websocket: WebSocket,
+    model: Optional[str] = None,
+) -> None:
+    """
+    WebSocket bridge for the Realtime API.
+
+    Clients connect to:
+      ws[s]://<relay>/v1/realtime/ws?model=<model>
+
+    The relay then connects to:
+      wss://api.openai.com/v1/realtime?model=<model>
+
+    All text/binary frames are proxied bidirectionally.
+    """
+    await websocket.accept()
+    upstream_model = model or DEFAULT_REALTIME_MODEL
+
     if not OPENAI_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": {
-                    "message": "OPENAI_API_KEY is not configured for Realtime WS",
-                    "type": "config_error",
-                    "code": "no_api_key",
-                }
-            },
+        await websocket.close(code=1011)
+        return
+
+    # Convert OPENAI_API_BASE ⇒ WebSocket base
+    if OPENAI_API_BASE.startswith("https://"):
+        ws_base = "wss://" + OPENAI_API_BASE[len("https://") :]
+    elif OPENAI_API_BASE.startswith("http://"):
+        ws_base = "ws://" + OPENAI_API_BASE[len("http://") :]
+    else:
+        ws_base = OPENAI_API_BASE.replace("https://", "wss://").replace(
+            "http://", "ws://"
         )
 
-    base = OPENAI_API_BASE.rstrip("/")
-    url = f"{base}/v1/realtime/sessions"
+    upstream_url = f"{ws_base}/v1/realtime?model={upstream_model}"
 
     headers: Dict[str, str] = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json",
     }
     if OPENAI_REALTIME_BETA:
         headers["OpenAI-Beta"] = OPENAI_REALTIME_BETA
 
-    body: Dict[str, Any] = {"model": model}
-    if session_config:
-        body.update(session_config)
-
-    logger.info("→ [realtime.ws] POST %s model=%s", url, model)
-
-    async with httpx.AsyncClient(timeout=PROXY_TIMEOUT) as client:
-        try:
-            resp = await client.post(url, headers=headers, json=body)
-        except httpx.RequestError as exc:
-            logger.error("[realtime.ws] Upstream request error: %s", exc)
-            raise HTTPException(
-                status_code=502,
-                detail={
-                    "error": {
-                        "message": "Failed to reach OpenAI Realtime Sessions API (WS)",
-                        "type": "upstream_error",
-                        "code": "realtime_ws_upstream_unreachable",
-                    }
-                },
-            ) from exc
-
-    try:
-        payload = resp.json()
-    except Exception:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "error": {
-                    "message": "Non-JSON response from Realtime Sessions API",
-                    "type": "upstream_error",
-                    "code": "realtime_ws_non_json",
-                }
-            },
-        )
-
-    if resp.status_code >= 400:
-        logger.warning(
-            "[realtime.ws] Upstream error %s: %s",
-            resp.status_code,
-            payload.get("error", {}).get("message", ""),
-        )
-        raise HTTPException(status_code=resp.status_code, detail=payload)
-
-    return payload
-
-
-def _extract_ws_auth(payload: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
-    ws_url = payload.get("url") or payload.get("ws_url")
-
-    if not ws_url and isinstance(payload.get("session"), dict):
-        session = payload["session"]
-        ws_url = session.get("url") or session.get("ws_url")
-
-    if not ws_url:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "error": {
-                    "message": "Realtime session response missing websocket URL",
-                    "type": "upstream_error",
-                    "code": "realtime_ws_no_url",
-                }
-            },
-        )
-
-    auth_headers: Dict[str, str] = {}
-
-    cs = payload.get("client_secret")
-    if isinstance(cs, dict):
-        token = cs.get("value")
-        if isinstance(token, str) and token:
-            auth_headers["Authorization"] = f"Bearer {token}"
-    elif isinstance(cs, str) and cs:
-        auth_headers["Authorization"] = f"Bearer {cs}"
-
-    if "Authorization" not in auth_headers:
-        session = payload.get("session")
-        if isinstance(session, dict):
-            cs2 = session.get("client_secret")
-            if isinstance(cs2, dict):
-                token2 = cs2.get("value")
-                if isinstance(token2, str) and token2:
-                    auth_headers["Authorization"] = f"Bearer {token2}"
-            elif isinstance(cs2, str) and cs2:
-                auth_headers["Authorization"] = f"Bearer {cs2}"
-
-    return ws_url, auth_headers
-
-
-@router.websocket("/realtime/ws")
-async def realtime_ws_relay(websocket: WebSocket):
-    await websocket.accept()
-
-    model = websocket.query_params.get("model") or DEFAULT_REALTIME_MODEL
-    session_config: Optional[Dict[str, Any]] = None
-
-    initial_to_forward: Optional[str] = None
-
-    try:
-        initial_text = await websocket.receive_text()
-    except WebSocketDisconnect:
-        await websocket.close()
-        return
-    except Exception:
-        initial_text = None
-
-    if initial_text:
-        try:
-            cfg = json.loads(initial_text)
-        except json.JSONDecodeError:
-            cfg = None
-
-        if isinstance(cfg, dict) and ("model" in cfg or "session_config" in cfg):
-            if isinstance(cfg.get("model"), str):
-                model = cfg["model"]
-            if isinstance(cfg.get("session_config"), dict):
-                session_config = cfg["session_config"]
-            initial_to_forward = None
-        else:
-            initial_to_forward = initial_text
-
-    payload = await _create_session_for_ws(model, session_config)
-    ws_url, upstream_headers = _extract_ws_auth(payload)
-
     logger.info(
-        "[realtime.ws] Opening upstream WS url=%s model=%s headers=%s",
-        ws_url,
-        model,
-        bool(upstream_headers),
+        "[realtime.ws] Connecting upstream model=%s url=%s",
+        upstream_model,
+        upstream_url,
     )
 
     try:
-        async with ws_connect(ws_url, extra_headers=upstream_headers) as upstream:
+        async with ws_connect(
+            upstream_url,
+            extra_headers=headers,
+            open_timeout=PROXY_TIMEOUT,
+        ) as upstream:
 
-            async def client_to_upstream():
-                if initial_to_forward is not None:
-                    await upstream.send(initial_to_forward)
-
+            async def client_to_upstream() -> None:
                 try:
                     while True:
                         msg = await websocket.receive()
@@ -282,27 +185,38 @@ async def realtime_ws_relay(websocket: WebSocket):
                             await upstream.send(msg["text"])
                         elif "bytes" in msg and msg["bytes"] is not None:
                             await upstream.send(msg["bytes"])
-                        else:
-                            continue
                 except WebSocketDisconnect:
-                    await upstream.close()
-                except Exception as exc:
+                    logger.info("[realtime.ws] client disconnected")
+                    try:
+                        await upstream.close()
+                    except Exception:
+                        pass
+                except ConnectionClosed:
+                    logger.info("[realtime.ws] upstream closed (client_to_upstream)")
+                except Exception as exc:  # pragma: no cover - defensive
                     logger.error("[realtime.ws] client_to_upstream error: %s", exc)
                     try:
                         await upstream.close()
                     except Exception:
                         pass
 
-            async def upstream_to_client():
+            async def upstream_to_client() -> None:
                 try:
-                    async for msg in upstream:
-                        if isinstance(msg, (bytes, bytearray)):
+                    while True:
+                        msg = await upstream.recv()
+                        if isinstance(msg, bytes):
                             await websocket.send_bytes(msg)
                         else:
-                            await websocket.send_text(str(msg))
+                            await websocket.send_text(msg)
                 except ConnectionClosed:
-                    await websocket.close()
-                except Exception as exc:
+                    logger.info("[realtime.ws] upstream closed (upstream_to_client)")
+                    try:
+                        await websocket.close()
+                    except Exception:
+                        pass
+                except WebSocketDisconnect:
+                    logger.info("[realtime.ws] client disconnected (upstream_to_client)")
+                except Exception as exc:  # pragma: no cover - defensive
                     logger.error("[realtime.ws] upstream_to_client error: %s", exc)
                     try:
                         await websocket.close()
@@ -311,8 +225,8 @@ async def realtime_ws_relay(websocket: WebSocket):
 
             await asyncio.gather(client_to_upstream(), upstream_to_client())
 
-    except Exception as exc:
-        logger.error("[realtime.ws] Failed to open upstream WS: %s", exc)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error("[realtime.ws] failed to establish upstream connection: %s", exc)
         try:
             await websocket.close(code=1011)
         except Exception:

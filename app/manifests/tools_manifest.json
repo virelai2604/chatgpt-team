@@ -16,7 +16,7 @@
           },
           "recency_days": {
             "type": "integer",
-            "description": "How many days back to prioritize in the search (e.g. 1 = last 24h, 7 = last week).",
+            "description": "How many days back to prioritize in the search (1 = last 24h, 7 = last week, etc.).",
             "minimum": 1,
             "default": 7
           },
@@ -28,9 +28,7 @@
             "default": 5
           }
         },
-        "required": [
-          "query"
-        ]
+        "required": ["query"]
       }
     },
     {
@@ -57,17 +55,11 @@
             "type": "object",
             "description": "Optional metadata filters to narrow search results (e.g. file type, tags, or source).",
             "additionalProperties": {
-              "type": [
-                "string",
-                "number",
-                "boolean"
-              ]
+              "type": ["string", "number", "boolean"]
             }
           }
         },
-        "required": [
-          "query"
-        ]
+        "required": ["query"]
       }
     },
     {
@@ -91,9 +83,7 @@
             }
           }
         },
-        "required": [
-          "code"
-        ]
+        "required": ["code"]
       }
     },
     {
@@ -111,7 +101,7 @@
           },
           "size": {
             "type": "string",
-            "description": "Image size, for example '1024x1024', '512x512', etc.",
+            "description": "Image size, e.g. '1024x1024', '512x512'.",
             "default": "1024x1024"
           },
           "n": {
@@ -127,9 +117,7 @@
             "default": "b64_json"
           }
         },
-        "required": [
-          "prompt"
-        ]
+        "required": ["prompt"]
       }
     },
     {
@@ -137,7 +125,7 @@
       "name": "audio_transcription",
       "object": "tool",
       "type": "function",
-      "description": "Transcribe audio files or streams into text using OpenAI audio models.",
+      "description": "Transcribe audio files into text using OpenAI audio models.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -145,119 +133,65 @@
             "type": "string",
             "description": "File ID of the audio to transcribe."
           },
-          "model": {
-            "type": "string",
-            "description": "Audio transcription model to use.",
-            "default": "gpt-4o-mini-transcribe"
-          },
           "language": {
             "type": "string",
-            "description": "Optional BCP-47 language code to bias transcription (e.g. 'en', 'id', 'en-US')."
+            "description": "Optional language code for the transcription (e.g. 'en')."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Optional prompt to guide the transcription style or context."
           }
         },
-        "required": [
-          "file_id"
-        ]
+        "required": ["file_id"]
       }
     },
     {
-      "id": "audio_generation",
-      "name": "audio_generation",
+      "id": "audio_speech",
+      "name": "audio_speech",
       "object": "tool",
       "type": "function",
-      "description": "Generate speech or audio clips from text using OpenAI audio models.",
+      "description": "Convert text to speech audio using OpenAI text-to-speech models.",
       "parameters": {
         "type": "object",
         "properties": {
-          "text": {
+          "input": {
             "type": "string",
-            "description": "Text to synthesize into audio."
+            "description": "Text to synthesize into speech."
           },
           "voice": {
             "type": "string",
-            "description": "Voice name or style identifier.",
+            "description": "Voice preset to use (e.g. 'alloy').",
             "default": "alloy"
           },
           "format": {
             "type": "string",
-            "description": "Audio format to return (e.g. 'mp3', 'wav').",
+            "description": "Audio format to return, e.g. 'mp3' or 'wav'.",
             "default": "mp3"
-          },
-          "model": {
-            "type": "string",
-            "description": "Audio generation model to use.",
-            "default": "gpt-4o-mini-tts"
           }
         },
-        "required": [
-          "text"
-        ]
+        "required": ["input"]
       }
     },
     {
-      "id": "vector_store_search",
-      "name": "vector_store_search",
+      "id": "audio_translation",
+      "name": "audio_translation",
       "object": "tool",
       "type": "function",
-      "description": "Search a vector store managed through this relay using embeddings.",
+      "description": "Translate spoken audio into another language.",
       "parameters": {
         "type": "object",
         "properties": {
-          "vector_store_id": {
+          "file_id": {
             "type": "string",
-            "description": "Identifier of the vector store to search."
+            "description": "File ID of the audio to translate."
           },
-          "query": {
+          "target_language": {
             "type": "string",
-            "description": "Natural language query to embed and search against the vector store."
-          },
-          "top_k": {
-            "type": "integer",
-            "description": "Maximum number of results to return.",
-            "minimum": 1,
-            "maximum": 50,
-            "default": 10
-          },
-          "filters": {
-            "type": "object",
-            "description": "Optional metadata filters to narrow search results.",
-            "additionalProperties": {
-              "type": [
-                "string",
-                "number",
-                "boolean"
-              ]
-            }
+            "description": "Target language code (e.g. 'en', 'es', 'fr').",
+            "default": "en"
           }
         },
-        "required": [
-          "vector_store_id",
-          "query"
-        ]
-      }
-    },
-    {
-      "id": "computer_use",
-      "name": "computer_use",
-      "object": "tool",
-      "type": "function",
-      "description": "High-level computer control actions (mouse, keyboard, application control) via an external agent.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "action": {
-            "type": "string",
-            "description": "Action to perform, for example 'click', 'type', 'open_app', 'scroll', etc."
-          },
-          "arguments": {
-            "type": "object",
-            "description": "Structured arguments for the action (coordinates, text, application id, etc.).",
-            "additionalProperties": true
-          }
-        },
-        "required": [
-          "action"
-        ]
+        "required": ["file_id"]
       }
     },
     {
@@ -265,60 +199,26 @@
       "name": "video_generation",
       "object": "tool",
       "type": "function",
-      "description": "Generate short videos using the upstream OpenAI video generation APIs via this relay.",
+      "description": "Generate or edit videos using the OpenAI Video API via this relay.",
       "parameters": {
         "type": "object",
         "properties": {
           "prompt": {
             "type": "string",
-            "description": "Natural language description of the desired video content."
+            "description": "Text description of the desired video."
           },
-          "duration_seconds": {
-            "type": "integer",
-            "description": "Target duration of the video in seconds (approximate).",
-            "minimum": 1,
-            "default": 6
+          "duration": {
+            "type": "number",
+            "description": "Approximate video duration in seconds.",
+            "default": 5
           },
           "aspect_ratio": {
             "type": "string",
-            "description": "Requested aspect ratio (e.g. '16:9', '9:16', '1:1')."
-          },
-          "model": {
-            "type": "string",
-            "description": "Video-capable model to use for generation.",
-            "default": "sora-2-pro"
+            "description": "Optional aspect ratio, e.g. '16:9', '9:16', or '1:1'.",
+            "default": "16:9"
           }
         },
-        "required": [
-          "prompt"
-        ]
-      }
-    },
-    {
-      "id": "realtime_session",
-      "name": "realtime_session",
-      "object": "tool",
-      "type": "function",
-      "description": "Create a Realtime session descriptor that clients can use to establish a WebSocket connection via the OpenAI Realtime API.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "model": {
-            "type": "string",
-            "description": "Realtime-capable model to request.",
-            "default": "gpt-4o-realtime-preview-2024-10-01"
-          },
-          "instructions": {
-            "type": "string",
-            "description": "Optional system-level instructions to apply to the realtime session."
-          },
-          "session_ttl_seconds": {
-            "type": "integer",
-            "description": "Optional session lifetime hint in seconds, if supported.",
-            "minimum": 60
-          }
-        },
-        "required": []
+        "required": ["prompt"]
       }
     }
   ]

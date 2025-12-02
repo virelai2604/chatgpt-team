@@ -23,7 +23,7 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
         self.relay_key = relay_key
 
     async def dispatch(self, request: Request, call_next):
-        # Normalize to treat trailing slashes as equivalent for routing decisions.
+        # Normalise to treat trailing slashes as equivalent for routing decisions.
         path = request.url.path.rstrip("/") or "/"
 
         # Only protect relay-facing paths; health endpoints remain open.

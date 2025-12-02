@@ -13,8 +13,14 @@ class Settings(BaseSettings):
     Central configuration for the ChatGPT Team Relay.
 
     All values are loaded from environment variables or `.env`.
-    This version is compatible with pydantic v2 + pydantic-settings v2.
+    Compatible with pydantic v2 + pydantic-settings v2.
     """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # -------- Core relay / app mode --------
     ENVIRONMENT: str = Field(default="development", alias="ENVIRONMENT")
@@ -22,34 +28,58 @@ class Settings(BaseSettings):
 
     # -------- OpenAI upstream config --------
     OPENAI_API_BASE: AnyHttpUrl = Field(
-        default="https://api.openai.com", alias="OPENAI_API_BASE"
+        default="https://api.openai.com",
+        alias="OPENAI_API_BASE",
     )
     OPENAI_API_KEY: str = Field(default="", alias="OPENAI_API_KEY")
     OPENAI_ASSISTANTS_BETA: str = Field(
-        default="assistants=v2", alias="OPENAI_ASSISTANTS_BETA"
+        default="assistants=v2",
+        alias="OPENAI_ASSISTANTS_BETA",
     )
     OPENAI_REALTIME_BETA: str = Field(
-        default="realtime=v1", alias="OPENAI_REALTIME_BETA"
+        default="realtime=v1",
+        alias="OPENAI_REALTIME_BETA",
     )
 
-    # -------- Default model --------
-    DEFAULT_MODEL: str = Field(default="gpt-4o-mini", alias="DEFAULT_MODEL")
-    REALTIME_MODEL: str = Field(default="gpt-4.1-mini", alias="REALTIME_MODEL")
+    # Optional: webhook signing secret for webhooks (Responses, etc.)
+    OPENAI_WEBHOOK_SECRET: Optional[str] = Field(
+        default=None,
+        alias="OPENAI_WEBHOOK_SECRET",
+    )
+
+    # -------- Default models --------
+    DEFAULT_MODEL: str = Field(
+        default="gpt-4o-mini",
+        alias="DEFAULT_MODEL",
+    )
+    REALTIME_MODEL: str = Field(
+        default="gpt-4.1-mini",
+        alias="REALTIME_MODEL",
+    )
 
     # -------- Relay identity / runtime --------
-    RELAY_AUTH_ENABLED: bool = Field(default=True, alias="RELAY_AUTH_ENABLED")
+    RELAY_AUTH_ENABLED: bool = Field(
+        default=True,
+        alias="RELAY_AUTH_ENABLED",
+    )
     RELAY_HOST: str = Field(default="0.0.0.0", alias="RELAY_HOST")
-    RELAY_NAME: str = Field(default="ChatGPT Team Relay", alias="RELAY_NAME")
+    RELAY_NAME: str = Field(
+        default="ChatGPT Team Relay",
+        alias="RELAY_NAME",
+    )
     RELAY_TIMEOUT: int = Field(default=120, alias="RELAY_TIMEOUT")
     PROXY_TIMEOUT: int = Field(default=120, alias="PROXY_TIMEOUT")
     PYTHON_VERSION: str = Field(default="3.12.5", alias="PYTHON_VERSION")
 
     # -------- Auth / secrets for relay usage --------
     RELAY_KEY: str = Field(default="", alias="RELAY_KEY")
-    CHATGPT_ACTIONS_SECRET: str = Field(default="", alias="CHATGPT_ACTIONS_SECRET")
+    CHATGPT_ACTIONS_SECRET: str = Field(
+        default="",
+        alias="CHATGPT_ACTIONS_SECRET",
+    )
 
     # -------- CORS config --------
-    # IMPORTANT: keep them as *plain strings* so env can stay
+    # Keep as plain strings so env can stay:
     # "https://chat.openai.com,https://platform.openai.com"
     CORS_ALLOW_ORIGINS: str = Field(
         default="https://chat.openai.com,https://platform.openai.com",
@@ -66,9 +96,11 @@ class Settings(BaseSettings):
 
     # -------- Tools & validation schema --------
     TOOLS_MANIFEST: str = Field(
-        default="app/manifests/tools_manifest.json", alias="TOOLS_MANIFEST"
+        default="app/manifests/tools_manifest.json",
+        alias="TOOLS_MANIFEST",
     )
     VALIDATION_SCHEMA_PATH: str = Field(
+        # Used by SchemaValidationMiddleware if you wire it up
         default="ChatGPT-API_reference_ground_truth-2025-10-29.pdf",
         alias="VALIDATION_SCHEMA_PATH",
     )
@@ -80,21 +112,18 @@ class Settings(BaseSettings):
 
     # -------- Feature flags / orchestration --------
     ENABLE_STREAM: bool = Field(default=True, alias="ENABLE_STREAM")
-    # can be "sequential" / "parallel" in a more complex setup;
-    # here we just keep it as a free string.
-    CHAIN_WAIT_MODE: str = Field(default="sequential", alias="CHAIN_WAIT_MODE")
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
+    ORCHESTRATOR_MODE: str = Field(
+        default="sequential",
+        alias="ORCHESTRATOR_MODE",
     )
 
 
 @lru_cache
 def get_settings() -> Settings:
+    """
+    Cached settings singleton.
+    """
     return Settings()
 
 
-settings = get_settings()
+settings: Settings = get_settings()

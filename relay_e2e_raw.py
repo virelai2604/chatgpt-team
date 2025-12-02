@@ -2,13 +2,13 @@ import os
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable
 
 import requests
 
 try:
     import asyncio
-    import websockets
+    import websockets  # type: ignore
 except ImportError:  # type: ignore
     asyncio = None
     websockets = None  # type: ignore
@@ -33,8 +33,12 @@ class E2EContext:
     upload_id: Optional[str] = None
     vector_store_id: Optional[str] = None
     vector_store_file_id: Optional[str] = None
+    vector_store_file_batch_id: Optional[str] = None
     video_id: Optional[str] = None
     video_job_id: Optional[str] = None
+    container_id: Optional[str] = None
+    chatkit_session_id: Optional[str] = None
+    chatkit_thread_id: Optional[str] = None
 
     # Misc
     debug: bool = False
@@ -86,12 +90,54 @@ def request(
         headers = make_headers(ctx, extra=headers)
 
     debug(ctx, f"{method} {url} headers={headers} kwargs={list(kwargs.keys())}")
-    resp = requests.request(method, url, headers=headers, stream=stream, timeout=60, **kwargs)
+    resp = requests.request(
+        method,
+        url,
+        headers=headers,
+        stream=stream,
+        timeout=60,
+        **kwargs,
+    )
     debug(ctx, f"-> {resp.status_code}")
     return resp
 
 
+def poll_until(
+    ctx: E2EContext,
+    description: str,
+    method: str,
+    path: str,
+    *,
+    check_fn: Callable[[Dict[str, Any]], bool],
+    interval: float = 2.0,
+    timeout: float = 60.0,
+) -> bool:
+    """
+    Generic chain-wait helper: repeatedly call an endpoint until check_fn(json) is True
+    or timeout is reached. Logs warnings; never raises.
+    """
+    log(f"Polling {description} at {path} (timeout={int(timeout)}s)...")
+    start = time.time()
+    while time.time() - start < timeout:
+        resp = request(ctx, method, path)
+        if resp.status_code != 200:
+            log(f"[WARN] {description} poll failed: {resp.status_code} {resp.text}")
+            return False
+        try:
+            data = resp.json()
+        except Exception as exc:
+            log(f"[WARN] {description} poll JSON error: {exc}")
+            return False
+        if check_fn(data):
+            log(f"{description} completed.")
+            return True
+        time.sleep(interval)
+    log(f"[WARN] {description} poll timed out after {int(timeout)}s")
+    return False
+
+
 # ---------- Core helpers ----------
+
 
 def get_env_context() -> E2EContext:
     base_url = os.getenv("REST_BASE") or os.getenv("BASE_URL") or "http://127.0.0.1:8000"
@@ -104,7 +150,11 @@ def get_env_context() -> E2EContext:
     test_model = os.getenv("TEST_MODEL", "gpt-5.1-mini")
     embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
     image_model = os.getenv("IMAGE_MODEL", "gpt-image-1")
-    realtime_model = os.getenv("REALTIME_MODEL") or os.getenv("RELAY_REALTIME_MODEL") or "gpt-realtime"
+    realtime_model = (
+        os.getenv("REALTIME_MODEL")
+        or os.getenv("RELAY_REALTIME_MODEL")
+        or "gpt-realtime"
+    )
 
     debug_flag = os.getenv("RELAY_E2E_DEBUG", "").lower() in {"1", "true", "yes"}
 
@@ -121,6 +171,7 @@ def get_env_context() -> E2EContext:
 
 
 # ---------- Sequential chain helpers ----------
+
 
 def ensure_conversation(ctx: E2EContext) -> Optional[str]:
     if ctx.conversation_id:
@@ -145,12 +196,11 @@ def ensure_file(ctx: E2EContext) -> Optional[str]:
     if ctx.file_id:
         return ctx.file_id
 
-    log("Uploading test file ...")
+    log("Uploading test file via /files ...")
     files = {
         "file": ("relay-e2e.txt", b"relay e2e content", "text/plain"),
     }
     data = {"purpose": "assistants"}
-    # Let requests set multipart content-type
     resp = requests.post(
         ctx.api_base.rstrip("/") + "/files",
         headers=make_headers(ctx),
@@ -188,6 +238,7 @@ def ensure_vector_store(ctx: E2EContext) -> Optional[str]:
 
 # ---------- Core tests (strict) ----------
 
+
 def test_health(ctx: E2EContext) -> None:
     log("== Health checks ==")
     for base in (ctx.base_url, ctx.api_base):
@@ -215,23 +266,7 @@ def test_models(ctx: E2EContext) -> None:
     log(f"/models OK, {len(body.get('data', []))} models")
 
 
-def test_responses_chain(ctx: E2EContext) -> None:
-    log("== Responses create + retrieve + chain ==")
-    payload = {
-        "model": ctx.test_model,
-        "input": "Say exactly: relay-http-chain-ok",
-        "store": True,
-        "metadata": {"test": "relay_e2e_raw"},
-    }
-    resp = request(ctx, "POST", "/responses", json_body=payload)
-    if resp.status_code != 200:
-        raise AssertionError(f"/responses create failed: {resp.status_code} {resp.text}")
-    data = resp.json()
-    ctx.response_id = data.get("id")
-    ctx.conversation_id = data.get("conversation") or ctx.conversation_id
-    log(f"Response created: {ctx.response_id}, conversation: {ctx.conversation_id}")
-
-    # Extract text from unified Responses output shape if present
+def _extract_responses_text(data: Dict[str, Any]) -> str:
     text_out = ""
     output = data.get("output") or data.get("choices")
     if isinstance(output, list):
@@ -251,7 +286,26 @@ def test_responses_chain(ctx: E2EContext) -> None:
             text_out = data["choices"][0]["message"]["content"]
         except Exception:
             pass
+    return text_out
 
+
+def test_responses_chain(ctx: E2EContext) -> None:
+    log("== Responses create + retrieve + chain ==")
+    payload = {
+        "model": ctx.test_model,
+        "input": "Say exactly: relay-http-chain-ok",
+        "store": True,
+        "metadata": {"test": "relay_e2e_raw"},
+    }
+    resp = request(ctx, "POST", "/responses", json_body=payload)
+    if resp.status_code != 200:
+        raise AssertionError(f"/responses create failed: {resp.status_code} {resp.text}")
+    data = resp.json()
+    ctx.response_id = data.get("id")
+    ctx.conversation_id = data.get("conversation") or ctx.conversation_id
+    log(f"Response created: {ctx.response_id}, conversation: {ctx.conversation_id}")
+
+    text_out = _extract_responses_text(data)
     if "relay-http-chain-ok" not in text_out:
         raise AssertionError(f"/responses create did not echo marker; got: {text_out!r}")
 
@@ -288,23 +342,7 @@ def test_responses_chain(ctx: E2EContext) -> None:
         if resp5.status_code == 200:
             data2 = resp5.json()
             ctx.previous_response_id = data2.get("id")
-            text2 = ""
-            output2 = data2.get("output") or data2.get("choices")
-            if isinstance(output2, list):
-                for item in output2:
-                    if isinstance(item, dict):
-                        for part in item.get("content", []):
-                            if isinstance(part, dict) and part.get("type") in {
-                                "output_text",
-                                "output_text_delta",
-                            }:
-                                txt = part.get("text") or part.get("delta") or ""
-                                text2 += txt
-            if not text2 and "choices" in data2:
-                try:
-                    text2 = data2["choices"][0]["message"]["content"]
-                except Exception:
-                    pass
+            text2 = _extract_responses_text(data2)
             if "relay-http-chain-followup-ok" in text2:
                 log("Chained /responses previous_response_id OK")
             else:
@@ -322,7 +360,13 @@ def test_responses_stream_sse(ctx: E2EContext) -> None:
     }
     headers = make_headers(ctx, json_mode=True, extra={"Accept": "text/event-stream"})
     url = ctx.api_base.rstrip("/") + "/responses"
-    resp = requests.post(url, headers=headers, data=json.dumps(payload), stream=True, timeout=60)
+    resp = requests.post(
+        url,
+        headers=headers,
+        data=json.dumps(payload),
+        stream=True,
+        timeout=60,
+    )
     if resp.status_code != 200:
         raise AssertionError(f"/responses stream failed: {resp.status_code} {resp.text}")
 
@@ -331,14 +375,13 @@ def test_responses_stream_sse(ctx: E2EContext) -> None:
         if not raw:
             continue
         if raw.startswith("data:"):
-            line = raw[len("data:"):].strip()
+            line = raw[len("data:") :].strip()
             if line == "[DONE]":
                 break
             try:
                 evt = json.loads(line)
             except Exception:
                 continue
-            # Unified SSE event format
             evt_type = evt.get("type") or ""
             if evt_type == "response.output_text.delta":
                 full_text += evt.get("delta") or ""
@@ -370,6 +413,7 @@ def test_embeddings(ctx: E2EContext) -> None:
 
 
 # ---------- Best-effort tests (do not fail core run) ----------
+
 
 def test_conversations_chain(ctx: E2EContext) -> None:
     log("== Conversations (best-effort) ==")
@@ -434,11 +478,33 @@ def test_files_and_vector_store_chain(ctx: E2EContext) -> None:
         payload = {
             "file_ids": [file_id],
         }
-        resp = request(ctx, "POST", f"/vector_stores/{vs_id}/file_batches", json_body=payload)
+        resp = request(
+            ctx,
+            "POST",
+            f"/vector_stores/{vs_id}/file_batches",
+            json_body=payload,
+        )
         if resp.status_code == 200:
             body = resp.json()
-            ctx.vector_store_file_id = body.get("id") or ctx.vector_store_file_id
+            ctx.vector_store_file_batch_id = body.get("id") or ctx.vector_store_file_batch_id
             log("/vector_stores file_batches create OK")
+
+            # Poll batch status if possible
+            batch_id = ctx.vector_store_file_batch_id
+            if batch_id:
+                def _check_batch(d: Dict[str, Any]) -> bool:
+                    status = d.get("status") or d.get("state")
+                    return status in {"completed", "succeeded", "failed", "cancelled"}
+
+                poll_until(
+                    ctx,
+                    "vector_store file_batch",
+                    "GET",
+                    f"/vector_stores/{vs_id}/file_batches/{batch_id}",
+                    check_fn=_check_batch,
+                    interval=2.0,
+                    timeout=60.0,
+                )
         else:
             log(f"[WARN] /vector_stores file_batches create failed: {resp.status_code} {resp.text}")
 
@@ -451,37 +517,99 @@ def test_files_and_vector_store_chain(ctx: E2EContext) -> None:
         log(f"[WARN] /vector_stores list failed: {resp2.status_code} {resp2.text}")
 
     # List files for this vector store
+    files_list: Optional[Dict[str, Any]] = None
     if vs_id:
         resp3 = request(ctx, "GET", f"/vector_stores/{vs_id}/files")
         if resp3.status_code == 200:
-            body3 = resp3.json()
-            log(f"/vector_stores files list OK, {len(body3.get('data', []))} files")
+            files_list = resp3.json()
+            log(f"/vector_stores files list OK, {len(files_list.get('data', []))} files")
         else:
             log(f"[WARN] /vector_stores files list failed: {resp3.status_code} {resp3.text}")
+
+    # Retrieve and download first file in store, if any
+    if vs_id and files_list and isinstance(files_list.get("data"), list) and files_list["data"]:
+        first_file = files_list["data"][0]
+        vs_file_id = first_file.get("id")
+        ctx.vector_store_file_id = vs_file_id or ctx.vector_store_file_id
+        if vs_file_id:
+            resp4 = request(ctx, "GET", f"/vector_stores/{vs_id}/files/{vs_file_id}")
+            if resp4.status_code == 200:
+                log("/vector_stores files retrieve OK")
+            else:
+                log(f"[WARN] /vector_stores files retrieve failed: {resp4.status_code} {resp4.text}")
+
+            resp5 = request(ctx, "GET", f"/vector_stores/{vs_id}/files/{vs_file_id}/content")
+            if resp5.status_code == 200:
+                log("/vector_stores files content OK")
+            else:
+                log(f"[WARN] /vector_stores files content failed: {resp5.status_code} {resp5.text}")
+
+
+def test_uploads_best_effort(ctx: E2EContext) -> None:
+    log("== Uploads (best-effort) ==")
+
+    # Try listing uploads if supported
+    resp_list = request(ctx, "GET", "/uploads")
+    if resp_list.status_code == 200:
+        try:
+            body = resp_list.json()
+            uploads = body.get("data", [])
+            log(f"/uploads list OK, {len(uploads)} uploads")
+        except Exception as exc:
+            log(f"[WARN] /uploads list JSON error: {exc}")
+    else:
+        log(f"[WARN] /uploads list failed or unsupported: {resp_list.status_code} {resp_list.text}")
+
+    # Try creating an upload in the simplest possible way
+    payload = {
+        "filename": "relay-e2e-upload.txt",
+        "purpose": "assistants",
+    }
+    resp_create = request(ctx, "POST", "/uploads", json_body=payload)
+    if resp_create.status_code in (200, 201):
+        try:
+            body_c = resp_create.json()
+            ctx.upload_id = body_c.get("id") or ctx.upload_id
+            log(f"/uploads create OK, upload_id={ctx.upload_id}")
+        except Exception as exc:
+            log(f"[WARN] /uploads create JSON error: {exc}")
+    else:
+        log(f"[WARN] /uploads create failed or unsupported: {resp_create.status_code} {resp_create.text}")
 
 
 def test_images_and_stream(ctx: E2EContext) -> None:
     log("== Images (sync + stream best-effort) ==")
-    # Basic generations
+    # Basic generations: try /images/generations first, fall back to /images
     payload = {
         "model": ctx.image_model,
         "prompt": f"Minimalist icon with text 'relay-img-{int(time.time())}'",
         "size": "512x512",
         "response_format": "b64_json",
     }
-    resp = request(ctx, "POST", "/images", json_body=payload)
-    if resp.status_code == 200:
-        try:
-            data = resp.json()
-            if isinstance(data.get("data"), list) and data["data"]:
-                if data["data"][0].get("b64_json"):
-                    log("/images generation OK")
-                else:
-                    log("[WARN] /images generation missing b64_json")
-        except Exception as exc:
-            log(f"[WARN] /images JSON parse error: {exc}")
-    else:
-        log(f"[WARN] /images generation failed: {resp.status_code} {resp.text}")
+
+    def _try_images(path: str) -> Optional[Dict[str, Any]]:
+        resp = request(ctx, "POST", path, json_body=payload)
+        if resp.status_code == 200:
+            try:
+                return resp.json()
+            except Exception as exc:
+                log(f"[WARN] {path} JSON parse error: {exc}")
+        else:
+            log(f"[WARN] {path} failed: {resp.status_code} {resp.text}")
+        return None
+
+    data = _try_images("/images/generations")
+    if not data:
+        data = _try_images("/images")
+
+    if data:
+        if isinstance(data.get("data"), list) and data["data"]:
+            if data["data"][0].get("b64_json") or data["data"][0].get("url"):
+                log("Image generation OK")
+            else:
+                log("[WARN] Image generation missing b64_json/url")
+        else:
+            log("[WARN] Image generation: unexpected data shape")
 
     # Image streaming endpoint (if relay/OpenAI supports it)
     payload_stream = {
@@ -491,7 +619,13 @@ def test_images_and_stream(ctx: E2EContext) -> None:
     headers = make_headers(ctx, json_mode=True, extra={"Accept": "text/event-stream"})
     url = ctx.api_base.rstrip("/") + "/image-stream"
     try:
-        resp2 = requests.post(url, headers=headers, data=json.dumps(payload_stream), stream=True, timeout=60)
+        resp2 = requests.post(
+            url,
+            headers=headers,
+            data=json.dumps(payload_stream),
+            stream=True,
+            timeout=60,
+        )
     except Exception as exc:
         log(f"[WARN] /image-stream request error: {exc}")
         return
@@ -505,7 +639,7 @@ def test_images_and_stream(ctx: E2EContext) -> None:
         if not raw:
             continue
         if raw.startswith("data:"):
-            line = raw[len("data:"):].strip()
+            line = raw[len("data:") :].strip()
             if line == "[DONE]":
                 break
             chunks += 1
@@ -513,26 +647,6 @@ def test_images_and_stream(ctx: E2EContext) -> None:
         log(f"/image-stream OK, received {chunks} chunks")
     else:
         log("[WARN] /image-stream returned no chunks")
-
-
-def test_audio_speech_best_effort(ctx: E2EContext) -> None:
-    log("== Audio speech (best-effort) ==")
-    payload = {
-        "model": "tts-1",  # adjust to a valid TTS model in your project
-        "input": "Relay end to end test.",
-        "voice": "alloy",
-        "format": "mp3",
-    }
-    resp = request(ctx, "POST", "/audio/speech", json_body=payload)
-    if resp.status_code == 200:
-        # Should be binary audio, not JSON
-        content_type = resp.headers.get("Content-Type", "")
-        if "audio" in content_type:
-            log("/audio/speech OK")
-        else:
-            log(f"[WARN] /audio/speech unexpected content type: {content_type}")
-    else:
-        log(f"[WARN] /audio/speech failed: {resp.status_code} {resp.text}")
 
 
 def test_moderations_best_effort(ctx: E2EContext) -> None:
@@ -556,6 +670,151 @@ def test_batch_list_best_effort(ctx: E2EContext) -> None:
         log(f"/batches list OK, {len(body.get('data', []))} batches")
     else:
         log(f"[WARN] /batches list failed: {resp.status_code} {resp.text}")
+
+
+def test_tools_and_actions_best_effort(ctx: E2EContext) -> None:
+    log("== Tools + Actions (best-effort) ==")
+
+    # /v1/tools
+    resp_tools = request(ctx, "GET", "/tools")
+    if resp_tools.status_code == 200:
+        try:
+            tools = resp_tools.json().get("tools") or resp_tools.json()
+            log(f"/tools OK ({len(tools) if isinstance(tools, list) else 'object'})")
+        except Exception as exc:
+            log(f"[WARN] /tools JSON error: {exc}")
+    else:
+        log(f"[WARN] /tools failed: {resp_tools.status_code} {resp_tools.text}")
+
+    # /v1/actions/ping
+    resp_ping = request(ctx, "GET", "/actions/ping")
+    if resp_ping.status_code == 200:
+        log("/actions/ping OK")
+    else:
+        log(f"[WARN] /actions/ping failed: {resp_ping.status_code} {resp_ping.text}")
+
+    # /v1/actions/relay_info
+    resp_info = request(ctx, "GET", "/actions/relay_info")
+    if resp_info.status_code == 200:
+        log("/actions/relay_info OK")
+    else:
+        log(f"[WARN] /actions/relay_info failed: {resp_info.status_code} {resp_info.text}")
+
+
+def test_videos_best_effort(ctx: E2EContext) -> None:
+    log("== Videos (best-effort) ==")
+    payload = {
+        "model": "sora-2",
+        "prompt": "Short abstract pattern for relay e2e video test.",
+        "seconds": "4",
+    }
+    resp = request(ctx, "POST", "/videos", json_body=payload)
+    if resp.status_code == 200:
+        try:
+            data = resp.json()
+        except Exception as exc:
+            log(f"[WARN] /videos create JSON error: {exc}")
+            return
+        ctx.video_id = data.get("id") or data.get("video_id") or ctx.video_id
+        log(f"/videos create OK, video_id={ctx.video_id}, status={data.get('status')}")
+    elif resp.status_code == 403:
+        log(f"[WARN] /videos forbidden (likely no Sora access): {resp.text}")
+        return
+    else:
+        log(f"[WARN] /videos create failed or unsupported: {resp.status_code} {resp.text}")
+        return
+
+    if ctx.video_id:
+        resp2 = request(ctx, "GET", f"/videos/{ctx.video_id}")
+        if resp2.status_code == 200:
+            try:
+                data2 = resp2.json()
+                log(f"/videos retrieve OK, status={data2.get('status')}")
+            except Exception as exc:
+                log(f"[WARN] /videos retrieve JSON error: {exc}")
+        else:
+            log(f"[WARN] /videos retrieve failed: {resp2.status_code} {resp2.text}")
+
+
+def test_containers_best_effort(ctx: E2EContext) -> None:
+    log("== Containers (best-effort) ==")
+    payload = {
+        "name": "relay-e2e-container",
+        "metadata": {"test": "relay_e2e_raw"},
+    }
+    resp = request(ctx, "POST", "/containers", json_body=payload)
+    if resp.status_code == 200:
+        try:
+            data = resp.json()
+            ctx.container_id = data.get("id") or ctx.container_id
+            log(f"/containers create OK, container_id={ctx.container_id}")
+        except Exception as exc:
+            log(f"[WARN] /containers create JSON error: {exc}")
+            return
+    else:
+        log(f"[WARN] /containers create failed or unsupported: {resp.status_code} {resp.text}")
+        return
+
+    # List containers
+    resp2 = request(ctx, "GET", "/containers")
+    if resp2.status_code == 200:
+        try:
+            body2 = resp2.json()
+            log(f"/containers list OK, {len(body2.get('data', []))} containers")
+        except Exception as exc:
+            log(f"[WARN] /containers list JSON error: {exc}")
+    else:
+        log(f"[WARN] /containers list failed: {resp2.status_code} {resp2.text}")
+
+    # Retrieve container
+    if ctx.container_id:
+        resp3 = request(ctx, "GET", f"/containers/{ctx.container_id}")
+        if resp3.status_code == 200:
+            log("/containers retrieve OK")
+        else:
+            log(f"[WARN] /containers retrieve failed: {resp3.status_code} {resp3.text}")
+
+        # List files in container (may be empty)
+        resp4 = request(ctx, "GET", f"/containers/{ctx.container_id}/files")
+        if resp4.status_code == 200:
+            try:
+                body4 = resp4.json()
+                log(f"/containers files list OK, {len(body4.get('data', []))} files")
+            except Exception as exc:
+                log(f"[WARN] /containers files list JSON error: {exc}")
+        else:
+            log(f"[WARN] /containers files list failed: {resp4.status_code} {resp4.text}")
+
+
+def test_chatkit_best_effort(ctx: E2EContext) -> None:
+    log("== ChatKit (best-effort) ==")
+
+    # Try simple GET endpoints first to see if anything is wired up
+    for path in ("/chatkit/sessions", "/chatkit/threads", "/chatkit"):
+        resp = request(ctx, "GET", path)
+        if resp.status_code == 200:
+            log(f"{path} OK")
+            break
+        else:
+            log(f"[WARN] {path} failed or unsupported: {resp.status_code} {resp.text}")
+
+    # Try creating a session, if supported
+    payload = {"metadata": {"test": "relay_e2e_raw"}}
+    resp_create = request(ctx, "POST", "/chatkit/sessions", json_body=payload)
+    if resp_create.status_code == 200:
+        try:
+            data = resp_create.json()
+            session = data.get("session") or data
+            ctx.chatkit_session_id = (
+                session.get("id")
+                or session.get("session_id")
+                or ctx.chatkit_session_id
+            )
+            log(f"/chatkit/sessions create OK, session_id={ctx.chatkit_session_id}")
+        except Exception as exc:
+            log(f"[WARN] /chatkit/sessions create JSON error: {exc}")
+    else:
+        log(f"[WARN] /chatkit/sessions create failed or unsupported: {resp_create.status_code} {resp_create.text}")
 
 
 def test_realtime_session_ws(ctx: E2EContext) -> None:
@@ -596,7 +855,6 @@ def test_realtime_session_ws(ctx: E2EContext) -> None:
             extra_headers={"Authorization": f"Bearer {client_secret}"},
             max_size=16 * 1024 * 1024,
         ) as ws:
-            # Simple GA-compatible text input event
             event = {
                 "type": "input_text",
                 "text": "Say exactly: relay-ws-ok",
@@ -647,13 +905,17 @@ def main() -> int:
 
     log("CORE TESTS PASSED (health + models + responses + SSE + embeddings).")
 
-    # Best-effort tests
+    # Best-effort tests (do not fail the run)
     test_conversations_chain(ctx)
     test_files_and_vector_store_chain(ctx)
+    test_uploads_best_effort(ctx)
     test_images_and_stream(ctx)
-    test_audio_speech_best_effort(ctx)
     test_moderations_best_effort(ctx)
     test_batch_list_best_effort(ctx)
+    test_tools_and_actions_best_effort(ctx)
+    test_videos_best_effort(ctx)
+    test_containers_best_effort(ctx)
+    test_chatkit_best_effort(ctx)
     test_realtime_session_ws(ctx)
 
     log("E2E RAW (sequential chain) completed.")

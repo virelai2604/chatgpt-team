@@ -27,8 +27,8 @@ def _load_tools_manifest() -> List[Dict[str, Any]]:
     """
     Load and cache the tools manifest from disk.
 
-    settings.TOOLS_MANIFEST should be a relative or absolute path
-    like "app/manifests/tools_manifest.json".
+    settings.TOOLS_MANIFEST should be a relative or absolute path, e.g.:
+      "app/manifests/tools_manifest.json"
 
     Accepts either:
       - {"object":"list","data":[...]} (OpenAI-style list)
@@ -81,7 +81,7 @@ async def list_tools() -> Dict[str, Any]:
     """
     OpenAI-style tools registry for ChatGPT Actions / Platform.
 
-    Response shape is intentionally simple:
+    Response shape:
       {
         "object": "list",
         "data": [ {tool}, {tool}, ... ]
@@ -128,8 +128,21 @@ async def list_relay_models() -> Dict[str, Any]:
                 "id": realtime_model,
                 "object": "model",
                 "owned_by": "relay",
+                "relay_default": False,
                 "realtime": True,
             }
         )
 
-    return {"object": "list", "data": models}
+    return {
+        "object": "list",
+        "data": models,
+    }
+
+
+@router.get("/relay/tools/manifest")
+async def relay_tools_manifest() -> Dict[str, Any]:
+    """
+    Debug endpoint returning raw tools manifest (without OpenAI-style wrapping).
+    """
+    tools = _load_tools_manifest()
+    return {"tools": tools}
