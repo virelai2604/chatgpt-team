@@ -1,16 +1,12 @@
-# app/middleware/p4_orchestrator.py
-
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Dict, Optional
 
 from fastapi import Request
+from openai import AsyncOpenAI
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-
-from openai import AsyncOpenAI
 
 from app.core.config import settings
 
@@ -43,94 +39,39 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
     ) -> None:
         super().__init__(app)
 
-        # ----- helpers -----------------------------------------------------
+        base = openai_api_base or str(settings.OPENAI_API_BASE)
+        self.openai_api_base: str = base.rstrip("/")
 
-        def _get(attr: str, env_name: str, default: Any) -> Any:
-            """
-            Priority:
-              1. settings.<attr> if present and not None
-              2. environment variable <env_name>
-              3. provided default
-            """
-            if hasattr(settings, attr):
-                val = getattr(settings, attr)
-                if val is not None:
-                    return val
-            env_val = os.getenv(env_name)
-            if env_val is not None:
-                return env_val
-            return default
-
-        def _get_float(attr: str, env_name: str, default: float) -> float:
-            raw = _get(attr, env_name, default)
-            try:
-                return float(raw)
-            except (TypeError, ValueError):
-                return default
-
-        # ----- resolve base URL & models -----------------------------------
-
-        base = (
-            openai_api_base
-            or _get("OPENAI_API_BASE", "OPENAI_API_BASE", "https://api.openai.com/v1")
-        )
-        # Cast AnyHttpUrl → str so httpx.URL() is happy
-        self.openai_api_base: str = str(base)
-
-        self.default_model: str = (
-            default_model
-            or _get("DEFAULT_MODEL", "DEFAULT_MODEL", "gpt-4o-mini")
-        )
-
-        self.realtime_model: str = (
-            realtime_model
-            or _get("REALTIME_MODEL", "REALTIME_MODEL", "gpt-realtime")
-        )
-
-        # ----- streaming & chaining behaviour ------------------------------
+        self.default_model: str = default_model or settings.DEFAULT_MODEL
+        self.realtime_model: str = realtime_model or settings.REALTIME_MODEL
 
         if enable_stream is None:
-            raw_stream = str(_get("ENABLE_STREAM", "ENABLE_STREAM", "true")).lower()
-            self.enable_stream: bool = raw_stream in {"1", "true", "yes", "on"}
+            self.enable_stream: bool = True
         else:
             self.enable_stream = enable_stream
 
-        self.chain_wait_mode: str = (
-            chain_wait_mode
-            or _get("CHAIN_WAIT_MODE", "CHAIN_WAIT_MODE", "sequential")
-        )
+        self.chain_wait_mode: str = chain_wait_mode or "sequential"
+        self.proxy_timeout: float = float(proxy_timeout or settings.PROXY_TIMEOUT)
+        self.relay_timeout: float = float(relay_timeout or settings.RELAY_TIMEOUT)
+        self.relay_name: str = relay_name or settings.RELAY_NAME
 
-        # ----- timeouts & relay identity -----------------------------------
-
-        self.proxy_timeout: float = (
-            proxy_timeout
-            if proxy_timeout is not None
-            else _get_float("PROXY_TIMEOUT", "PROXY_TIMEOUT", 30.0)
-        )
-
-        self.relay_timeout: float = (
-            relay_timeout
-            if relay_timeout is not None
-            else _get_float("RELAY_TIMEOUT", "RELAY_TIMEOUT", 60.0)
-        )
-
-        self.relay_name: str = (
-            relay_name
-            or _get("RELAY_NAME", "RELAY_NAME", "chatgpt-team-relay")
-        )
-
-        # ----- AsyncOpenAI client ------------------------------------------
-
-        api_key = getattr(settings, "OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
-
-        self.client = AsyncOpenAI(
-            api_key=api_key,
+        # Shared AsyncOpenAI client for agent workflows (not used by HTTP proxy).
+        self.openai_client = AsyncOpenAI(
+            api_key=settings.OPENAI_API_KEY,
             base_url=self.openai_api_base,
-            timeout=self.proxy_timeout,
         )
 
-        # Snapshot of config for routes/tools/tests to inspect
-        self.p4_config: Dict[str, Any] = {
+        logger.info(
+            "P4OrchestratorMiddleware configured: base=%s, default_model=%s, realtime_model=%s",
+            self.openai_api_base,
+            self.default_model,
+            self.realtime_model,
+        )
+
+    async def dispatch(self, request: Request, call_next):
+        # Attach orchestration context to request.state for downstream use.
+        p4_config: Dict[str, Any] = {
+            "openai_api_base": self.openai_api_base,
             "default_model": self.default_model,
             "realtime_model": self.realtime_model,
             "enable_stream": self.enable_stream,
@@ -138,22 +79,9 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
             "proxy_timeout": self.proxy_timeout,
             "relay_timeout": self.relay_timeout,
             "relay_name": self.relay_name,
-            "app_mode": getattr(settings, "APP_MODE", "unknown"),
-            "environment": getattr(settings, "ENVIRONMENT", "unknown"),
         }
 
-        logger.info(
-            "P4OrchestratorMiddleware initialized",
-            extra=self.p4_config | {"openai_api_base": self.openai_api_base},
-        )
+        request.state.openai_client = self.openai_client
+        request.state.p4_config = p4_config
 
-    async def dispatch(self, request: Request, call_next):
-        """
-        Attach the shared OpenAI client + P4 config to request.state
-        so downstream routes and agents can reuse them.
-        """
-        request.state.openai_client = self.client
-        request.state.p4_config = self.p4_config
-
-        response = await call_next(request)
-        return response
+        return await call_next(request)

@@ -41,7 +41,6 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
         if request.method in {"GET", "HEAD", "OPTIONS"}:
             return await call_next(request)
 
-        # Stub for future PDF / OpenAPI-based validation
         try:
             body_bytes = await request.body()
             logger.debug(

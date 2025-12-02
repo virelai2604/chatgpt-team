@@ -1,5 +1,4 @@
 # app/routes/register_routes.py
-
 from __future__ import annotations
 
 from fastapi import FastAPI
@@ -29,7 +28,6 @@ def register_routes(app: FastAPI) -> None:
 
     This is the central wiring layer – any new route module should be added here.
     """
-
     # -------- Health --------
     app.include_router(health_router)
 

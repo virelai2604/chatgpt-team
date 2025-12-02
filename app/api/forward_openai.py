@@ -1,5 +1,4 @@
 # app/api/forward_openai.py
-
 from __future__ import annotations
 
 import json
@@ -13,7 +12,7 @@ from app.core.config import settings
 
 logger = logging.getLogger("relay")
 
-# Single source of truth – use Pydantic settings (P4 core plan)
+# Single source of truth – use Pydantic settings
 OPENAI_API_BASE: str = str(settings.OPENAI_API_BASE).rstrip("/")
 OPENAI_API_KEY: str = settings.OPENAI_API_KEY
 
@@ -22,9 +21,8 @@ def _filter_request_headers(headers: Mapping[str, str]) -> Dict[str, str]:
     """
     Drop hop-by-hop headers and downstream Authorization before forwarding.
 
-    We will always inject our own Authorization header, derived from
-    OPENAI_API_KEY, so the relay never forwards arbitrary client secrets
-    upstream.
+    The relay always injects its own Authorization header, derived from
+    OPENAI_API_KEY, so arbitrary client secrets are never forwarded upstream.
     """
     blocked = {
         "host",
@@ -55,8 +53,8 @@ def _filter_response_headers(headers: Mapping[str, str]) -> Dict[str, str]:
     """
     Drop hop-by-hop headers and content-encoding from the upstream response.
 
-    We let the ASGI server handle compression; we want to avoid re-exposing
-    gzip/brotli directly and keep the downstream JSON/text simple.
+    We let the ASGI server handle compression; we avoid re-exposing gzip/brotli
+    directly and keep the downstream JSON/text simple.
     """
     blocked = {
         "connection",
@@ -113,7 +111,7 @@ async def _do_forward(
     params = query_params or {}
 
     upstream_headers = _filter_request_headers(incoming_headers)
-
+    upstream_headers.setdefault("Accept", "application/json")
     upstream_headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
     upstream_headers["Accept-Encoding"] = "identity"
 
@@ -124,7 +122,6 @@ async def _do_forward(
         request_kwargs["content"] = raw_body
 
     # Longer timeouts for images/videos generation
-    # Use settings.PROXY_TIMEOUT as baseline
     if path.startswith("/v1/images") or path.startswith("/v1/videos"):
         timeout = httpx.Timeout(
             connect=30.0,
@@ -152,14 +149,14 @@ async def _do_forward(
                 **request_kwargs,
             )
     except httpx.RequestError as exc:
-        logger.warning("forward_openai_core.error %s", exc)
-        # Map connection errors to a clear OpenAI-style error envelope
+        logger.exception("Error proxying request to OpenAI: %s", exc)
         raise HTTPException(
             status_code=502,
             detail={
                 "error": {
-                    "message": "Error contacting upstream OpenAI API",
-                    "type": "upstream_connection_error",
+                    "message": "Failed to reach OpenAI API",
+                    "type": "upstream_error",
+                    "code": "openai_upstream_unreachable",
                 }
             },
         ) from exc
@@ -171,86 +168,78 @@ async def _do_forward(
         upstream_resp.status_code,
     )
 
-    response_headers = _filter_response_headers(upstream_resp.headers)
-
+    filtered_headers = _filter_response_headers(upstream_resp.headers)
     return Response(
         content=upstream_resp.content,
         status_code=upstream_resp.status_code,
-        headers=response_headers,
+        headers=filtered_headers,
+        media_type=upstream_resp.headers.get("content-type"),
     )
 
 
-async def forward_openai_request(
-    request: Request,
-    *,
-    upstream_path: str | None = None,
-    upstream_method: str | None = None,
-) -> Response:
+async def forward_openai_request(request: Request) -> Response:
     """
-    Generic OpenAI HTTP proxy for /v1/* requests.
+    Public entrypoint for normal FastAPI routes.
 
-    - Copies method, path, query params.
-    - Copies headers except hop-by-hop + Authorization.
-    - Sends JSON body when Content-Type is application/json, raw bytes otherwise.
-    - Injects Authorization: Bearer <OPENAI_API_KEY>.
-    - Forces Accept-Encoding=identity so upstream never sends gzipped/brotli data.
+    Forwards the incoming Request to the upstream OpenAI API, preserving:
+      - HTTP method
+      - path
+      - query parameters
+      - headers (after filtering)
+      - JSON/body
     """
-    method = (upstream_method or request.method).upper()
-    path = upstream_path or request.url.path
-
+    method = request.method
+    path = request.url.path
     query_params = dict(request.query_params)
-    incoming_headers = request.headers
 
+    # Try to parse JSON; fall back to raw bytes
     raw_body = await request.body()
     json_body: Any = None
-
-    content_type = incoming_headers.get("content-type", "")
-    if raw_body and "application/json" in content_type:
+    content_type = request.headers.get("content-type", "")
+    if raw_body and "application/json" in content_type.lower():
         try:
             json_body = json.loads(raw_body.decode("utf-8"))
             raw_body = None
         except Exception:
-            # Fallback to sending raw bytes if JSON parsing fails
+            # Leave as raw bytes if JSON parse fails
             json_body = None
 
     return await _do_forward(
         method=method,
         path=path,
         query_params=query_params,
-        incoming_headers=incoming_headers,
-        raw_body=raw_body,
+        incoming_headers=request.headers,
+        raw_body=raw_body or None,
         json_body=json_body,
     )
 
 
 async def forward_openai_from_parts(
-    *,
     method: str,
     path: str,
     query: Optional[Dict[str, Any]] = None,
-    body: Any | None = None,
-    headers: Optional[Mapping[str, str]] = None,
+    body: Any = None,
+    headers: Optional[Dict[str, str]] = None,
 ) -> Response:
     """
-    Forwarder for ChatGPT Actions / agent tools that send:
+    Public entrypoint for the generic Forward API:
 
-      {
-        "method": "GET" | "POST" | ...,
-        "path": "/v1/models",
-        "query": {...},
-        "body": {...}
-      }
+      /v1/actions/openai/forward
 
-    This does NOT trust arbitrary Authorization headers; any provided
-    headers are filtered through the same rules as forward_openai_request.
+    This is primarily used by ChatGPT Actions / custom agents so that a single
+    tool can reach any OpenAI endpoint through this relay.
     """
-    method = method.upper()
-    incoming_headers: Mapping[str, str] = headers or {}
+    incoming_headers: Dict[str, str] = dict(headers or {})
+    # Ensure we at least send a content-type when JSON is present
+    if body is not None and "content-type" not in {
+        k.lower() for k in incoming_headers.keys()
+    }:
+        incoming_headers["Content-Type"] = "application/json"
 
     return await _do_forward(
-        method=method,
+        method=method.upper(),
         path=path,
-        query_params=query or {},
+        query_params=query,
         incoming_headers=incoming_headers,
         raw_body=None,
         json_body=body,

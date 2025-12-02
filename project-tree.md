@@ -2,6 +2,7 @@
   📄 .env.example.env
   📄 .gitattributes
   📄 .gitignore
+  📄 AGENTS.md
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
   📄 __init__.py
   📄 generate_tree.py
@@ -99,6 +100,7 @@
     📄 test_models_files_vectorstores_sdk.py
     📄 test_models_files_videos_extra_routes.py
     📄 test_realtime_and_infra.py
+    📄 test_relay_auth_middleware.py
     📄 test_responses_and_conversations.py
     📄 test_responses_and_embeddings_sdk.py
     📄 test_responses_stream_http.py

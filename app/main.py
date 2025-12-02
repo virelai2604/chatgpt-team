@@ -1,3 +1,4 @@
+# app/main.py
 """
 main.py — ChatGPT Team Relay Entry Point
 ────────────────────────────────────────
@@ -9,7 +10,7 @@ Features:
   • Integrates JSON validation + orchestration middleware.
   • Registers /v1/tools from the hosted tools manifest.
   • Serves /schemas/openapi.yaml for ChatGPT Actions / Plugins.
-  • Exposes /v1/health for Render health checks.
+  • Exposes /health and /v1/health for health checks.
 """
 
 import os
@@ -18,44 +19,28 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.core.config import settings
-from app.middleware.validation import SchemaValidationMiddleware
 from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
 from app.middleware.relay_auth import RelayAuthMiddleware
-
-from app.api.tools_api import router as tools_router
-from app.routes import (
-    actions as actions_routes,
-    conversations as conversations_routes,
-    embeddings as embeddings_routes,
-    files as files_routes,
-    images as images_routes,
-    models as models_routes,
-    realtime as realtime_routes,
-    responses as responses_routes,
-    vector_stores as vector_stores_routes,
-    videos as videos_routes,
-)
+from app.middleware.validation import SchemaValidationMiddleware
+from app.routes.register_routes import register_routes
 
 
 def create_app() -> FastAPI:
     # Load .env (no-op on Render where env vars are already injected)
     load_dotenv()
 
-    relay_name = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
+    relay_name = os.getenv("RELAY_NAME", settings.RELAY_NAME)
     bifl_version = os.getenv("BIFL_VERSION", "dev")
-    environment = os.getenv("ENVIRONMENT", "development")
+    environment = settings.ENVIRONMENT
 
-    # Core configuration
-    openai_api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
-    default_model = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
-    validation_schema_path = os.getenv("VALIDATION_SCHEMA_PATH", "")
-    tools_manifest_path = os.getenv(
-        "TOOLS_MANIFEST",
-        "app/manifests/tools_manifest.json",
-    )
+    # Core configuration from settings
+    openai_api_base = str(settings.OPENAI_API_BASE)
+    default_model = settings.DEFAULT_MODEL
+    validation_schema_path = settings.VALIDATION_SCHEMA_PATH
+    tools_manifest_path = settings.TOOLS_MANIFEST
 
     app = FastAPI(
         title=relay_name,
@@ -74,30 +59,24 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------
     # CORS
     # ------------------------------------------------------------
-    origins_raw = os.getenv(
-        "CORS_ALLOW_ORIGINS",
-        "https://chat.openai.com,https://platform.openai.com",
-    )
+    origins_raw = settings.CORS_ALLOW_ORIGINS
     allow_origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
 
-    methods_raw = os.getenv(
-        "CORS_ALLOW_METHODS",
-        "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-    )
+    methods_raw = settings.CORS_ALLOW_METHODS
     allow_methods = [m.strip() for m in methods_raw.split(",") if m.strip()]
 
-    headers_raw = os.getenv("CORS_ALLOW_HEADERS", "*")
+    headers_raw = settings.CORS_ALLOW_HEADERS
     allow_headers = [h.strip() for h in headers_raw.split(",") if h.strip()]
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allow_origins or ["*"],
-        allow_methods=allow_methods,
-        allow_headers=allow_headers,
+        allow_methods=allow_methods or ["*"],
+        allow_headers=allow_headers or ["*"],
     )
 
     # ------------------------------------------------------------
-    # Middleware stack: validation → orchestrator → routes
+    # Middleware stack: validation → auth → orchestrator → routes
     # ------------------------------------------------------------
     app.add_middleware(SchemaValidationMiddleware)
     if settings.RELAY_AUTH_ENABLED:
@@ -108,7 +87,7 @@ def create_app() -> FastAPI:
     # Meta endpoints
     # ------------------------------------------------------------
     @app.get("/")
-    async def root():
+    async def root() -> dict:
         return {
             "object": "relay",
             "name": relay_name,
@@ -118,77 +97,42 @@ def create_app() -> FastAPI:
             "openai_api_base": openai_api_base,
         }
 
-    @app.get("/v1/health")
-    async def health():
-        """
-        Lightweight health check for Render and external monitors.
-        Does not call upstream OpenAI; just reports local status.
-        """
-        return {
-            "object": "health",
-            "status": "ok",
-            "environment": environment,
-            "default_model": default_model,
-            "openai_api_base": openai_api_base,
-        }
+    # Keep /health and /v1/health implemented at routes.health,
+    # but provide a minimal fallback here if needed.
+    @app.get("/health-basic")
+    async def health_basic() -> JSONResponse:
+        return JSONResponse(
+            {
+                "status": "ok",
+                "environment": environment,
+                "default_model": default_model,
+            }
+        )
 
+    # OpenAPI schema for ChatGPT Actions / Plugins
     @app.get("/schemas/openapi.yaml")
-    async def openapi_schema():
-        """
-        Serve the OpenAPI schema for ChatGPT Actions.
-        """
-        schema_path = Path("schemas/openapi.yaml")
+    async def openapi_schema() -> FileResponse:
+        schema_path_env = os.getenv("OPENAPI_SCHEMA_PATH", "schemas/openapi.yaml")
+        schema_path = Path(schema_path_env)
         if not schema_path.is_file():
-            return JSONResponse(
+            # 404 if schema missing
+            return FileResponse(
+                path=schema_path,
                 status_code=404,
-                content={
-                    "error": {
-                        "message": "OpenAPI schema not found.",
-                        "type": "not_found",
-                    }
-                },
             )
-        return FileResponse(schema_path)
+        return FileResponse(path=schema_path, media_type="text/yaml")
+
+    # Common alias used by some tooling
+    @app.get("/openapi.yaml")
+    async def openapi_schema_root() -> FileResponse:
+        return await openapi_schema()  # type: ignore[func-returns-value]
 
     # ------------------------------------------------------------
-    # Routers (local endpoints)
+    # Register routes
     # ------------------------------------------------------------
-    # /v1/tools and /v1/tools/{tool_id} — hosted tools registry
-    app.include_router(tools_router)
+    register_routes(app)
 
-    # Relay-focus /v1/* surfaces — locally handled (may still proxy upstream)
-    app.include_router(responses_routes.router)
-    app.include_router(conversations_routes.router)
-    app.include_router(files_routes.router)
-    app.include_router(vector_stores_routes.router)
-    app.include_router(embeddings_routes.router)
-    app.include_router(realtime_routes.router)
-    app.include_router(models_routes.router)
-    app.include_router(images_routes.router)
-    app.include_router(videos_routes.router)
-    app.include_router(actions_routes.router)
-
-    # All other /v1/* paths fall back to P4Orchestrator + forward_openai_request.
     return app
 
 
-# FastAPI ASGI app object for uvicorn / Render
 app = create_app()
-
-
-# ------------------------------------------------------------
-# Dev server entry point (local only)
-# ------------------------------------------------------------
-if __name__ == "__main__":
-    import uvicorn
-
-    port = int(os.getenv("PORT", "10000"))
-    reload_flag = os.getenv("RELAY_DEBUG", "false").lower() == "true"
-
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=reload_flag,
-        log_level=os.getenv("LOG_LEVEL", "info"),
-    )

@@ -21,6 +21,7 @@ def _build_openai_error(
 ) -> Dict[str, Any]:
     """
     Build an OpenAI-style error envelope.
+
     Shape:
       {
         "error": {
@@ -66,13 +67,9 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
-        """
-        Handle FastAPI HTTPException explicitly so we don't treat normal
-        4xx responses (auth errors, invalid params, etc.) as 500s.
-        """
         path = str(request.url)
 
-        # If the detail is already an OpenAI-style error envelope, just pass it through.
+        # If already OpenAI-style, pass through.
         if isinstance(exc.detail, dict) and "error" in exc.detail:
             logger.warning(
                 "HTTPException in relay (passthrough)",
@@ -84,7 +81,6 @@ def register_exception_handlers(app: FastAPI) -> None:
             )
             return JSONResponse(status_code=exc.status_code, content=exc.detail)
 
-        # Otherwise, wrap the detail into an OpenAI-style error.
         if isinstance(exc.detail, str):
             message = exc.detail
         else:
@@ -104,16 +100,16 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
-        """
-        Catch-all handler for unexpected server-side errors (true 5xx bugs).
-        """
         path = str(request.url)
-        logger.exception("Unhandled exception in relay", extra={"path": path})
+        logger.exception(
+            "Unhandled exception in relay",
+            extra={"path": path},
+        )
 
         payload = _build_openai_error(
-            message="An unexpected error occurred on the relay.",
+            message="Internal server error",
             status_code=500,
-            code="internal_error",
+            code="internal_server_error",
             path=path,
             exc=exc,
         )

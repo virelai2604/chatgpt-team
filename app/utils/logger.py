@@ -6,12 +6,14 @@ import os
 from datetime import UTC, datetime
 from typing import Any, Dict
 
-LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
-LOG_FORMAT = os.getenv("LOG_FORMAT", "text").lower()
+from app.core.config import settings
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", settings.LOG_LEVEL).upper()
+LOG_FORMAT = os.getenv("LOG_FORMAT", settings.LOG_FORMAT).lower()
 LOG_COLOR = os.getenv("LOG_COLOR", "false").lower() == "true"
 
-RELAY_NAME = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
-ENVIRONMENT = os.getenv("ENVIRONMENT", "local")
+RELAY_NAME = settings.RELAY_NAME
+ENVIRONMENT = settings.ENVIRONMENT
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -91,8 +93,7 @@ def setup_logging() -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
-    logger = logging.getLogger(name)
-    return logger
+    return logging.getLogger(name)
 
 
 relay_log: logging.Logger = get_logger("relay")
