@@ -1,4 +1,5 @@
 # app/routes/register_routes.py
+
 from __future__ import annotations
 
 from fastapi import FastAPI
@@ -17,6 +18,11 @@ from app.routes.vector_stores import router as vector_stores_router
 from app.routes.conversations import router as conversations_router
 from app.routes.realtime import router as realtime_router
 
+# Newly added OpenAI endpoint families
+from app.routes.batches import router as batches_router
+from app.routes.chatkit import router as chatkit_router
+from app.routes.containers import router as containers_router
+
 # Tools + relay metadata
 from app.api.tools_api import router as tools_router
 from app.routes.actions import router as actions_router
@@ -28,6 +34,7 @@ def register_routes(app: FastAPI) -> None:
 
     This is the central wiring layer – any new route module should be added here.
     """
+
     # -------- Health --------
     app.include_router(health_router)
 
@@ -41,6 +48,11 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(vector_stores_router)
     app.include_router(conversations_router)
     app.include_router(realtime_router)
+
+    # New families
+    app.include_router(batches_router)
+    app.include_router(chatkit_router)
+    app.include_router(containers_router)
 
     # -------- Tools + relay metadata --------
     app.include_router(tools_router)
