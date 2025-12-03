@@ -1,41 +1,51 @@
-# app/routes/batches.py
-
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger
 
-router = APIRouter(tags=["batches"])
+router = APIRouter(
+    prefix="/v1",
+    tags=["batches"],
+)
 
 
-@router.post("/v1/batches")
-async def create_batch(request: Request):
+@router.post("/batches")
+async def create_batch(request: Request) -> Response:
     """
-    Proxy for: POST https://api.openai.com/v1/batches
+    Create a new batch job.
+    Mirrors POST /v1/batches.
     """
+    logger.info("→ [batches] POST %s", request.url.path)
     return await forward_openai_request(request)
 
 
-@router.get("/v1/batches")
-async def list_batches(request: Request):
+@router.get("/batches")
+async def list_batches(request: Request) -> Response:
     """
-    Proxy for: GET https://api.openai.com/v1/batches
+    List batch jobs.
+    Mirrors GET /v1/batches.
     """
+    logger.info("→ [batches] GET %s", request.url.path)
     return await forward_openai_request(request)
 
 
-@router.get("/v1/batches/{batch_id}")
-async def retrieve_batch(request: Request, batch_id: str):
+@router.get("/batches/{batch_id}")
+async def retrieve_batch(batch_id: str, request: Request) -> Response:
     """
-    Proxy for: GET https://api.openai.com/v1/batches/{batch_id}
+    Retrieve a single batch.
+    Mirrors GET /v1/batches/{batch_id}.
     """
+    logger.info("→ [batches] GET %s", request.url.path)
     return await forward_openai_request(request)
 
 
-@router.post("/v1/batches/{batch_id}/cancel")
-async def cancel_batch(request: Request, batch_id: str):
+@router.delete("/batches/{batch_id}")
+async def cancel_batch(batch_id: str, request: Request) -> Response:
     """
-    Proxy for: POST https://api.openai.com/v1/batches/{batch_id}/cancel
+    Cancel a batch job.
+    Mirrors DELETE /v1/batches/{batch_id}.
     """
+    logger.info("→ [batches] DELETE %s", request.url.path)
     return await forward_openai_request(request)

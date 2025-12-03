@@ -1,61 +1,35 @@
-# app/routes/chatkit.py
-
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger
 
-router = APIRouter(tags=["chatkit"])
+router = APIRouter(
+    prefix="/v1",
+    tags=["chatkit"],
+)
 
 
-# Sessions
-
-@router.post("/v1/chatkit/sessions")
-async def create_chatkit_session(request: Request):
+@router.api_route("/chatkit", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
+async def proxy_chatkit_root(request: Request) -> Response:
     """
-    Proxy for: POST https://api.openai.com/v1/chatkit/sessions
+    Generic proxy for /v1/chatkit.
+
+    This keeps the relay forward-compatible with new ChatKit endpoints
+    without needing to hard-code each subresource.
     """
+    logger.info("→ [chatkit] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
-@router.get("/v1/chatkit/sessions/{session_id}")
-async def retrieve_chatkit_session(request: Request, session_id: str):
+@router.api_route(
+    "/chatkit/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+)
+async def proxy_chatkit_subpaths(path: str, request: Request) -> Response:
     """
-    Proxy for: GET https://api.openai.com/v1/chatkit/sessions/{session_id}
+    Generic proxy for any /v1/chatkit/* sub-path.
     """
-    return await forward_openai_request(request)
-
-
-# Threads
-
-@router.post("/v1/chatkit/threads")
-async def create_chatkit_thread(request: Request):
-    """
-    Proxy for: POST https://api.openai.com/v1/chatkit/threads
-    """
-    return await forward_openai_request(request)
-
-
-@router.get("/v1/chatkit/threads/{thread_id}")
-async def retrieve_chatkit_thread(request: Request, thread_id: str):
-    """
-    Proxy for: GET https://api.openai.com/v1/chatkit/threads/{thread_id}
-    """
-    return await forward_openai_request(request)
-
-
-@router.get("/v1/chatkit/threads/{thread_id}/items")
-async def list_chatkit_thread_items(request: Request, thread_id: str):
-    """
-    Proxy for: GET https://api.openai.com/v1/chatkit/threads/{thread_id}/items
-    """
-    return await forward_openai_request(request)
-
-
-@router.post("/v1/chatkit/threads/{thread_id}/items")
-async def append_chatkit_thread_items(request: Request, thread_id: str):
-    """
-    Proxy for: POST https://api.openai.com/v1/chatkit/threads/{thread_id}/items
-    """
+    logger.info("→ [chatkit/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
