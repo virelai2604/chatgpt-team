@@ -7,31 +7,39 @@ from fastapi import APIRouter, Request, Response
 from app.api.forward_openai import forward_openai_request
 from app.utils.logger import relay_log as logger
 
-router = APIRouter(prefix="/v1", tags=["responses"])
+router = APIRouter(
+    prefix="/v1",
+    tags=["responses"],
+)
 
 
-@router.post("/responses")
-async def create_response(request: Request) -> Response:
+@router.api_route("/responses", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def proxy_responses_root(request: Request) -> Response:
     """
-    POST /v1/responses – main chat/agent entrypoint.
-    Streaming is handled via Accept: text/event-stream by forward_openai_request.
+    Generic proxy for the Responses API root.
+
+    Covers:
+      - POST /v1/responses        (create response; JSON or SSE stream)
+      - GET  /v1/responses        (future-safe)
     """
-    logger.info("→ [responses] POST %s", request.url.path)
+    logger.info("→ [responses] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.api_route(
     "/responses/{path:path}",
-    methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"],
+    methods=["GET", "POST", "DELETE", "PATCH", "HEAD", "OPTIONS"],
 )
 async def proxy_responses_subpaths(path: str, request: Request) -> Response:
     """
-    Catch-all for /v1/responses/*, e.g.:
+    Catch-all for all other Responses subpaths.
 
-      - /v1/responses/{id}
-      - /v1/responses/{id}/cancel
-      - /v1/responses/{id}/input_token_counts
-      - /v1/responses/{id}/output_items
+    Examples:
+      - GET    /v1/responses/{response_id}
+      - DELETE /v1/responses/{response_id}
+      - POST   /v1/responses/{response_id}/cancel
+      - GET    /v1/responses/{response_id}/input_token_counts
+      - any future /v1/responses/* additions
     """
     logger.info("→ [responses/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)

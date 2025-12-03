@@ -13,36 +13,16 @@ router = APIRouter(
 )
 
 
-@router.get("/files")
-async def list_files(request: Request) -> Response:
-    logger.info("→ [files] GET %s", request.url.path)
-    return await forward_openai_request(request)
-
-
-@router.post("/files")
-async def create_file(request: Request) -> Response:
-    logger.info("→ [files] POST %s", request.url.path)
-    return await forward_openai_request(request)
-
-
-@router.get("/files/{file_id}")
-async def retrieve_file(file_id: str, request: Request) -> Response:
-    logger.info("→ [files] GET %s", request.url.path)
-    return await forward_openai_request(request)
-
-
-@router.delete("/files/{file_id}")
-async def delete_file(file_id: str, request: Request) -> Response:
-    logger.info("→ [files] DELETE %s", request.url.path)
-    return await forward_openai_request(request)
-
-
-@router.get("/files/{file_id}/content")
-async def download_file_content(file_id: str, request: Request) -> Response:
+@router.api_route("/files", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def proxy_files_root(request: Request) -> Response:
     """
-    Proxy for /v1/files/{file_id}/content – returns binary file content.
+    Files root.
+
+    Covers:
+      - GET  /v1/files   (list)
+      - POST /v1/files   (create/upload)
     """
-    logger.info("→ [files/content] GET %s", request.url.path)
+    logger.info("→ [files] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
@@ -50,9 +30,15 @@ async def download_file_content(file_id: str, request: Request) -> Response:
     "/files/{path:path}",
     methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"],
 )
-async def files_subpaths(path: str, request: Request) -> Response:
+async def proxy_files_subpaths(path: str, request: Request) -> Response:
     """
-    Catch-all for any additional /v1/files/* subroutes.
+    Catch-all for Files subresources.
+
+    Examples:
+      - GET    /v1/files/{file_id}
+      - DELETE /v1/files/{file_id}
+      - GET    /v1/files/{file_id}/content
+      - future /v1/files/* additions (e.g. uploads interoperability)
     """
     logger.info("→ [files/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
