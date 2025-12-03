@@ -13,9 +13,6 @@ router = APIRouter(tags=["health"])
 
 
 def _base_status() -> Dict[str, Any]:
-    """
-    Build a consistent health payload describing relay + upstream status.
-    """
     return {
         "status": "ok",
         "relay": {
@@ -39,19 +36,9 @@ def _base_status() -> Dict[str, Any]:
 
 @router.get("/health")
 async def health_root() -> Dict[str, Any]:
-    """
-    GET /health
-
-    Simple root health endpoint for infra checks.
-    """
     return _base_status()
 
 
 @router.get("/v1/health")
 async def health_v1() -> Dict[str, Any]:
-    """
-    GET /v1/health
-
-    Versioned health endpoint to align with /v1 namespace.
-    """
     return _base_status()

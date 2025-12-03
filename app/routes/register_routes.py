@@ -17,8 +17,7 @@ from app.routes.videos import router as videos_router
 from app.routes.vector_stores import router as vector_stores_router
 from app.routes.conversations import router as conversations_router
 from app.routes.realtime import router as realtime_router
-from app.routes.chatkit import router as chatkit_router  # NEW
-# from app.routes.containers import router as containers_router  # if/when you add containers
+from app.routes.containers import router as containers_router  # NEW
 
 # Tools + relay metadata
 from app.api.tools_api import router as tools_router
@@ -45,7 +44,6 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(vector_stores_router)
     app.include_router(conversations_router)
     app.include_router(realtime_router)
-    app.include_router(chatkit_router)
     app.include_router(containers_router)
 
     # -------- Tools + relay metadata --------

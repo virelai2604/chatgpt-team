@@ -2,70 +2,154 @@
 
 from __future__ import annotations
 
-import json
-import logging
-from pathlib import Path
-from typing import Any
+import os
+import platform
+from datetime import datetime, timezone
+from typing import Any, Dict, Literal, Optional
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 
-logger = logging.getLogger("relay.actions")
+from app.api.forward_openai import forward_openai_from_parts
 
-router = APIRouter(prefix="/v1", tags=["actions", "tools"])
-
-# Adjust to your actual location
-TOOLS_MANIFEST_PATH = (
-    Path(__file__).resolve().parent.parent / "manifests" / "tools_manifest.json"
-)
+router = APIRouter(tags=["actions"])
 
 
-def load_tools_manifest() -> dict[str, Any]:
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _base_env() -> Dict[str, str]:
     """
-    Load the tools manifest from disk.
-
-    This is used both by the relay API (for /v1/tools) and by the P4 orchestrator
-    when wiring tools into the agent. :contentReference[oaicite:7]{index=7}
+    Shared environment snapshot used by ping and relay_info.
     """
-    if not TOOLS_MANIFEST_PATH.exists():
-        logger.error("tools_manifest.json not found at %s", TOOLS_MANIFEST_PATH)
-        raise HTTPException(status_code=500, detail="Tools manifest not found")
+    return {
+        "app_mode": os.getenv("APP_MODE", "development"),
+        "environment": os.getenv("ENVIRONMENT", "local"),
+        "base_openai_api": os.getenv("OPENAI_API_BASE", "https://api.openai.com"),
+        "default_model": os.getenv("DEFAULT_MODEL")
+        or os.getenv("DEFAULT_OPENAI_MODEL")
+        or "gpt-4.1-mini",
+    }
 
+
+def _flat_relay_info() -> Dict[str, Any]:
+    base = _base_env()
+    relay_name = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
+
+    return {
+        "relay_name": relay_name,
+        "environment": base["environment"],
+        "app_mode": base["app_mode"],
+        "base_openai_api": base["base_openai_api"],
+    }
+
+
+def _structured_relay_info() -> Dict[str, Any]:
+    base = _base_env()
+    relay_name = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
+    build_version = os.getenv("BIFL_VERSION", "dev")
+
+    return {
+        "relay": {
+            "name": relay_name,
+            "version": build_version,
+            "environment": base["environment"],
+            "app_mode": base["app_mode"],
+        },
+        "upstream": {
+            "api_base": base["base_openai_api"],
+            "default_model": base["default_model"],
+        },
+        "host": {
+            "platform": platform.system(),
+            "platform_release": platform.release(),
+            "python_version": platform.python_version(),
+        },
+        "timestamp": _now_iso(),
+    }
+
+
+class OpenAIForwardPayload(BaseModel):
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+    path: str = Field(..., description="OpenAI API path, must start with /v1")
+    query: Optional[Dict[str, Any]] = None
+    headers: Optional[Dict[str, str]] = None
+    body: Optional[Any] = None
+    stream: bool = Field(
+        default=False,
+        description="If true, forward as SSE stream (caller must also set Accept: text/event-stream).",
+    )
+
+
+# -------- Relay info / ping -------------------------------------------------
+
+
+@router.get("/v1/actions/ping")
+@router.get("/relay/actions/ping")
+async def actions_ping() -> Dict[str, Any]:
+    """
+    Simple ping endpoint used by tests and health checks.
+    """
+    env = _base_env()
+    return {
+        "status": "ok",
+        "now": _now_iso(),
+        "environment": env["environment"],
+        "app_mode": env["app_mode"],
+    }
+
+
+@router.get("/v1/actions/relay_info")
+@router.get("/relay/actions/relay_info")
+async def actions_relay_info() -> Dict[str, Any]:
+    """
+    Structured relay metadata for diagnostics and debugging.
+    """
+    return _structured_relay_info()
+
+
+# -------- Generic OpenAI forwarder ------------------------------------------
+
+
+@router.post("/v1/actions/openai/forward")
+async def actions_openai_forward(payload: OpenAIForwardPayload, request: Request) -> Response:
+    """
+    Generic action entrypoint:
+
+      POST /v1/actions/openai/forward
+      {
+        "method": "POST",
+        "path": "/v1/embeddings",
+        "query": { ... },
+        "headers": { ... },
+        "body": { ... },
+        "stream": false
+      }
+
+    This is relay-native; it is not an OpenAI public API endpoint.
+    """
     try:
-        with TOOLS_MANIFEST_PATH.open("r", encoding="utf-8") as f:
-            data = json.load(f)
+        return await forward_openai_from_parts(
+            method=payload.method,
+            path=payload.path,
+            query=payload.query,
+            headers=payload.headers,
+            body=payload.body,
+            stream=payload.stream,
+        )
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Failed to load tools_manifest.json")
-        raise HTTPException(status_code=500, detail="Failed to load tools manifest") from exc
-
-    if not isinstance(data, dict) or data.get("object") != "list":
-        logger.error("Invalid tools_manifest.json format: %s", data)
-        raise HTTPException(status_code=500, detail="Invalid tools manifest format")
-
-    return data
-
-
-@router.get("/tools")
-async def list_tools() -> JSONResponse:
-    """
-    List all tools available to the agent, mirroring the GPTs/Actions concept.
-
-    This is *not* an OpenAI upstream endpoint; it is a local relay endpoint
-    exposing your manifest to the orchestrator / UI.
-    """
-    manifest = load_tools_manifest()
-    return JSONResponse(content=manifest)
-
-
-@router.get("/tools/{tool_id}")
-async def get_tool(tool_id: str) -> JSONResponse:
-    """
-    Fetch a single tool definition by id from tools_manifest.json.
-    """
-    manifest = load_tools_manifest()
-    tools = manifest.get("data", [])
-    for tool in tools:
-        if tool.get("id") == tool_id:
-            return JSONResponse(content=tool)
-
-    raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found")
+        # Wrap unexpected exceptions in an OpenAI-style error envelope
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "message": f"actions_openai_forward failed: {exc}",
+                    "type": "server_error",
+                    "code": "actions_forward_error",
+                }
+            },
+        )

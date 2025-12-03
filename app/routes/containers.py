@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger
 
 router = APIRouter(
     prefix="/v1",
@@ -12,44 +13,27 @@ router = APIRouter(
 )
 
 
-@router.post("/containers")
-async def create_container(request: Request) -> Response:
+@router.api_route("/containers", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def containers_root(request: Request) -> Response:
+    """
+    - POST /v1/containers → create container
+    - GET  /v1/containers → list containers
+    """
+    logger.info("→ [containers] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
-@router.get("/containers")
-async def list_containers(request: Request) -> Response:
-    return await forward_openai_request(request)
+@router.api_route(
+    "/containers/{path:path}",
+    methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"],
+)
+async def containers_subpaths(path: str, request: Request) -> Response:
+    """
+    Catch-all for /v1/containers/*, including:
 
-
-@router.get("/containers/{container_id}")
-async def retrieve_container(container_id: str, request: Request) -> Response:
-    return await forward_openai_request(request)
-
-
-@router.delete("/containers/{container_id}")
-async def delete_container(container_id: str, request: Request) -> Response:
-    return await forward_openai_request(request)
-
-
-@router.get("/containers/{container_id}/files")
-async def list_container_files(container_id: str, request: Request) -> Response:
-    return await forward_openai_request(request)
-
-
-@router.get("/containers/{container_id}/files/{file_id}")
-async def retrieve_container_file(
-    container_id: str,
-    file_id: str,
-    request: Request,
-) -> Response:
-    return await forward_openai_request(request)
-
-
-@router.get("/containers/{container_id}/files/{file_id}/content")
-async def download_container_file_content(
-    container_id: str,
-    file_id: str,
-    request: Request,
-) -> Response:
+      - /v1/containers/{container_id}
+      - /v1/containers/{container_id}/files
+      - /v1/containers/{container_id}/files/{file_id}/content
+    """
+    logger.info("→ [containers/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
