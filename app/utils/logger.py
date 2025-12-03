@@ -1,24 +1,46 @@
-# app/utils/logger.py
-
 from __future__ import annotations
 
 import json
 import logging
 import os
+import sys
 from datetime import UTC, datetime
 from typing import Any, Dict
 
-from app.core.config import settings
 
-LOG_LEVEL = os.getenv("LOG_LEVEL", settings.LOG_LEVEL).upper()
-LOG_FORMAT = os.getenv("LOG_FORMAT", settings.LOG_FORMAT).lower()
+# ---------------------------------------------------------------------------
+# Environment-driven logging configuration
+# ---------------------------------------------------------------------------
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_FORMAT = os.getenv("LOG_FORMAT", "text").lower()  # "text" | "json"
 LOG_COLOR = os.getenv("LOG_COLOR", "false").lower() == "true"
 
-RELAY_NAME = settings.RELAY_NAME
-ENVIRONMENT = settings.ENVIRONMENT if hasattr(settings, "ENVIRONMENT") else "local"
+RELAY_NAME = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "local")
+
+
+# ---------------------------------------------------------------------------
+# JSON formatter
+# ---------------------------------------------------------------------------
 
 
 class JsonLogFormatter(logging.Formatter):
+    """
+    JSON log formatter used when LOG_FORMAT=json.
+
+    Produces structured payloads such as:
+      {
+        "ts": "...",
+        "level": "INFO",
+        "logger": "relay",
+        "message": "something happened",
+        "environment": "local",
+        "relay": "ChatGPT Team Relay",
+        "extra_field": "value"
+      }
+    """
+
     _RESERVED_KEYS = {
         "name",
         "msg",
@@ -62,6 +84,7 @@ class JsonLogFormatter(logging.Formatter):
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
 
+        # Add any user-defined extra fields that aren't reserved
         for key, value in record.__dict__.items():
             if key not in self._RESERVED_KEYS and key not in payload:
                 payload[key] = value
@@ -69,35 +92,76 @@ class JsonLogFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+# ---------------------------------------------------------------------------
+# Root logger configuration
+# ---------------------------------------------------------------------------
+
+_configured = False
+
+
 def _configure_root_logger() -> None:
+    """
+    Configure the root logger exactly once, based on environment variables.
+
+    This is intentionally simple:
+      - Single StreamHandler to stdout
+      - JSON or text formatter
+      - Level from LOG_LEVEL
+    """
+    global _configured
+    if _configured:
+        return
+
     root = logging.getLogger()
-    root.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+    # If something already configured handlers (e.g., uvicorn),
+    # we respect that and just adjust levels/format where reasonable.
+    if not root.handlers:
+        handler = logging.StreamHandler(stream=sys.stdout)
 
-    for h in list(root.handlers):
-        root.removeHandler(h)
+        if LOG_FORMAT == "json":
+            formatter: logging.Formatter = JsonLogFormatter()
+        else:
+            # Simple human-readable format. Coloring is optional and
+            # left minimal to avoid coupling to external libraries.
+            if LOG_COLOR:
+                # Basic ANSI coloring by level
+                fmt = "%(levelname)s %(name)s - %(message)s"
+            else:
+                fmt = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
 
-    handler = logging.StreamHandler()
+            formatter = logging.Formatter(fmt)
 
-    if LOG_FORMAT == "json":
-        formatter: logging.Formatter = JsonLogFormatter()
-    else:
-        formatter = logging.Formatter(
-            fmt="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
 
-    handler.setFormatter(formatter)
-    root.addHandler(handler)
+    # Set level on the root logger
+    try:
+        level = getattr(logging, LOG_LEVEL, logging.INFO)
+    except Exception:
+        level = logging.INFO
+    root.setLevel(level)
+
+    _configured = True
 
 
-def setup_logging() -> None:
-    _configure_root_logger()
+# ---------------------------------------------------------------------------
+# Public helpers
+# ---------------------------------------------------------------------------
 
 
 def get_logger(name: str) -> logging.Logger:
+    """
+    Return a logger with the relay's standard configuration.
+
+    Usage:
+        from app.utils.logger import get_logger
+        logger = get_logger("my_module")
+    """
+    _configure_root_logger()
     return logging.getLogger(name)
 
 
-relay_log: logging.Logger = get_logger("relay")
+# Canonical relay logger used across the project
+relay_log = get_logger("relay")
 
-__all__ = ["setup_logging", "get_logger", "relay_log"]
+__all__ = ["get_logger", "relay_log", "JsonLogFormatter"]
