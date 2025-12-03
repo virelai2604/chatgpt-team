@@ -1,9 +1,10 @@
+# app/routes/chatkit.py
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
+from app.utils.logger import relay_log as logger  # type: ignore
 
 router = APIRouter(
     prefix="/v1",
@@ -11,25 +12,29 @@ router = APIRouter(
 )
 
 
-@router.api_route("/chatkit", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
-async def proxy_chatkit_root(request: Request) -> Response:
+@router.api_route(
+    "/chatkit",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+)
+async def chatkit_root_proxy(request: Request) -> Response:
     """
     Generic proxy for /v1/chatkit.
 
-    This keeps the relay forward-compatible with new ChatKit endpoints
-    without needing to hard-code each subresource.
+    ChatKit is primarily a client framework, but the OpenAI docs expose
+    ChatKit-related API surfaces under /v1/chatkit*. This relay forwards
+    them 1:1 to the upstream OpenAI API.
     """
-    logger.info("→ [chatkit] %s %s", request.method, request.url.path)
+    logger.info("[chatkit] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.api_route(
     "/chatkit/{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
 )
-async def proxy_chatkit_subpaths(path: str, request: Request) -> Response:
+async def chatkit_proxy(path: str, request: Request) -> Response:
     """
-    Generic proxy for any /v1/chatkit/* sub-path.
+    Catch-all proxy for any nested /v1/chatkit/* path.
     """
-    logger.info("→ [chatkit/*] %s %s", request.method, request.url.path)
+    logger.info("[chatkit] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)

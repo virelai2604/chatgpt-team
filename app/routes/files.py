@@ -1,9 +1,10 @@
+# app/routes/files.py
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
+from app.utils.logger import relay_log as logger  # type: ignore
 
 router = APIRouter(
     prefix="/v1",
@@ -15,9 +16,9 @@ router = APIRouter(
 async def list_files(request: Request) -> Response:
     """
     GET /v1/files
-    List files (never returns raw binary).
+    List files.
     """
-    logger.info("→ [files] GET %s", request.url.path)
+    logger.info("[files] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
@@ -25,12 +26,9 @@ async def list_files(request: Request) -> Response:
 async def create_file(request: Request) -> Response:
     """
     POST /v1/files
-    Create/upload a file.
-
-    The relay forwards the multipart/form-data (or JSON) body as-is to
-    the upstream OpenAI Files API.
+    Create a file (JSON → multipart handled upstream).
     """
-    logger.info("→ [files] POST %s", request.url.path)
+    logger.info("[files] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
@@ -38,9 +36,9 @@ async def create_file(request: Request) -> Response:
 async def retrieve_file(file_id: str, request: Request) -> Response:
     """
     GET /v1/files/{file_id}
-    Retrieve file metadata.
+    Retrieve metadata for a file.
     """
-    logger.info("→ [files] GET %s", request.url.path)
+    logger.info("[files] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
@@ -50,18 +48,15 @@ async def delete_file(file_id: str, request: Request) -> Response:
     DELETE /v1/files/{file_id}
     Delete a file.
     """
-    logger.info("→ [files] DELETE %s", request.url.path)
+    logger.info("[files] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
-@router.get("/files/{file_id}/content")
-async def retrieve_file_content(file_id: str, request: Request) -> Response:
+@router.post("/uploads")
+async def create_upload(request: Request) -> Response:
     """
-    GET /v1/files/{file_id}/content
-    Stream / retrieve the raw file content.
-
-    NOTE: This endpoint may return binary content, which the relay forwards
-    untouched from OpenAI to the client.
+    POST /v1/uploads
+    Proxy for the OpenAI uploads API used by /v1/files.
     """
-    logger.info("→ [files] GET %s (content)", request.url.path)
+    logger.info("[files/uploads] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
