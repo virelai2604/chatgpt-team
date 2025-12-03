@@ -1,9 +1,10 @@
+# app/routes/batches.py
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
+from app.utils.logger import relay_log as logger  # type: ignore
 
 router = APIRouter(
     prefix="/v1",
@@ -11,41 +12,41 @@ router = APIRouter(
 )
 
 
-@router.post("/batches")
-async def create_batch(request: Request) -> Response:
-    """
-    Create a new batch job.
-    Mirrors POST /v1/batches.
-    """
-    logger.info("→ [batches] POST %s", request.url.path)
-    return await forward_openai_request(request)
-
-
 @router.get("/batches")
 async def list_batches(request: Request) -> Response:
     """
-    List batch jobs.
-    Mirrors GET /v1/batches.
+    GET /v1/batches
+    List all batch jobs.
     """
-    logger.info("→ [batches] GET %s", request.url.path)
+    logger.info("[batches] %s %s", request.method, request.url.path)
+    return await forward_openai_request(request)
+
+
+@router.post("/batches")
+async def create_batch(request: Request) -> Response:
+    """
+    POST /v1/batches
+    Create a new batch job.
+    """
+    logger.info("[batches] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.get("/batches/{batch_id}")
 async def retrieve_batch(batch_id: str, request: Request) -> Response:
     """
-    Retrieve a single batch.
-    Mirrors GET /v1/batches/{batch_id}.
+    GET /v1/batches/{batch_id}
+    Retrieve a specific batch job.
     """
-    logger.info("→ [batches] GET %s", request.url.path)
+    logger.info("[batches] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
-@router.delete("/batches/{batch_id}")
+@router.post("/batches/{batch_id}/cancel")
 async def cancel_batch(batch_id: str, request: Request) -> Response:
     """
+    POST /v1/batches/{batch_id}/cancel
     Cancel a batch job.
-    Mirrors DELETE /v1/batches/{batch_id}.
     """
-    logger.info("→ [batches] DELETE %s", request.url.path)
+    logger.info("[batches] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
