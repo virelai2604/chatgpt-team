@@ -16,8 +16,11 @@ router = APIRouter(
 @router.api_route("/videos", methods=["GET", "POST", "HEAD", "OPTIONS"])
 async def proxy_videos_root(request: Request) -> Response:
     """
-    - POST /v1/videos           → create video job
-    - GET /v1/videos            → list video jobs
+    Videos root.
+
+    Covers:
+      - POST /v1/videos      (create job)
+      - GET  /v1/videos      (list jobs, per current docs)
     """
     logger.info("→ [videos] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
@@ -29,12 +32,14 @@ async def proxy_videos_root(request: Request) -> Response:
 )
 async def proxy_videos_subpaths(path: str, request: Request) -> Response:
     """
-    Catch-all for /v1/videos/*, including:
+    Catch-all for video-related subresources.
 
-      - /v1/videos/{video_id}
-      - /v1/videos/{video_id}/content
-      - /v1/videos/remix
-      - /v1/videos/job
+    Examples:
+      - POST   /v1/videos/remix
+      - GET    /v1/videos/{video_id}
+      - GET    /v1/videos/{video_id}/content
+      - DELETE /v1/videos/{video_id}
+      - any future /v1/videos/* additions
     """
     logger.info("→ [videos/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)

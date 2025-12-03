@@ -15,23 +15,20 @@ router = APIRouter(
 
 @router.get("/models")
 async def list_models(request: Request) -> Response:
-    logger.info("→ [models] GET %s", request.url.path)
+    logger.info("→ [models] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.get("/models/{model_id}")
 async def retrieve_model(model_id: str, request: Request) -> Response:
-    logger.info("→ [models] GET %s", request.url.path)
+    logger.info("→ [models] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
-@router.api_route(
-    "/models/{model_id}/{subpath:path}",
-    methods=["GET", "DELETE", "HEAD", "OPTIONS"],
-)
-async def models_subpaths(model_id: str, subpath: str, request: Request) -> Response:
+@router.delete("/models/{model_id}")
+async def delete_model(model_id: str, request: Request) -> Response:
     """
-    Future-proof catch-all for /v1/models/{model_id}/* subroutes (if added later).
+    DELETE /v1/models/{model_id} — delete fine-tuned model (OpenAI parity).
     """
-    logger.info("→ [models/*] %s %s", request.method, request.url.path)
+    logger.info("→ [models] DELETE %s", request.url.path)
     return await forward_openai_request(request)

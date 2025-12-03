@@ -15,17 +15,8 @@ router = APIRouter(
 
 @router.post("/embeddings")
 async def create_embedding(request: Request) -> Response:
-    logger.info("→ [embeddings] POST %s", request.url.path)
-    return await forward_openai_request(request)
-
-
-@router.api_route(
-    "/embeddings/{path:path}",
-    methods=["GET", "POST", "HEAD", "OPTIONS"],
-)
-async def embeddings_subpaths(path: str, request: Request) -> Response:
     """
-    Forward any future /v1/embeddings/* subroutes.
+    POST /v1/embeddings — standard embeddings creation endpoint.
     """
-    logger.info("→ [embeddings/*] %s %s", request.method, request.url.path)
+    logger.info("→ [embeddings] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)

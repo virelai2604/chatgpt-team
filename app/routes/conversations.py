@@ -13,14 +13,14 @@ router = APIRouter(
 )
 
 
-@router.api_route(
-    "/conversations",
-    methods=["GET", "POST", "HEAD", "OPTIONS"],
-)
-async def conversations_root(request: Request) -> Response:
+@router.api_route("/conversations", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def proxy_conversations_root(request: Request) -> Response:
     """
-    - GET /v1/conversations      → list conversations
-    - POST /v1/conversations     → create conversation
+    Conversations root.
+
+    Covers:
+      - GET  /v1/conversations  (list)
+      - POST /v1/conversations  (create)
     """
     logger.info("→ [conversations] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
@@ -28,15 +28,21 @@ async def conversations_root(request: Request) -> Response:
 
 @router.api_route(
     "/conversations/{path:path}",
-    methods=["GET", "POST", "DELETE", "PATCH", "PUT", "HEAD", "OPTIONS"],
+    methods=["GET", "POST", "DELETE", "PATCH", "HEAD", "OPTIONS"],
 )
-async def conversations_subpaths(path: str, request: Request) -> Response:
+async def proxy_conversations_subpaths(path: str, request: Request) -> Response:
     """
-    Catch-all for /v1/conversations/*, e.g.:
+    Catch-all for Conversations subresources.
 
-      - /v1/conversations/{conversation_id}
-      - /v1/conversations/{conversation_id}/items
-      - /v1/conversations/{conversation_id}/items/{item_id}
+    Examples:
+      - GET    /v1/conversations/{conversation_id}
+      - POST   /v1/conversations/{conversation_id}              (update)
+      - DELETE /v1/conversations/{conversation_id}              (delete)
+      - GET    /v1/conversations/{conversation_id}/items        (list items)
+      - POST   /v1/conversations/{conversation_id}/items        (create item)
+      - GET    /v1/conversations/{conversation_id}/items/{id}   (retrieve item)
+      - DELETE /v1/conversations/{conversation_id}/items/{id}   (delete item)
+      - future /v1/conversations/* additions
     """
     logger.info("→ [conversations/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
