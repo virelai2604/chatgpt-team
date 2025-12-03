@@ -58,6 +58,7 @@ def create_app() -> FastAPI:
 
     # -------- P4 Orchestrator (AsyncOpenAI client on request.state) --------
     app.add_middleware(P4OrchestratorMiddleware)
+        
 
     # -------- Schema validation middleware (logging + future hook) --------
     schema_path = Path("schemas/openapi.yaml")
