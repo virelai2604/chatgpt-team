@@ -1,12 +1,11 @@
-from __future__ import annotations
+# app/routes/conversations.py
 
-import logging
+from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
-
-logger = logging.getLogger(__name__)
+from app.utils.logger import relay_log as logger
 
 router = APIRouter(
     prefix="/v1",
@@ -14,128 +13,30 @@ router = APIRouter(
 )
 
 
-@router.post("/conversations")
-async def create_conversation(request: Request) -> Response:
+@router.api_route(
+    "/conversations",
+    methods=["GET", "POST", "HEAD", "OPTIONS"],
+)
+async def conversations_root(request: Request) -> Response:
     """
-    POST /v1/conversations
-
-    Create a conversation.
-    Mirrors:
-    https://platform.openai.com/docs/api-reference/conversations/create
+    - GET /v1/conversations      → list conversations
+    - POST /v1/conversations     → create conversation
     """
-    logger.debug("Proxying POST /v1/conversations to OpenAI")
+    logger.info("→ [conversations] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
-@router.get("/conversations/{conversation_id}")
-async def retrieve_conversation(conversation_id: str, request: Request) -> Response:
+@router.api_route(
+    "/conversations/{path:path}",
+    methods=["GET", "POST", "DELETE", "PATCH", "PUT", "HEAD", "OPTIONS"],
+)
+async def conversations_subpaths(path: str, request: Request) -> Response:
     """
-    GET /v1/conversations/{conversation_id}
+    Catch-all for /v1/conversations/*, e.g.:
 
-    Retrieve a conversation.
-    Mirrors:
-    https://platform.openai.com/docs/api-reference/conversations/retrieve
+      - /v1/conversations/{conversation_id}
+      - /v1/conversations/{conversation_id}/items
+      - /v1/conversations/{conversation_id}/items/{item_id}
     """
-    logger.debug("Proxying GET /v1/conversations/%s to OpenAI", conversation_id)
-    return await forward_openai_request(request)
-
-
-@router.post("/conversations/{conversation_id}")
-async def update_conversation(conversation_id: str, request: Request) -> Response:
-    """
-    POST /v1/conversations/{conversation_id}
-
-    Update a conversation (metadata).
-    Mirrors:
-    https://platform.openai.com/docs/api-reference/conversations/update
-    """
-    logger.debug("Proxying POST /v1/conversations/%s to OpenAI", conversation_id)
-    return await forward_openai_request(request)
-
-
-@router.delete("/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: str, request: Request) -> Response:
-    """
-    DELETE /v1/conversations/{conversation_id}
-
-    Delete a conversation.
-    Mirrors:
-    https://platform.openai.com/docs/api-reference/conversations/delete
-    """
-    logger.debug("Proxying DELETE /v1/conversations/%s to OpenAI", conversation_id)
-    return await forward_openai_request(request)
-
-
-@router.get("/conversations/{conversation_id}/items")
-async def list_conversation_items(conversation_id: str, request: Request) -> Response:
-    """
-    GET /v1/conversations/{conversation_id}/items
-
-    List all items in a conversation.
-    Mirrors:
-    https://platform.openai.com/docs/api-reference/conversations/list-items
-    """
-    logger.debug(
-        "Proxying GET /v1/conversations/%s/items to OpenAI", conversation_id
-    )
-    return await forward_openai_request(request)
-
-
-@router.post("/conversations/{conversation_id}/items")
-async def create_conversation_items(
-    conversation_id: str,
-    request: Request,
-) -> Response:
-    """
-    POST /v1/conversations/{conversation_id}/items
-
-    Create items in a conversation.
-    Mirrors:
-    https://platform.openai.com/docs/api-reference/conversations/create-item
-    """
-    logger.debug(
-        "Proxying POST /v1/conversations/%s/items to OpenAI", conversation_id
-    )
-    return await forward_openai_request(request)
-
-
-@router.get("/conversations/{conversation_id}/items/{item_id}")
-async def retrieve_conversation_item(
-    conversation_id: str,
-    item_id: str,
-    request: Request,
-) -> Response:
-    """
-    GET /v1/conversations/{conversation_id}/items/{item_id}
-
-    Retrieve a single item.
-    Mirrors:
-    https://platform.openai.com/docs/api-reference/conversations/retrieve-item
-    """
-    logger.debug(
-        "Proxying GET /v1/conversations/%s/items/%s to OpenAI",
-        conversation_id,
-        item_id,
-    )
-    return await forward_openai_request(request)
-
-
-@router.delete("/conversations/{conversation_id}/items/{item_id}")
-async def delete_conversation_item(
-    conversation_id: str,
-    item_id: str,
-    request: Request,
-) -> Response:
-    """
-    DELETE /v1/conversations/{conversation_id}/items/{item_id}
-
-    Delete a conversation item.
-    Mirrors:
-    https://platform.openai.com/docs/api-reference/conversations/delete-item
-    """
-    logger.debug(
-        "Proxying DELETE /v1/conversations/%s/items/%s to OpenAI",
-        conversation_id,
-        item_id,
-    )
+    logger.info("→ [conversations/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)

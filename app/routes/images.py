@@ -3,23 +3,8 @@
 """
 images.py — /v1/images proxy
 ─────────────────────────────
-Thin, OpenAI-compatible proxy for image generation and related
-image operations via the official Images API.
-
-Main endpoints (per current OpenAI docs):
-
-  • POST /v1/images/generations   → generate images from a prompt
-  • POST /v1/images/edits         → edit existing images
-  • POST /v1/images/variations    → generate variations
-
-Legacy / extended endpoints MAY include:
-
-  • POST /v1/images               → "best-effort" entrypoint some clients call
-
-This router intentionally does NOT encode any business logic or
-parameter validation. All behavior is delegated to
-`forward_openai_request`, so the relay automatically tracks
-changes in the upstream API and openai-python SDK.
+Thin, OpenAI-compatible proxy for image generation (and related
+image operations) via the official Images API.
 """
 
 from __future__ import annotations
@@ -32,52 +17,24 @@ from app.utils.logger import relay_log as logger
 router = APIRouter(
     prefix="/v1",
     tags=["images"],
-    # Auth is handled centrally by RelayAuthMiddleware.
 )
 
 
 @router.post("/images")
 async def create_images_root(request: Request) -> Response:
     """
-    POST /v1/images
-
-    Convenience/legacy entrypoint for clients that call /v1/images directly.
-    Proxies to OpenAI Images API without modification.
+    Convenience entrypoint for clients that POST /v1/images directly.
     """
-    logger.debug("Proxying POST /v1/images")
+    logger.info("→ [images] POST %s", request.url.path)
     return await forward_openai_request(request)
 
 
 @router.post("/images/generations")
 async def create_image_generations(request: Request) -> Response:
     """
-    POST /v1/images/generations
-
-    Primary image generation endpoint.
+    POST /v1/images/generations – main image generation endpoint.
     """
-    logger.debug("Proxying POST /v1/images/generations")
-    return await forward_openai_request(request)
-
-
-@router.post("/images/edits")
-async def create_image_edits(request: Request) -> Response:
-    """
-    POST /v1/images/edits
-
-    Image editing endpoint.
-    """
-    logger.debug("Proxying POST /v1/images/edits")
-    return await forward_openai_request(request)
-
-
-@router.post("/images/variations")
-async def create_image_variations(request: Request) -> Response:
-    """
-    POST /v1/images/variations
-
-    Generate variations of an existing image.
-    """
-    logger.debug("Proxying POST /v1/images/variations")
+    logger.info("→ [images] POST %s", request.url.path)
     return await forward_openai_request(request)
 
 
@@ -87,11 +44,11 @@ async def create_image_variations(request: Request) -> Response:
 )
 async def proxy_images_subpaths(path: str, request: Request) -> Response:
     """
-    Generic catch-all proxy for any future /v1/images/* subpaths.
+    Catch-all for /v1/images/*, including:
 
-    This ensures the relay remains compatible with new image-related routes
-    without requiring code changes, while still passing through full
-    request/response bodies.
+      - /v1/images/edits
+      - /v1/images/variations
+      - any future image-related subroutes
     """
-    logger.debug("Proxying /v1/images/%s with method %s", path, request.method)
+    logger.info("→ [images/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
