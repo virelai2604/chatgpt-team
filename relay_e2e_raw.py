@@ -60,8 +60,14 @@ def make_headers(
     json_mode: bool = False,
     extra: Optional[Dict[str, str]] = None,
 ) -> Dict[str, str]:
+    """
+    Build headers for talking to the ChatGPT Team Relay.
+
+    The relay expects an auth key in X-Relay-Key; it manages the upstream
+    OpenAI Authorization header itself using its own OPENAI_API_KEY.
+    """
     headers: Dict[str, str] = {
-        "Authorization": f"Bearer {ctx.relay_key}",
+        "X-Relay-Key": ctx.relay_key,
     }
     if json_mode:
         headers["Content-Type"] = "application/json"
@@ -240,12 +246,16 @@ def ensure_vector_store(ctx: E2EContext) -> Optional[str]:
 
 
 def test_health(ctx: E2EContext) -> None:
+    """
+    Health checks for both the root and /v1 base URLs.
+
+    Uses the `request` helper so the relay auth header (X-Relay-Key) is included.
+    """
     log("== Health checks ==")
-    # Use the relay-aware request helper so Authorization: Bearer <relay_key>
-    # is always sent (RelayAuthMiddleware protects /health and /v1/health).
     for base in (ctx.base_url, ctx.api_base):
         resp = request(ctx, "GET", "/health", base=base)
         url = base.rstrip("/") + "/health"
+
         if resp.status_code != 200:
             raise AssertionError(
                 f"Health check failed for {url}: {resp.status_code} {resp.text}"
@@ -403,8 +413,11 @@ def test_embeddings(ctx: E2EContext) -> None:
         "input": "relay embedding test",
     }
     resp = request(ctx, "POST", "/embeddings", json_body=payload)
-    if resp.status_code != 200:
+    if resp.status_code != 0 and resp.status_code != 200:
         raise AssertionError(f"/embeddings failed: {resp.status_code} {resp.text}")
+    if resp.status_code == 0:
+        raise AssertionError("/embeddings returned no response")
+
     body = resp.json()
     embedding = None
     if isinstance(body.get("data"), list) and body["data"]:
