@@ -1,3 +1,5 @@
+# app/utils/logger.py
+
 from __future__ import annotations
 
 import json
@@ -13,7 +15,7 @@ LOG_FORMAT = os.getenv("LOG_FORMAT", settings.LOG_FORMAT).lower()
 LOG_COLOR = os.getenv("LOG_COLOR", "false").lower() == "true"
 
 RELAY_NAME = settings.RELAY_NAME
-ENVIRONMENT = settings.ENVIRONMENT
+ENVIRONMENT = settings.ENVIRONMENT if hasattr(settings, "ENVIRONMENT") else "local"
 
 
 class JsonLogFormatter(logging.Formatter):

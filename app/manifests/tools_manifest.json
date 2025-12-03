@@ -1,131 +1,248 @@
 {
   "object": "list",
-  "data": [
+  "tools": [
     {
+      "type": "function",
       "id": "web_search",
       "name": "web_search",
-      "object": "tool",
-      "type": "function",
-      "description": "Search the web for up-to-date information, news, and facts.",
+      "description": "Search the web for real-time information, news, and knowledge.",
       "parameters": {
         "type": "object",
         "properties": {
           "query": {
             "type": "string",
-            "description": "Search query string describing what to look up."
+            "description": "The search query to run."
           },
           "recency_days": {
             "type": "integer",
-            "description": "How many days back to prioritize in the search (1 = last 24h, 7 = last week, etc.).",
-            "minimum": 1,
-            "default": 7
-          },
-          "max_results": {
-            "type": "integer",
-            "description": "Maximum number of search results to retrieve.",
-            "minimum": 1,
-            "maximum": 20,
-            "default": 5
+            "description": "Optional recency filter in days for search results.",
+            "minimum": 0
           }
         },
         "required": ["query"]
       }
     },
     {
+      "type": "function",
       "id": "file_search",
       "name": "file_search",
-      "object": "tool",
-      "type": "function",
-      "description": "Search across files and vector stores connected to this relay.",
+      "description": "Search across uploaded files or vector stores to retrieve relevant chunks of data.",
       "parameters": {
         "type": "object",
         "properties": {
           "query": {
             "type": "string",
-            "description": "Search query string describing what to look up in files or vector stores."
+            "description": "Natural language query to match against indexed content."
           },
           "top_k": {
             "type": "integer",
-            "description": "Maximum number of relevant chunks or documents to return.",
+            "description": "Maximum number of matches to return.",
             "minimum": 1,
-            "maximum": 50,
             "default": 10
           },
-          "filters": {
-            "type": "object",
-            "description": "Optional metadata filters to narrow search results (e.g. file type, tags, or source).",
-            "additionalProperties": {
-              "type": ["string", "number", "boolean"]
-            }
+          "vector_store_id": {
+            "type": "string",
+            "description": "Optional vector store identifier to restrict search."
           }
         },
         "required": ["query"]
       }
     },
     {
-      "id": "code_interpreter",
-      "name": "code_interpreter",
-      "object": "tool",
       "type": "function",
-      "description": "Execute Python code in a sandbox for calculations, data analysis, and other utilities.",
+      "id": "retrieval",
+      "name": "retrieval",
+      "description": "Higher-level retrieval abstraction built on top of vector stores / file search.",
       "parameters": {
         "type": "object",
         "properties": {
-          "code": {
+          "query": {
             "type": "string",
-            "description": "Python code to execute."
+            "description": "User question to answer using retrieved context."
           },
-          "files": {
+          "top_k": {
+            "type": "integer",
+            "description": "Number of documents or chunks to retrieve.",
+            "minimum": 1,
+            "default": 8
+          },
+          "vector_store_ids": {
             "type": "array",
-            "description": "Optional list of file IDs to make available in the runtime environment.",
-            "items": {
-              "type": "string"
-            }
+            "description": "List of vector store IDs to search.",
+            "items": { "type": "string" }
           }
         },
-        "required": ["code"]
+        "required": ["query"]
       }
     },
     {
+      "type": "function",
       "id": "image_generation",
       "name": "image_generation",
-      "object": "tool",
-      "type": "function",
-      "description": "Generate images using the OpenAI image generation API via this relay.",
+      "description": "Generate images from text prompts using the OpenAI images API.",
       "parameters": {
         "type": "object",
         "properties": {
           "prompt": {
             "type": "string",
-            "description": "Text prompt describing the desired image."
+            "description": "Description of the image to generate."
           },
           "size": {
             "type": "string",
-            "description": "Image size, e.g. '1024x1024', '512x512'.",
+            "description": "Requested image size (e.g. 1024x1024).",
             "default": "1024x1024"
           },
           "n": {
             "type": "integer",
             "description": "Number of images to generate.",
             "minimum": 1,
-            "maximum": 10,
+            "maximum": 4,
             "default": 1
-          },
-          "response_format": {
-            "type": "string",
-            "description": "Response format for the generated image(s), e.g. 'b64_json' or 'url'.",
-            "default": "b64_json"
           }
         },
         "required": ["prompt"]
       }
     },
     {
+      "type": "function",
+      "id": "code_interpreter",
+      "name": "code_interpreter",
+      "description": "Execute code in a sandboxed environment (similar to Code Interpreter).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "Programming language to use (e.g. python).",
+            "default": "python"
+          },
+          "code": {
+            "type": "string",
+            "description": "Code snippet to execute."
+          },
+          "files": {
+            "type": "array",
+            "description": "Optional file IDs to attach before execution.",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["code"]
+      }
+    },
+    {
+      "type": "function",
+      "id": "computer_use",
+      "name": "computer_use",
+      "description": "Control a computer environment: open apps, browse, click, type, etc.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "Natural language description of the computer task to perform."
+          }
+        },
+        "required": ["task"]
+      }
+    },
+    {
+      "type": "function",
+      "id": "apply_patch",
+      "name": "apply_patch",
+      "description": "Apply patch-style edits to text or files (e.g. unified diff patches).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "The original content to be modified."
+          },
+          "patch": {
+            "type": "string",
+            "description": "Patch instructions or diff to apply."
+          }
+        },
+        "required": ["target", "patch"]
+      }
+    },
+    {
+      "type": "function",
+      "id": "shell",
+      "name": "shell",
+      "description": "Execute shell commands in a controlled environment.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Shell command to execute."
+          },
+          "timeout": {
+            "type": "integer",
+            "description": "Maximum execution time in seconds.",
+            "minimum": 1,
+            "default": 30
+          }
+        },
+        "required": ["command"]
+      }
+    },
+    {
+      "type": "function",
+      "id": "local_shell",
+      "name": "local_shell",
+      "description": "Execute shell commands on a local or on-prem runtime (local-shell tooling).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Shell command to execute locally."
+          },
+          "working_directory": {
+            "type": "string",
+            "description": "Optional working directory path."
+          },
+          "timeout": {
+            "type": "integer",
+            "description": "Maximum execution time in seconds.",
+            "minimum": 1,
+            "default": 30
+          }
+        },
+        "required": ["command"]
+      }
+    },
+    {
+      "type": "function",
+      "id": "mcp_connectors",
+      "name": "mcp_connectors",
+      "description": "Query external systems via MCP connectors (databases, SaaS tools, internal APIs).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "type": "string",
+            "description": "MCP server identifier or name."
+          },
+          "method": {
+            "type": "string",
+            "description": "Server-defined method or command."
+          },
+          "arguments": {
+            "type": "object",
+            "description": "JSON-serialisable arguments for the MCP call.",
+            "additionalProperties": true
+          }
+        },
+        "required": ["server", "method"]
+      }
+    },
+    {
+      "type": "function",
       "id": "audio_transcription",
       "name": "audio_transcription",
-      "object": "tool",
-      "type": "function",
-      "description": "Transcribe audio files into text using OpenAI audio models.",
+      "description": "Transcribe audio to text using the OpenAI audio transcription endpoints.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -135,90 +252,71 @@
           },
           "language": {
             "type": "string",
-            "description": "Optional language code for the transcription (e.g. 'en')."
-          },
-          "prompt": {
-            "type": "string",
-            "description": "Optional prompt to guide the transcription style or context."
+            "description": "Optional language hint for transcription."
           }
         },
         "required": ["file_id"]
       }
     },
     {
-      "id": "audio_speech",
-      "name": "audio_speech",
-      "object": "tool",
       "type": "function",
-      "description": "Convert text to speech audio using OpenAI text-to-speech models.",
+      "id": "audio_generation",
+      "name": "audio_generation",
+      "description": "Generate speech audio from text.",
       "parameters": {
         "type": "object",
         "properties": {
-          "input": {
+          "text": {
             "type": "string",
-            "description": "Text to synthesize into speech."
+            "description": "Text to synthesise as speech."
           },
           "voice": {
             "type": "string",
-            "description": "Voice preset to use (e.g. 'alloy').",
-            "default": "alloy"
-          },
-          "format": {
-            "type": "string",
-            "description": "Audio format to return, e.g. 'mp3' or 'wav'.",
-            "default": "mp3"
+            "description": "Optional voice preset."
           }
         },
-        "required": ["input"]
+        "required": ["text"]
       }
     },
     {
-      "id": "audio_translation",
-      "name": "audio_translation",
-      "object": "tool",
       "type": "function",
-      "description": "Translate spoken audio into another language.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "file_id": {
-            "type": "string",
-            "description": "File ID of the audio to translate."
-          },
-          "target_language": {
-            "type": "string",
-            "description": "Target language code (e.g. 'en', 'es', 'fr').",
-            "default": "en"
-          }
-        },
-        "required": ["file_id"]
-      }
-    },
-    {
       "id": "video_generation",
       "name": "video_generation",
-      "object": "tool",
-      "type": "function",
-      "description": "Generate or edit videos using the OpenAI Video API via this relay.",
+      "description": "Generate or remix videos using the OpenAI videos API.",
       "parameters": {
         "type": "object",
         "properties": {
           "prompt": {
             "type": "string",
-            "description": "Text description of the desired video."
+            "description": "Description of the video to generate or the edit instructions."
           },
-          "duration": {
-            "type": "number",
-            "description": "Approximate video duration in seconds.",
-            "default": 5
-          },
-          "aspect_ratio": {
+          "mode": {
             "type": "string",
-            "description": "Optional aspect ratio, e.g. '16:9', '9:16', or '1:1'.",
-            "default": "16:9"
+            "description": "Generation mode such as 'create' or 'remix'.",
+            "default": "create"
           }
         },
         "required": ["prompt"]
+      }
+    },
+    {
+      "type": "function",
+      "id": "realtime_session",
+      "name": "realtime_session",
+      "description": "Establish a realtime session (WebRTC/WebSocket/SIP) with a model like gpt-4o-realtime-preview.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "session_type": {
+            "type": "string",
+            "description": "Type of realtime session (websocket, webrtc, sip).",
+            "default": "websocket"
+          },
+          "instructions": {
+            "type": "string",
+            "description": "Optional high-level instructions for the realtime agent."
+          }
+        }
       }
     }
   ]
