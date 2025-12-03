@@ -1,75 +1,35 @@
-# app/routes/containers.py
-
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger
 
-router = APIRouter(tags=["containers"])
+router = APIRouter(
+    prefix="/v1",
+    tags=["containers"],
+)
 
 
-@router.post("/v1/containers")
-async def create_container(request: Request):
+@router.api_route(
+    "/containers",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+)
+async def proxy_containers_root(request: Request) -> Response:
     """
-    Proxy for: POST https://api.openai.com/v1/containers
+    Generic proxy for /v1/containers.
     """
+    logger.info("→ [containers] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
-@router.get("/v1/containers")
-async def list_containers(request: Request):
+@router.api_route(
+    "/containers/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+)
+async def proxy_containers_subpaths(path: str, request: Request) -> Response:
     """
-    Proxy for: GET https://api.openai.com/v1/containers
+    Generic proxy for any /v1/containers/* sub-path, including `/file`.
     """
-    return await forward_openai_request(request)
-
-
-@router.get("/v1/containers/{container_id}")
-async def retrieve_container(request: Request, container_id: str):
-    """
-    Proxy for: GET https://api.openai.com/v1/containers/{container_id}
-    """
-    return await forward_openai_request(request)
-
-
-@router.delete("/v1/containers/{container_id}")
-async def delete_container(request: Request, container_id: str):
-    """
-    Proxy for: DELETE https://api.openai.com/v1/containers/{container_id}
-    """
-    return await forward_openai_request(request)
-
-
-@router.post("/v1/containers/{container_id}/files")
-async def upload_container_file(request: Request, container_id: str):
-    """
-    Proxy for: POST https://api.openai.com/v1/containers/{container_id}/files
-    """
-    return await forward_openai_request(request)
-
-
-@router.get("/v1/containers/{container_id}/files")
-async def list_container_files(request: Request, container_id: str):
-    """
-    Proxy for: GET https://api.openai.com/v1/containers/{container_id}/files
-    """
-    return await forward_openai_request(request)
-
-
-@router.get("/v1/containers/{container_id}/files/{file_id}/content")
-async def get_container_file_content(request: Request, container_id: str, file_id: str):
-    """
-    Proxy for:
-      GET https://api.openai.com/v1/containers/{container_id}/files/{file_id}/content
-    """
-    return await forward_openai_request(request)
-
-
-@router.delete("/v1/containers/{container_id}/files/{file_id}")
-async def delete_container_file(request: Request, container_id: str, file_id: str):
-    """
-    Proxy for:
-      DELETE https://api.openai.com/v1/containers/{container_id}/files/{file_id}
-    """
+    logger.info("→ [containers/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
