@@ -2,61 +2,40 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Request
 
 from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
 
-router = APIRouter(prefix="/v1", tags=["batches"])
+router = APIRouter(tags=["batches"])
 
 
-@router.post("/batches")
-async def create_batch(request: Request) -> Response:
+@router.post("/v1/batches")
+async def create_batch(request: Request):
     """
-    Thin proxy for OpenAI Batch API:
-    POST https://api.openai.com/v1/batches
+    Proxy for: POST https://api.openai.com/v1/batches
     """
-    logger.info(
-        "Relay: create batch",
-        extra={"path": "/v1/batches", "method": "POST"},
-    )
     return await forward_openai_request(request)
 
 
-@router.get("/batches")
-async def list_batches(request: Request) -> Response:
+@router.get("/v1/batches")
+async def list_batches(request: Request):
     """
-    Thin proxy:
-    GET https://api.openai.com/v1/batches
+    Proxy for: GET https://api.openai.com/v1/batches
     """
-    logger.info(
-        "Relay: list batches",
-        extra={"path": "/v1/batches", "method": "GET"},
-    )
     return await forward_openai_request(request)
 
 
-@router.get("/batches/{batch_id}")
-async def retrieve_batch(batch_id: str, request: Request) -> Response:
+@router.get("/v1/batches/{batch_id}")
+async def retrieve_batch(request: Request, batch_id: str):
     """
-    Thin proxy:
-    GET https://api.openai.com/v1/batches/{batch_id}
+    Proxy for: GET https://api.openai.com/v1/batches/{batch_id}
     """
-    logger.info(
-        "Relay: retrieve batch",
-        extra={"path": f"/v1/batches/{batch_id}", "method": "GET"},
-    )
     return await forward_openai_request(request)
 
 
-@router.post("/batches/{batch_id}/cancel")
-async def cancel_batch(batch_id: str, request: Request) -> Response:
+@router.post("/v1/batches/{batch_id}/cancel")
+async def cancel_batch(request: Request, batch_id: str):
     """
-    Thin proxy:
-    POST https://api.openai.com/v1/batches/{batch_id}/cancel
+    Proxy for: POST https://api.openai.com/v1/batches/{batch_id}/cancel
     """
-    logger.info(
-        "Relay: cancel batch",
-        extra={"path": f"/v1/batches/{batch_id}/cancel", "method": "POST"},
-    )
     return await forward_openai_request(request)
