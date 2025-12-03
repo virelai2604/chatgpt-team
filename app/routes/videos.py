@@ -1,10 +1,12 @@
-# app/routes/videos.py
 from __future__ import annotations
+
+import logging
 
 from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/v1",
@@ -17,9 +19,11 @@ async def create_video(request: Request) -> Response:
     """
     POST /v1/videos
 
-    Create a new video generation or editing job.
+    Create a video generation job.
+    Mirrors:
+    https://platform.openai.com/docs/api-reference/videos
     """
-    logger.info("→ [videos] POST %s", request.url.path)
+    logger.debug("Proxying POST /v1/videos to OpenAI")
     return await forward_openai_request(request)
 
 
@@ -30,29 +34,7 @@ async def list_videos(request: Request) -> Response:
 
     List video jobs.
     """
-    logger.info("→ [videos] GET %s", request.url.path)
-    return await forward_openai_request(request)
-
-
-@router.post("/videos/remix")
-async def remix_video(request: Request) -> Response:
-    """
-    POST /v1/videos/remix
-
-    Remix an existing video.
-    """
-    logger.info("→ [videos] POST %s", request.url.path)
-    return await forward_openai_request(request)
-
-
-@router.post("/videos/edits")
-async def edit_video(request: Request) -> Response:
-    """
-    POST /v1/videos/edits
-
-    Edit an existing video (if supported by upstream API).
-    """
-    logger.info("→ [videos] POST %s", request.url.path)
+    logger.debug("Proxying GET /v1/videos to OpenAI")
     return await forward_openai_request(request)
 
 
@@ -61,9 +43,9 @@ async def retrieve_video(video_id: str, request: Request) -> Response:
     """
     GET /v1/videos/{video_id}
 
-    Retrieve video job metadata.
+    Retrieve a video job.
     """
-    logger.info("→ [videos] GET %s", request.url.path)
+    logger.debug("Proxying GET /v1/videos/%s to OpenAI", video_id)
     return await forward_openai_request(request)
 
 
@@ -72,33 +54,29 @@ async def delete_video(video_id: str, request: Request) -> Response:
     """
     DELETE /v1/videos/{video_id}
 
-    Delete a video job (if supported).
+    Delete a video job.
     """
-    logger.info("→ [videos] DELETE %s", request.url.path)
+    logger.debug("Proxying DELETE /v1/videos/%s to OpenAI", video_id)
     return await forward_openai_request(request)
 
 
 @router.get("/videos/{video_id}/content")
-async def retrieve_video_content(video_id: str, request: Request) -> Response:
+async def download_video_content(video_id: str, request: Request) -> Response:
     """
     GET /v1/videos/{video_id}/content
 
-    Retrieve rendered video content.
+    Download rendered video content.
     """
-    logger.info("→ [videos] GET %s", request.url.path)
+    logger.debug("Proxying GET /v1/videos/%s/content to OpenAI", video_id)
     return await forward_openai_request(request)
 
 
-@router.api_route(
-    "/videos/{path:path}",
-    methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"],
-)
-async def proxy_videos_subpaths(path: str, request: Request) -> Response:
+@router.post("/videos/{video_id}/remix")
+async def remix_video(video_id: str, request: Request) -> Response:
     """
-    Catch-all proxy for any future /v1/videos/* subpaths.
+    POST /v1/videos/{video_id}/remix
 
-    This keeps the relay compatible with future Video API additions
-    without code changes.
+    Remix a completed video job.
     """
-    logger.info("→ [videos/*] %s %s", request.method, request.url.path)
+    logger.debug("Proxying POST /v1/videos/%s/remix to OpenAI", video_id)
     return await forward_openai_request(request)
