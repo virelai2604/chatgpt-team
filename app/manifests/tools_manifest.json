@@ -16,7 +16,7 @@
           },
           "recency_days": {
             "type": "integer",
-            "description": "How many days back to prioritize in the search (1 = last 24h, 7 = last week, etc.).",
+            "description": "How many days back to prioritize in the search (e.g. 1 = last 24h, 7 = last week).",
             "minimum": 1,
             "default": 7
           },
@@ -24,6 +24,7 @@
             "type": "integer",
             "description": "Maximum number of search results to return.",
             "minimum": 1,
+            "maximum": 20,
             "default": 5
           }
         },
@@ -35,49 +36,25 @@
       "name": "file_search",
       "object": "tool",
       "type": "function",
-      "description": "Search indexed documents or vector stores for semantically relevant passages.",
+      "description": "Search user-provided documents or vector stores to retrieve relevant passages.",
       "parameters": {
         "type": "object",
         "properties": {
           "query": {
             "type": "string",
-            "description": "Natural language query to match against stored documents."
+            "description": "Query string describing what information to retrieve from the files."
           },
           "top_k": {
             "type": "integer",
-            "description": "Number of relevant chunks to return.",
+            "description": "Maximum number of chunks or documents to return.",
             "minimum": 1,
-            "default": 5
+            "maximum": 50,
+            "default": 8
           },
-          "filters": {
-            "type": "object",
-            "description": "Optional metadata filters (e.g. {\"source\": \"spec\"}).",
-            "additionalProperties": {
-              "type": ["string", "number", "boolean"]
-            }
-          }
-        },
-        "required": ["query"]
-      }
-    },
-    {
-      "id": "retrieval",
-      "name": "retrieval",
-      "object": "tool",
-      "type": "function",
-      "description": "High-level retrieval helper that combines file and vector store search.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "description": "Natural language query to retrieve information for."
-          },
-          "top_k": {
-            "type": "integer",
-            "description": "Maximum number of results.",
-            "minimum": 1,
-            "default": 10
+          "include_metadata": {
+            "type": "boolean",
+            "description": "Whether to return document metadata (file names, ids, etc.).",
+            "default": true
           }
         },
         "required": ["query"]
@@ -88,23 +65,18 @@
       "name": "image_generation",
       "object": "tool",
       "type": "function",
-      "description": "Generate images from a natural language prompt using the Images API.",
+      "description": "Generate images from natural language prompts using the images API.",
       "parameters": {
         "type": "object",
         "properties": {
           "prompt": {
             "type": "string",
-            "description": "Text prompt describing the desired image."
+            "description": "Detailed description of the image to generate."
           },
           "size": {
             "type": "string",
-            "description": "Image size such as 1024x1024 or 1024x576.",
+            "description": "Requested image size (for example, 512x512, 1024x1024).",
             "default": "1024x1024"
-          },
-          "quality": {
-            "type": "string",
-            "description": "Image quality, for example 'standard' or 'high'.",
-            "default": "standard"
           },
           "n": {
             "type": "integer",
@@ -118,117 +90,30 @@
       }
     },
     {
-      "id": "image_edit",
-      "name": "image_edit",
-      "object": "tool",
-      "type": "function",
-      "description": "Edit existing images or create variations using the Images API.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "instruction": {
-            "type": "string",
-            "description": "Plain-language description of how to edit or vary the given image."
-          },
-          "mask_hint": {
-            "type": "string",
-            "description": "Optional description of the mask region to modify."
-          }
-        },
-        "required": ["instruction"]
-      }
-    },
-    {
       "id": "code_interpreter",
       "name": "code_interpreter",
       "object": "tool",
       "type": "function",
-      "description": "Use a sandboxed Python environment for computation, data analysis, and plotting.",
+      "description": "Execute small code snippets (e.g. Python) for calculations, data inspection, and plotting.",
       "parameters": {
         "type": "object",
         "properties": {
-          "task": {
+          "language": {
             "type": "string",
-            "description": "Natural language description of the computation or analysis to perform."
-          }
-        },
-        "required": ["task"]
-      }
-    },
-    {
-      "id": "shell",
-      "name": "shell",
-      "object": "tool",
-      "type": "function",
-      "description": "Execute carefully constrained shell commands on a controlled environment.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "command": {
-            "type": "string",
-            "description": "Shell command to execute."
+            "description": "Programming language of the snippet (e.g. 'python').",
+            "default": "python"
           },
-          "cwd": {
+          "code": {
             "type": "string",
-            "description": "Optional working directory."
-          }
-        },
-        "required": ["command"]
-      }
-    },
-    {
-      "id": "local_shell",
-      "name": "local_shell",
-      "object": "tool",
-      "type": "function",
-      "description": "Execute shell commands on a local development environment with stricter constraints.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "command": {
-            "type": "string",
-            "description": "Local shell command to execute."
-          }
-        },
-        "required": ["command"]
-      }
-    },
-    {
-      "id": "computer_use",
-      "name": "computer_use",
-      "object": "tool",
-      "type": "function",
-      "description": "Plan and coordinate multi-step interactions with a graphical environment (computer use).",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "objective": {
-            "type": "string",
-            "description": "High-level description of the goal to achieve via computer actions."
-          }
-        },
-        "required": ["objective"]
-      }
-    },
-    {
-      "id": "apply_patch",
-      "name": "apply_patch",
-      "object": "tool",
-      "type": "function",
-      "description": "Apply a textual patch or diff to an existing file or buffer.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Path or identifier of the file to patch."
+            "description": "The code to execute."
           },
-          "patch": {
+          "stdin": {
             "type": "string",
-            "description": "Unified diff style patch to apply."
+            "description": "Optional standard input for the process.",
+            "nullable": true
           }
         },
-        "required": ["path", "patch"]
+        "required": ["code"]
       }
     },
     {
@@ -236,47 +121,166 @@
       "name": "mcp_connector",
       "object": "tool",
       "type": "function",
-      "description": "Discovery and high-level invocation of MCP (Model Context Protocol) connectors.",
+      "description": "Call an MCP connector/server and invoke one of its tools.",
       "parameters": {
         "type": "object",
         "properties": {
-          "connector_id": {
+          "server": {
             "type": "string",
-            "description": "Identifier of the MCP connector to use."
+            "description": "The MCP server or connector name to call."
           },
-          "operation": {
+          "tool": {
             "type": "string",
-            "description": "Operation or method name to invoke on the connector."
+            "description": "Tool name on the MCP server to invoke."
           },
           "arguments": {
             "type": "object",
-            "description": "Structured arguments for the operation.",
-            "additionalProperties": true
+            "description": "JSON object of arguments to pass to the selected tool.",
+            "additionalProperties": true,
+            "default": {}
           }
         },
-        "required": ["connector_id", "operation"]
+        "required": ["server", "tool"]
       }
     },
     {
-      "id": "additional_tool",
-      "name": "additional_tool",
+      "id": "apply_patch",
+      "name": "apply_patch",
       "object": "tool",
       "type": "function",
-      "description": "Placeholder for any additional relay-specific tool.",
+      "description": "Apply structured patches to JSON or text documents (for example, configuration updates).",
       "parameters": {
         "type": "object",
         "properties": {
-          "name": {
+          "target": {
             "type": "string",
-            "description": "Logical name of the additional tool."
+            "description": "Identifier of the target document or resource to patch."
           },
-          "payload": {
+          "patch": {
             "type": "object",
-            "description": "Arbitrary JSON payload to drive the tool.",
+            "description": "Patch payload describing the changes to apply.",
             "additionalProperties": true
+          },
+          "patch_type": {
+            "type": "string",
+            "description": "Type of patch to apply (e.g. json_merge, json_patch, text_replace).",
+            "default": "json_merge"
           }
         },
-        "required": ["name"]
+        "required": ["target", "patch"]
+      }
+    },
+    {
+      "id": "shell",
+      "name": "shell",
+      "object": "tool",
+      "type": "function",
+      "description": "Execute shell commands in a controlled environment.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Shell command to execute."
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "description": "Maximum time in seconds to allow the command to run.",
+            "minimum": 1,
+            "maximum": 300,
+            "default": 60
+          },
+          "working_directory": {
+            "type": "string",
+            "description": "Optional working directory for the command.",
+            "nullable": true
+          }
+        },
+        "required": ["command"]
+      }
+    },
+    {
+      "id": "retrieval",
+      "name": "retrieval",
+      "object": "tool",
+      "type": "function",
+      "description": "High-level retrieval wrapper to fetch and synthesize information from multiple sources (files, vector stores, connectors).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural language query describing the information to retrieve."
+          },
+          "sources": {
+            "type": "array",
+            "description": "List of logical sources to search over (e.g. ['files', 'web', 'mcp']).",
+            "items": {
+              "type": "string"
+            },
+            "default": ["files"]
+          },
+          "max_items": {
+            "type": "integer",
+            "description": "Maximum number of items to aggregate.",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "id": "computer_use",
+      "name": "computer_use",
+      "object": "tool",
+      "type": "function",
+      "description": "Plan and issue high-level computer control actions (for example, open an app, click a button, type text).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "High-level action to perform (e.g. 'open_browser', 'click', 'type')."
+          },
+          "target": {
+            "type": "string",
+            "description": "The target element or application when applicable.",
+            "nullable": true
+          },
+          "details": {
+            "type": "object",
+            "description": "Additional structured parameters for the action.",
+            "additionalProperties": true,
+            "default": {}
+          }
+        },
+        "required": ["action"]
+      }
+    },
+    {
+      "id": "local_shell",
+      "name": "local_shell",
+      "object": "tool",
+      "type": "function",
+      "description": "Run shell commands against the local project environment (for example, git status, pytest).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Command to run inside the local project workspace."
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "description": "Maximum runtime for the command.",
+            "minimum": 1,
+            "maximum": 300,
+            "default": 60
+          }
+        },
+        "required": ["command"]
       }
     }
   ]
