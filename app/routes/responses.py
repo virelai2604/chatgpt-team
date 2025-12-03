@@ -1,13 +1,17 @@
-# app/routes/responses.py
-
 from __future__ import annotations
+
+import logging
 
 from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
 
-router = APIRouter(prefix="/v1", tags=["responses"])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(
+    prefix="/v1",
+    tags=["responses"],
+)
 
 
 @router.post("/responses")
@@ -15,9 +19,11 @@ async def create_response(request: Request) -> Response:
     """
     POST /v1/responses
 
-    Create a model response (core Responses API entrypoint).
+    Create a model response.
+    Mirrors:
+    https://platform.openai.com/docs/api-reference/responses/create
     """
-    logger.info("→ [responses] POST %s", request.url.path)
+    logger.debug("Proxying POST /v1/responses to OpenAI")
     return await forward_openai_request(request)
 
 
@@ -26,9 +32,11 @@ async def retrieve_response(response_id: str, request: Request) -> Response:
     """
     GET /v1/responses/{response_id}
 
-    Retrieve a single model response by ID.
+    Retrieve a response.
+    Mirrors:
+    https://platform.openai.com/docs/api-reference/responses/retrieve
     """
-    logger.info("→ [responses] GET %s", request.url.path)
+    logger.debug("Proxying GET /v1/responses/%s to OpenAI", response_id)
     return await forward_openai_request(request)
 
 
@@ -37,9 +45,11 @@ async def delete_response(response_id: str, request: Request) -> Response:
     """
     DELETE /v1/responses/{response_id}
 
-    Delete a response by ID.
+    Delete a response.
+    Mirrors:
+    https://platform.openai.com/docs/api-reference/responses/delete
     """
-    logger.info("→ [responses] DELETE %s", request.url.path)
+    logger.debug("Proxying DELETE /v1/responses/%s to OpenAI", response_id)
     return await forward_openai_request(request)
 
 
@@ -48,32 +58,40 @@ async def cancel_response(response_id: str, request: Request) -> Response:
     """
     POST /v1/responses/{response_id}/cancel
 
-    Cancel a background response.
+    Cancel a response in progress.
+    Mirrors:
+    https://platform.openai.com/docs/api-reference/responses/cancel
     """
-    logger.info("→ [responses] POST %s", request.url.path)
+    logger.debug("Proxying POST /v1/responses/%s/cancel to OpenAI", response_id)
     return await forward_openai_request(request)
 
 
-@router.get("/responses/{response_id}/input_items")
-async def list_response_input_items(
+@router.api_route(
+    "/responses/{response_id}/{subpath:path}",
+    methods=["GET", "POST"],
+)
+async def proxy_response_subroutes(
     response_id: str,
+    subpath: str,
     request: Request,
 ) -> Response:
     """
-    GET /v1/responses/{response_id}/input_items
+    Generic proxy for any nested Responses sub-routes, such as:
 
-    List input items that were used to generate this response.
+    - /v1/responses/{response_id}/items
+    - /v1/responses/{response_id}/input-token-counts
+    - Any new future subpaths
+
+    This ensures we automatically cover:
+    https://platform.openai.com/docs/api-reference/responses/list-items
+    https://platform.openai.com/docs/api-reference/responses/get-input-token-counts
+    and any similar additions.
     """
-    logger.info("→ [responses] GET %s", request.url.path)
-    return await forward_openai_request(request)
-
-
-@router.post("/responses/input_tokens")
-async def get_input_token_counts(request: Request) -> Response:
-    """
-    POST /v1/responses/input_tokens
-
-    Compute input token counts for a given hypothetical response request.
-    """
-    logger.info("→ [responses] POST %s", request.url.path)
+    logger.debug(
+        "Proxying %s %s to OpenAI (response_id=%s, subpath=%s)",
+        request.method,
+        request.url.path,
+        response_id,
+        subpath,
+    )
     return await forward_openai_request(request)
