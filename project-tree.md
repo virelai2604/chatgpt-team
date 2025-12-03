@@ -64,7 +64,6 @@
       📄 __init__.py
       📄 actions.py
       📄 batches.py
-      📄 chatkit.py
       📄 containers.py
       📄 conversations.py
       📄 embeddings.py

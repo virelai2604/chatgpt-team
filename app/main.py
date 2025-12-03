@@ -1,94 +1,98 @@
 # app/main.py
-"""
-main.py — ChatGPT Team Relay Entry Point
-────────────────────────────────────────
-Unified app bootstrap for the OpenAI-compatible relay.
 
-Features:
-  • Forwards /v1/* calls to the upstream OpenAI API via per-family routers.
-  • Integrates JSON validation + orchestration middleware.
-  • Registers /v1/tools from the hosted tools manifest.
-  • Serves /schemas/openapi.yaml for ChatGPT Actions / Plugins.
-  • Exposes /v1/health for Render health checks.
-"""
+from __future__ import annotations
 
-import os
-from pathlib import Path
-
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
 
 from app.core.config import settings
-from app.middleware.validation import SchemaValidationMiddleware
 from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
 from app.middleware.relay_auth import RelayAuthMiddleware
-from app.utils.error_handler import register_exception_handlers
 from app.routes.register_routes import register_routes
+from app.utils.error_handler import register_exception_handlers
+
+
+def _split_csv(value: str) -> list[str]:
+    """
+    Utility to turn comma-separated env strings into clean lists.
+
+    Example:
+        "https://chat.openai.com, https://platform.openai.com"
+        -> ["https://chat.openai.com", "https://platform.openai.com"]
+    """
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def create_app() -> FastAPI:
-    # Load .env (no-op on Render where env vars are already injected)
-    load_dotenv()
-
-    relay_name = settings.RELAY_NAME
-    bifl_version = os.getenv("BIFL_VERSION", "dev")
+    """
+    Create and configure the FastAPI application for the ChatGPT Team Relay.
+    """
 
     app = FastAPI(
-        title=relay_name,
-        version=bifl_version,
-        docs_url="/docs",
-        openapi_url="/openapi.json",
+        title=settings.RELAY_NAME,
+        version="1.0.0",
     )
 
     # -------- CORS --------
+    cors_origins = _split_csv(settings.CORS_ALLOW_ORIGINS)
+    cors_methods = _split_csv(settings.CORS_ALLOW_METHODS)
+    cors_headers = _split_csv(settings.CORS_ALLOW_HEADERS)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=cors_methods,
+        allow_headers=cors_headers,
     )
 
-    # -------- Relay auth --------
-    if settings.RELAY_AUTH_ENABLED:
-        relay_key = getattr(settings, "RELAY_KEY", "")
-        app.add_middleware(RelayAuthMiddleware, relay_key=relay_key)
-
-    # -------- P4 Orchestrator (AsyncOpenAI client on request.state) --------
-    app.add_middleware(P4OrchestratorMiddleware)
-        
-
-    # -------- Schema validation middleware (logging + future hook) --------
-    schema_path = Path("schemas/openapi.yaml")
+    # -------- P4 orchestrator (OpenAI client + config) --------
+    # This middleware centralizes OpenAI client config, streaming behavior,
+    # timeouts, and naming. Routers simply call `forward_openai_request`.
     app.add_middleware(
-        SchemaValidationMiddleware,
-        schema_path=str(schema_path) if schema_path.is_file() else None,
+        P4OrchestratorMiddleware,
+        openai_api_base=str(settings.OPENAI_API_BASE),
+        default_model=settings.DEFAULT_MODEL,
+        realtime_model=settings.REALTIME_MODEL,
+        enable_stream=settings.ENABLE_STREAM,
+        chain_wait_mode=settings.CHAIN_WAIT_MODE,
+        proxy_timeout=settings.PROXY_TIMEOUT,
+        relay_timeout=settings.RELAY_TIMEOUT,
+        relay_name=settings.RELAY_NAME,
     )
 
-    # -------- Routes --------
+    # -------- Relay key auth (protects /v1/*, but not health) --------
+    # RelayAuthMiddleware exempts `/health` and `/v1/health` internally.
+    if settings.RELAY_AUTH_ENABLED:
+        app.add_middleware(
+            RelayAuthMiddleware,
+            relay_key=settings.RELAY_KEY,
+        )
+
+    # -------- Routes & error handlers --------
+    # Register all /v1 routers:
+    #   - /health, /v1/health
+    #   - /v1/responses, /v1/conversations, /v1/embeddings, /v1/models
+    #   - /v1/files, /v1/images, /v1/videos, /v1/vector_stores
+    #   - /v1/realtime/sessions
+    #   - /v1/tools, /v1/actions/*
     register_routes(app)
 
-    # -------- Exception handlers (OpenAI-style error envelopes) --------
+    # Attach global exception handlers (OpenAI-style error envelopes, logging)
     register_exception_handlers(app)
-
-    # -------- OpenAPI YAML for ChatGPT Actions / Plugins --------
-    @app.get("/schemas/openapi.yaml", include_in_schema=False)
-    async def get_openapi_yaml():
-        if not schema_path.is_file():
-            return JSONResponse(
-                status_code=404,
-                content={
-                    "error": {
-                        "message": "schemas/openapi.yaml not found",
-                        "type": "invalid_request_error",
-                    }
-                },
-            )
-        return FileResponse(schema_path)
 
     return app
 
 
 app = create_app()
+
+# Optional: enable `python -m app.main` direct execution for local dev.
+if __name__ == "__main__":  # pragma: no cover
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host=settings.RELAY_HOST,
+        port=8000,
+        reload=True,
+    )
