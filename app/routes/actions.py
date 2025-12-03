@@ -2,217 +2,70 @@
 
 from __future__ import annotations
 
-import os
-import platform
-from datetime import datetime, timezone
-from typing import Any, Dict, Literal, Optional
+import json
+import logging
+from pathlib import Path
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 
-from app.api.forward_openai import forward_openai_from_parts
+logger = logging.getLogger("relay.actions")
 
-router = APIRouter(tags=["actions"])
+router = APIRouter(prefix="/v1", tags=["actions", "tools"])
 
-
-def _now_iso() -> str:
-    """
-    Return the current UTC time as an ISO-8601 string.
-    Used as default for BUILD_DATE in relay_info.
-    """
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _base_env() -> Dict[str, str]:
-    """
-    Shared environment snapshot used by both ping and relay_info.
-    """
-    return {
-        "app_mode": os.getenv("APP_MODE", "test"),
-        "environment": os.getenv("ENVIRONMENT", "local"),
-        "base_openai_api": os.getenv("OPENAI_API_BASE", "https://api.openai.com"),
-        "default_model": os.getenv("DEFAULT_MODEL")
-        or os.getenv("DEFAULT_OPENAI_MODEL")
-        or "gpt-4.1-mini",
-    }
-
-
-def _flat_relay_info() -> Dict[str, Any]:
-    """
-    Flat relay info used primarily by tests and lightweight monitors.
-    """
-    base = _base_env()
-    relay_name = os.getenv("RELAY_NAME", "ChatGPT Team Relay (pytest)")
-
-    return {
-        "relay_name": relay_name,
-        "environment": base["environment"],
-        "app_mode": base["app_mode"],
-        "base_openai_api": base["base_openai_api"],
-    }
-
-
-def _structured_relay_info() -> Dict[str, Any]:
-    """
-    Structured relay info used by /v1/actions/relay_info.
-    Mirrors the shape expected by orchestrator / Actions tooling.
-    """
-    base = _base_env()
-
-    relay = {
-        "name": os.getenv("RELAY_NAME", "ChatGPT Team Relay (pytest)"),
-        "app_mode": base["app_mode"],
-        "environment": base["environment"],
-        "version": os.getenv("RELAY_VERSION", "unknown"),
-    }
-
-    upstream = {
-        "base_url": base["base_openai_api"],
-        "default_model": base["default_model"],
-    }
-
-    system = {
-        "python_version": platform.python_version(),
-        "platform": platform.platform(),
-    }
-
-    build = {
-        "build_channel": os.getenv("BUILD_CHANNEL", "unknown"),
-        "version_source": os.getenv("VERSION_SOURCE", "unknown"),
-        "git_sha": os.getenv("GIT_SHA", "unknown"),
-        "build_date": os.getenv("BUILD_DATE", _now_iso()),
-    }
-
-    return {
-        "type": "relay.info",
-        "relay": relay,
-        "upstream": upstream,
-        "system": system,
-        "build": build,
-        "app_mode": base["app_mode"],
-        "environment": base["environment"],
-        "base_openai_api": base["base_openai_api"],
-    }
-
-
-@router.get("/actions/ping")
-@router.get("/v1/actions/ping")
-async def actions_ping() -> JSONResponse:
-    """
-    Simple liveness endpoint used by tests and external monitors.
-    Does not touch OpenAI; purely relay-local health.
-    """
-    base = _base_env()
-    payload = {
-        "object": "actions.ping",
-        "source": "chatgpt-team-relay",
-        "status": "ok",
-        "app_mode": base["app_mode"],
-        "environment": base["environment"],
-    }
-    return JSONResponse(payload, status_code=200)
-
-
-@router.get("/actions/relay_info", summary="Flat relay environment info")
-async def actions_relay_info_flat() -> Dict[str, Any]:
-    """
-    GET /actions/relay_info
-
-    Flat relay info used primarily by tests.
-    """
-    return _flat_relay_info()
-
-
-@router.get("/v1/actions/relay_info", summary="Structured relay environment info")
-async def actions_relay_info_v1() -> Dict[str, Any]:
-    """
-    GET /v1/actions/relay_info
-
-    Structured info used by Actions / orchestrator / Custom GPTs.
-    """
-    return _structured_relay_info()
-
-
-class OpenAIForwardPayload(BaseModel):
-    """
-    Payload for the generic Forward API endpoint.
-
-    Designed to be used as a ChatGPT Action / tool, e.g.:
-
-      {
-        "method": "POST",
-        "path": "/v1/responses",
-        "query": {"stream": true},
-        "body": { ... arbitrary OpenAI request body ... }
-      }
-
-    The relay injects its own Authorization header when calling upstream
-    OpenAI APIs, ignoring client-provided Authorization headers.
-    """
-
-    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"] = Field(
-        ...,
-        description="HTTP method to use for the upstream OpenAI request.",
-    )
-    path: str = Field(
-        ...,
-        description="Path to call on the upstream OpenAI API, e.g. '/v1/models'.",
-        examples=["/v1/models", "/v1/responses", "/v1/vector_stores"],
-    )
-    query: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Optional query parameters to append to the upstream request.",
-    )
-    body: Optional[Any] = Field(
-        default=None,
-        description="Optional JSON body to send to the upstream request.",
-    )
-    headers: Optional[Dict[str, str]] = Field(
-        default=None,
-        description=(
-            "Optional additional headers to send. "
-            "Authorization headers are always ignored; "
-            "the relay injects its own."
-        ),
-    )
-
-
-@router.post(
-    "/v1/actions/openai/forward",
-    summary="Generic Forward API for OpenAI endpoints",
+# Adjust to your actual location
+TOOLS_MANIFEST_PATH = (
+    Path(__file__).resolve().parent.parent / "manifests" / "tools_manifest.json"
 )
-async def actions_openai_forward(
-    payload: OpenAIForwardPayload,
-    request: Request,
-) -> Response:
+
+
+def load_tools_manifest() -> dict[str, Any]:
     """
-    Generic Forward API endpoint primarily for ChatGPT Actions / Agents.
+    Load the tools manifest from disk.
 
-    It allows a single tool (`openai_forward`) to reach any upstream OpenAI
-    endpoint through this relay without creating a new action for each path.
-
-    Security notes:
-      - Client-provided Authorization headers are ignored by the core forwarder.
-      - The relay always injects its own OPENAI_API_KEY for upstream calls.
-      - Recursive calls to this same endpoint are blocked.
+    This is used both by the relay API (for /v1/tools) and by the P4 orchestrator
+    when wiring tools into the agent. :contentReference[oaicite:7]{index=7}
     """
-    if payload.path.startswith("/v1/actions/openai/forward"):
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": {
-                    "message": "Recursive calls to /v1/actions/openai/forward are not allowed.",
-                    "type": "invalid_request_error",
-                    "code": "recursive_forward",
-                }
-            },
-        )
+    if not TOOLS_MANIFEST_PATH.exists():
+        logger.error("tools_manifest.json not found at %s", TOOLS_MANIFEST_PATH)
+        raise HTTPException(status_code=500, detail="Tools manifest not found")
 
-    return await forward_openai_from_parts(
-        method=payload.method,
-        path=payload.path,
-        query=payload.query,
-        body=payload.body,
-        headers=payload.headers,
-    )
+    try:
+        with TOOLS_MANIFEST_PATH.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Failed to load tools_manifest.json")
+        raise HTTPException(status_code=500, detail="Failed to load tools manifest") from exc
+
+    if not isinstance(data, dict) or data.get("object") != "list":
+        logger.error("Invalid tools_manifest.json format: %s", data)
+        raise HTTPException(status_code=500, detail="Invalid tools manifest format")
+
+    return data
+
+
+@router.get("/tools")
+async def list_tools() -> JSONResponse:
+    """
+    List all tools available to the agent, mirroring the GPTs/Actions concept.
+
+    This is *not* an OpenAI upstream endpoint; it is a local relay endpoint
+    exposing your manifest to the orchestrator / UI.
+    """
+    manifest = load_tools_manifest()
+    return JSONResponse(content=manifest)
+
+
+@router.get("/tools/{tool_id}")
+async def get_tool(tool_id: str) -> JSONResponse:
+    """
+    Fetch a single tool definition by id from tools_manifest.json.
+    """
+    manifest = load_tools_manifest()
+    tools = manifest.get("data", [])
+    for tool in tools:
+        if tool.get("id") == tool_id:
+            return JSONResponse(content=tool)
+
+    raise HTTPException(status_code=404, detail=f"Tool '{tool_id}' not found")
