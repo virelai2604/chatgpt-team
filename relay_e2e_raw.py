@@ -241,11 +241,15 @@ def ensure_vector_store(ctx: E2EContext) -> Optional[str]:
 
 def test_health(ctx: E2EContext) -> None:
     log("== Health checks ==")
+    # Use the relay-aware request helper so Authorization: Bearer <relay_key>
+    # is always sent (RelayAuthMiddleware protects /health and /v1/health).
     for base in (ctx.base_url, ctx.api_base):
+        resp = request(ctx, "GET", "/health", base=base)
         url = base.rstrip("/") + "/health"
-        resp = requests.get(url, timeout=30)
         if resp.status_code != 200:
-            raise AssertionError(f"Health check failed for {url}: {resp.status_code} {resp.text}")
+            raise AssertionError(
+                f"Health check failed for {url}: {resp.status_code} {resp.text}"
+            )
         try:
             data = resp.json()
         except Exception:
