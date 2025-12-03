@@ -12,8 +12,6 @@
   📄 relay_e2e_raw.py
   📄 render.yaml
   📄 requirements.txt
-  📁 scripts
-    📄 check_relay_health.py
   📁 static
     📁 .well-known
       📄 __init__.py
@@ -65,6 +63,9 @@
     📁 routes
       📄 __init__.py
       📄 actions.py
+      📄 batches.py
+      📄 chatkit.py
+      📄 containers.py
       📄 conversations.py
       📄 embeddings.py
       📄 files.py
