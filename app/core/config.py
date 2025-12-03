@@ -14,165 +14,206 @@ class Settings(BaseSettings):
     Central configuration for the ChatGPT Team Relay.
 
     All values are loaded from environment variables or `.env`.
-    Compatible with pydantic v2 + pydantic-settings v2.
+    This model is the single source of truth for:
+      - OpenAI upstream configuration (v1/v2 & realtime)
+      - Relay identity, timeouts, streaming/chain behavior
+      - CORS policy for ChatGPT / platform usage
+      - Tools manifest and validation schema (PDF) path
+      - Logging and environment metadata
     """
 
-    # ------------------------------------------------------------------
-    # Core relay / app mode
-    # ------------------------------------------------------------------
-    ENVIRONMENT: str = Field(
-        default="local",
-        alias="ENVIRONMENT",
-        description="High-level deployment environment (local, staging, production, etc.).",
-    )
+    # -------------------------------------------------------------------------
+    # Core environment / app mode
+    # -------------------------------------------------------------------------
 
     APP_MODE: str = Field(
         default="development",
-        alias="APP_MODE",
-        description="Application mode (development, test, production) for feature flags/logging.",
+        description="High-level mode (development / production / test).",
+    )
+    ENVIRONMENT: str = Field(
+        default="development",
+        description="Deployment environment label (e.g., local, staging, prod).",
     )
 
-    # ------------------------------------------------------------------
-    # OpenAI upstream config
-    # ------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Logging configuration
+    # -------------------------------------------------------------------------
+
+    LOG_LEVEL: str = Field(
+        default="info",
+        description="Root log level (debug, info, warning, error, critical).",
+    )
+    LOG_FORMAT: str = Field(
+        default="console",
+        description="Logging format (console/json/etc).",
+    )
+    LOG_COLOR: bool = Field(
+        default=True,
+        description="Whether to emit colorized logs in console mode.",
+    )
+
+    # -------------------------------------------------------------------------
+    # OpenAI upstream configuration
+    # -------------------------------------------------------------------------
+
+    # IMPORTANT: no `/v1` suffix – the client/forwarder appends paths as needed.
     OPENAI_API_BASE: AnyHttpUrl = Field(
         default="https://api.openai.com",
-        alias="OPENAI_API_BASE",
-        description="Base URL for the OpenAI API.",
+        description="Base URL for OpenAI API (no trailing /v1).",
     )
 
     OPENAI_API_KEY: str = Field(
-        default="",
-        alias="OPENAI_API_KEY",
-        description="Primary OpenAI API key used by the relay.",
+        default="sk-proj-REPLACE_WITH_YOUR_LOCAL_KEY",
+        description="Project or account API key used to call OpenAI upstream.",
     )
 
-    # Default models
-    DEFAULT_MODEL: str = Field(
-        default="gpt-5.1",
-        alias="DEFAULT_MODEL",
-        description="Default text/reasoning model for generic requests.",
-    )
-
-    REALTIME_MODEL: str = Field(
-        default="gpt-4o-realtime-preview",
-        alias="REALTIME_MODEL",
-        description="Default model for realtime (WebRTC/WebSocket) interactions.",
-    )
-
-    # Beta headers
+    # OpenAI-Beta headers for Assistants / Realtime features
     OPENAI_ASSISTANTS_BETA: str = Field(
         default="assistants=v2",
-        alias="OPENAI_ASSISTANTS_BETA",
-        description="OpenAI beta header toggle for Assistants v2.",
+        description="Value for OpenAI-Beta header when using Assistants/Responses v2.",
     )
 
     OPENAI_REALTIME_BETA: str = Field(
         default="realtime=v1",
-        alias="OPENAI_REALTIME_BETA",
-        description="OpenAI beta header toggle for Realtime API.",
+        description="Value for OpenAI-Beta header when using realtime endpoints.",
     )
 
-    # ------------------------------------------------------------------
-    # Relay identity / auth
-    # ------------------------------------------------------------------
+    # Default model choices used in health endpoints and fallbacks
+    DEFAULT_MODEL: str = Field(
+        default="gpt-4.1-mini",
+        description="Default text/chat model when caller does not specify one.",
+    )
+
+    REALTIME_MODEL: str = Field(
+        default="gpt-4o-realtime-preview",
+        description="Default realtime model for websocket/SIP usage.",
+    )
+
+    PYTHON_VERSION: str = Field(
+        default_factory=platform.python_version,
+        description="Python runtime version surfaced in /health.",
+    )
+
+    # -------------------------------------------------------------------------
+    # Relay timeouts, streaming, and orchestration behavior
+    # -------------------------------------------------------------------------
+
+    PROXY_TIMEOUT: int = Field(
+        default=30,
+        description=(
+            "Timeout in seconds for the underlying HTTP request to OpenAI. "
+            "Applied in the OpenAI client/forwarder."
+        ),
+    )
+
+    RELAY_TIMEOUT: int = Field(
+        default=60,
+        description=(
+            "End-to-end timeout in seconds for a request as seen by the relay. "
+            "Used by P4 orchestrator / middleware."
+        ),
+    )
+
+    ENABLE_STREAM: bool = Field(
+        default=True,
+        description=(
+            "If true, streaming is enabled by default where supported. "
+            "Routers can still override per-request."
+        ),
+    )
+
+    CHAIN_WAIT_MODE: str = Field(
+        default="background",
+        description=(
+            "How long-running chains are handled by the orchestrator. "
+            "Typical values: 'background' or 'sync' (future-proofing)."
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # Relay identity and auth
+    # -------------------------------------------------------------------------
+
+    RELAY_HOST: str = Field(
+        default="http://localhost:8000",
+        description="Public base URL of this relay, used in logs and metadata.",
+    )
+
     RELAY_NAME: str = Field(
         default="ChatGPT Team Relay",
-        alias="RELAY_NAME",
-        description="Human-readable name for this relay instance.",
+        description="Human-friendly relay name (also FastAPI title).",
     )
 
     RELAY_AUTH_ENABLED: bool = Field(
-        default=False,
-        alias="RELAY_AUTH_ENABLED",
-        description="If True, enforce relay-level auth using RELAY_KEY.",
+        default=True,
+        description=(
+            "If true, the relay expects an auth key (X-Relay-Key or similar) "
+            "for protected endpoints."
+        ),
     )
 
     RELAY_KEY: Optional[str] = Field(
         default=None,
-        alias="RELAY_KEY",
-        description="Shared secret for relay authentication (if enabled).",
+        description="Shared secret used by clients to authenticate with the relay.",
     )
 
-    # Optional external hostname (used only for metadata / logging)
-    RELAY_HOST: Optional[str] = Field(
+    CHATGPT_ACTIONS_SECRET: Optional[str] = Field(
         default=None,
-        alias="RELAY_HOST",
-        description="Optional public hostname / base URL of this relay.",
-    )
-
-    # ------------------------------------------------------------------
-    # Timeouts (seconds)
-    # ------------------------------------------------------------------
-    RELAY_TIMEOUT: float = Field(
-        default=120.0,
-        alias="RELAY_TIMEOUT",
-        description="Global timeout for relay-level operations (seconds).",
-    )
-
-    PROXY_TIMEOUT: float = Field(
-        default=120.0,
-        alias="PROXY_TIMEOUT",
-        description="Timeout applied when proxying upstream calls to OpenAI (seconds).",
-    )
-
-    # ------------------------------------------------------------------
-    # Schemas / tools
-    # ------------------------------------------------------------------
-    TOOLS_MANIFEST: str = Field(
-        default="app/manifests/tools_manifest.json",
-        alias="TOOLS_MANIFEST",
-        description="Path to the tools manifest JSON used for tools/agents.",
-    )
-
-    JSON_SCHEMA_PATH: Optional[str] = Field(
-        default=None,
-        alias="JSON_SCHEMA_PATH",
-        description="Optional path to additional JSON schemas for validation.",
-    )
-
-    # ------------------------------------------------------------------
-    # CORS configuration
-    # ------------------------------------------------------------------
-    CORS_ALLOW_ORIGINS: str = Field(
-        default="http://localhost:3000,http://127.0.0.1:3000",
-        alias="CORS_ALLOW_ORIGINS",
         description=(
-            "Comma-separated list of allowed origins for CORS. "
-            "Used by app/main.py to configure CORSMiddleware."
+            "Optional secret used to validate signatures when this relay is called "
+            "as a ChatGPT Action."
         ),
+    )
+
+    # -------------------------------------------------------------------------
+    # CORS configuration
+    # -------------------------------------------------------------------------
+    # NOTE: these are stored as CSV strings and converted into lists in main.py
+    # via the `_split_csv(...)` helper.
+
+    CORS_ALLOW_ORIGINS: str = Field(
+        default="https://chat.openai.com,https://platform.openai.com",
+        description="Comma-separated list of allowed origins for CORS.",
     )
 
     CORS_ALLOW_METHODS: str = Field(
         default="GET,POST,PUT,PATCH,DELETE,OPTIONS",
-        alias="CORS_ALLOW_METHODS",
-        description=(
-            "Comma-separated list of allowed HTTP methods for CORS. "
-            "Defaults to common REST methods plus OPTIONS for preflight."
-        ),
+        description="Comma-separated list of allowed HTTP methods for CORS.",
     )
 
     CORS_ALLOW_HEADERS: str = Field(
-        default="Authorization,Content-Type,Accept,Origin,User-Agent,Cache-Control,Pragma",
-        alias="CORS_ALLOW_HEADERS",
+        default="Authorization,Content-Type,Accept",
+        description="Comma-separated list of allowed headers for CORS.",
+    )
+
+    # -------------------------------------------------------------------------
+    # Tools & validation schema
+    # -------------------------------------------------------------------------
+
+    TOOLS_MANIFEST: str = Field(
+        default="app/manifests/tools_manifest.json",
         description=(
-            "Comma-separated list of allowed HTTP headers for CORS. "
-            "Include Authorization and Content-Type so browsers and clients work correctly."
+            "Relative path (from project root) to the tools manifest JSON used "
+            "by the relay / P4 orchestrator."
         ),
     )
 
-    # ------------------------------------------------------------------
-    # Meta
-    # ------------------------------------------------------------------
-    PYTHON_VERSION: str = Field(
-        default=platform.python_version(),
-        alias="PYTHON_VERSION",
-        description="Python version this app is running on (captured at import time).",
+    # IMPORTANT: the validation “schema” is a PDF API reference in this project.
+    # The default matches your repo root file:
+    #   ChatGPT-API_reference_ground_truth-2025-10-29.pdf
+    # You can override using the VALIDATION_SCHEMA_PATH environment variable.
+    VALIDATION_SCHEMA_PATH: str = Field(
+        default="ChatGPT-API_reference_ground_truth-2025-10-29.pdf",
+        description=(
+            "Relative or absolute path to the PDF used as the ground-truth API "
+            "reference / validation schema."
+        ),
     )
 
-    # ------------------------------------------------------------------
-    # Pydantic configuration
-    # ------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Pydantic settings configuration
+    # -------------------------------------------------------------------------
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -180,13 +221,16 @@ class Settings(BaseSettings):
     )
 
 
-@lru_cache
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """
-    Singleton settings loader to avoid repeatedly parsing environment variables.
+    Singleton settings loader.
+
+    Using lru_cache ensures the environment is parsed once per process and
+    the same Settings instance is reused across the app.
     """
     return Settings()
 
 
-# Eagerly instantiate settings at import time for convenience
+# Module-level singleton used throughout the app:
 settings = get_settings()
