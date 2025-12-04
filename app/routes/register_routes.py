@@ -1,5 +1,4 @@
 # app/routes/register_routes.py
-
 from __future__ import annotations
 
 from fastapi import FastAPI
@@ -16,8 +15,10 @@ from app.routes.images import router as images_router
 from app.routes.videos import router as videos_router
 from app.routes.vector_stores import router as vector_stores_router
 from app.routes.conversations import router as conversations_router
+from app.routes.containers import router as containers_router
 from app.routes.realtime import router as realtime_router
-from app.routes.containers import router as containers_router  # NEW
+from app.api.routes import router as api_router
+
 
 # Tools + relay metadata
 from app.api.tools_api import router as tools_router
@@ -30,7 +31,6 @@ def register_routes(app: FastAPI) -> None:
 
     This is the central wiring layer – any new route module should be added here.
     """
-
     # -------- Health --------
     app.include_router(health_router)
 
@@ -49,3 +49,4 @@ def register_routes(app: FastAPI) -> None:
     # -------- Tools + relay metadata --------
     app.include_router(tools_router)
     app.include_router(actions_router)
+    app.include_router(api_router) 

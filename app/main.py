@@ -1,10 +1,8 @@
-# app/main.py
-
 from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from app.api.routes import router as api_router
 from app.core.config import settings
 from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
 from app.middleware.relay_auth import RelayAuthMiddleware
@@ -77,6 +75,7 @@ def create_app() -> FastAPI:
     #   - /v1/realtime/sessions
     #   - /v1/tools, /v1/actions/*
     register_routes(app)
+    app.include_router(api_router)
 
     # Attach global exception handlers (OpenAI-style error envelopes, logging)
     register_exception_handlers(app)
