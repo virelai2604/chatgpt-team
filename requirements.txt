@@ -11,7 +11,7 @@ python-dotenv==1.0.1
 # https://github.com/Kludex/python-multipart/security/advisories
 python-multipart>=0.0.18,<0.1.0
  
-websockets==12.0
+websocket
 sse-starlette==2.1.2
  
 openai>=2.8,<3.0
