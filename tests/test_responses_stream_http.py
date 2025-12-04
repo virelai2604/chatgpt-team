@@ -62,10 +62,15 @@ def test_responses_stream_basic(client: TestClient) -> None:
         "input": "Say exactly: relay-stream-basic-ok",
         "stream": True,
     }
-    resp = client.post("/v1/responses", json=payload, stream=True)
+    # NOTE: TestClient in this environment does not support stream=True;
+    # instead we request SSE via Accept header and read the full body.
+    resp = client.post(
+        "/v1/responses",
+        json=payload,
+        headers={"Accept": "text/event-stream"},
+    )
 
-    # TestClient does not expose iter_lines for SSE directly; instead we
-    # capture the entire body and parse it as bytes.
+    # We capture the entire body and parse it as bytes.
     assert resp.status_code == 200
     raw = resp.content
     assert raw
@@ -88,7 +93,11 @@ def test_responses_stream_with_metadata(client: TestClient) -> None:
         "stream": True,
         "metadata": {"test_case": "stream_with_metadata"},
     }
-    resp = client.post("/v1/responses", json=payload, stream=True)
+    resp = client.post(
+        "/v1/responses",
+        json=payload,
+        headers={"Accept": "text/event-stream"},
+    )
 
     assert resp.status_code == 200
     raw = resp.content
@@ -135,8 +144,16 @@ def test_responses_stream_chain_mode(client: TestClient) -> None:
         "stream": True,
     }
 
-    resp1 = client.post("/v1/responses", json=payload1, stream=True)
-    resp2 = client.post("/v1/responses", json=payload2, stream=True)
+    resp1 = client.post(
+        "/v1/responses",
+        json=payload1,
+        headers={"Accept": "text/event-stream"},
+    )
+    resp2 = client.post(
+        "/v1/responses",
+        json=payload2,
+        headers={"Accept": "text/event-stream"},
+    )
 
     assert resp1.status_code == 200
     assert resp2.status_code == 200
@@ -172,7 +189,11 @@ def test_responses_stream_error_handling(client: TestClient) -> None:
         "input": "Say exactly: relay-stream-error-test",
         "stream": True,
     }
-    resp = client.post("/v1/responses", json=payload, stream=True)
+    resp = client.post(
+        "/v1/responses",
+        json=payload,
+        headers={"Accept": "text/event-stream"},
+    )
     # For now, we just assert it doesn't crash and is 200.
     assert resp.status_code == 200
     assert resp.content
