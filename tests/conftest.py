@@ -134,7 +134,8 @@ def _build_openai_stub_response(
 
     # Files detail / content
     if path.startswith("/v1/files/"):
-        # All file detail/content operations in tests only check echo_* fields.
+        # All file detail/content operations in tests only check
+        # echo_* fields.
         return 200, _echo_payload(path, method, body), headers
 
     # Vector store routes
