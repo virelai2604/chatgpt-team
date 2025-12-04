@@ -26,7 +26,9 @@ OPENAI_API_BASE: str = str(settings.OPENAI_API_BASE).rstrip("/")
 OPENAI_API_KEY: str = settings.OPENAI_API_KEY
 
 # Timeout (seconds) for upstream OpenAI calls
-DEFAULT_PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120")))
+DEFAULT_PROXY_TIMEOUT = float(
+    os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120"))
+)
 PROXY_TIMEOUT: float = float(getattr(settings, "PROXY_TIMEOUT", DEFAULT_PROXY_TIMEOUT))
 
 
@@ -131,7 +133,7 @@ def _extract_output_text_from_response_json(data: Dict[str, Any]) -> str:
 
     See the Responses output structure:
     - top-level "output" array with items containing "content" parts
-      of type "output_text" that hold the text. 
+      of type "output_text" that hold the text.
     """
     output = data.get("output")
     if isinstance(output, list):
@@ -246,7 +248,9 @@ async def forward_openai_request(
                         return
 
                     # Fallback: call /v1/responses without stream and synthesize SSE.
-                    fb_headers = {k: v for k, v in headers.items() if k.lower() != "accept"}
+                    fb_headers = {
+                        k: v for k, v in headers.items() if k.lower() != "accept"
+                    }
                     fb_body_bytes: Optional[bytes] = body
 
                     if body:
@@ -295,7 +299,7 @@ async def forward_openai_request(
                         return
 
                     # Synthesize Responses SSE events matching the docs
-                    # and the relay_e2e_raw expectations. :contentReference[oaicite:5]{index=5}
+                    # and the relay_e2e_raw expectations.
                     ev_delta = json.dumps(
                         {
                             "type": "response.output_text.delta",
