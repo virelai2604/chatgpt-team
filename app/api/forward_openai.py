@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any, Dict, Mapping, Optional, Union, AsyncIterator
+import os
+from typing import Any, Dict, Mapping, Optional, Union
 
 import httpx
 from fastapi import HTTPException, Request, Response
@@ -14,59 +16,53 @@ from app.core.config import settings
 logger = logging.getLogger("relay")
 
 # ---------------------------------------------------------------------------
-# Upstream config
+# Upstream configuration
 # ---------------------------------------------------------------------------
 
+# Base URL for OpenAI (no /v1 suffix – paths below always start with /v1)
 OPENAI_API_BASE: str = str(settings.OPENAI_API_BASE).rstrip("/")
+
+# API key used by the relay when forwarding to OpenAI
 OPENAI_API_KEY: str = settings.OPENAI_API_KEY
-PROXY_TIMEOUT: float = settings.PROXY_TIMEOUT
 
-OPENAI_ASSISTANTS_BETA: str = settings.OPENAI_ASSISTANTS_BETA
-OPENAI_REALTIME_BETA: str = settings.OPENAI_REALTIME_BETA
+# Timeout (seconds) for upstream OpenAI calls
+DEFAULT_PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120")))
+PROXY_TIMEOUT: float = float(getattr(settings, "PROXY_TIMEOUT", DEFAULT_PROXY_TIMEOUT))
+
 
 # ---------------------------------------------------------------------------
-# Header filtering
+# Header helpers
 # ---------------------------------------------------------------------------
-
-# Headers we never forward to OpenAI
-_HOP_BY_HOP_REQUEST_HEADERS = {
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailers",
-    "transfer-encoding",
-    "upgrade",
-    "host",
-    # relay-internal
-    "x-relay-key",
-}
-
-# Headers we strip from OpenAI responses before returning to the client
-_HOP_BY_HOP_RESPONSE_HEADERS = {
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailers",
-    "transfer-encoding",
-    "upgrade",
-}
 
 
 def _filter_request_headers(headers: Mapping[str, str]) -> Dict[str, str]:
     """
-    Copy request headers, removing hop‑by‑hop and relay‑internal ones.
+    Prepare headers for forwarding to OpenAI.
+
+    - Drop hop-by-hop headers that should not cross proxies.
+    - Drop downstream Authorization and X-Relay-Key; the relay injects its own.
     """
+    blocked = {
+        "host",
+        "content-length",
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+        "x-relay-key",
+    }
+
     out: Dict[str, str] = {}
     for name, value in headers.items():
         lname = name.lower()
-        if lname in _HOP_BY_HOP_REQUEST_HEADERS:
+        if lname in blocked:
             continue
-        # httpx will handle compression
-        if lname == "accept-encoding":
+        if lname == "authorization":
+            # Always replace with relay's Authorization header
             continue
         out[name] = value
     return out
@@ -74,128 +70,83 @@ def _filter_request_headers(headers: Mapping[str, str]) -> Dict[str, str]:
 
 def _filter_response_headers(headers: Mapping[str, str]) -> Dict[str, str]:
     """
-    Copy response headers, stripping hop‑by‑hop ones.
+    Prepare headers coming back from OpenAI before returning to the client.
+
+    We drop hop-by-hop and transport headers; Uvicorn/ASGI will manage
+    Content-Length, Transfer-Encoding, and connection reuse.
     """
+    blocked = {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+        "content-encoding",
+        "content-length",
+    }
+
     out: Dict[str, str] = {}
     for name, value in headers.items():
-        lname = name.lower()
-        if lname in _HOP_BY_HOP_RESPONSE_HEADERS:
+        if name.lower() in blocked:
             continue
         out[name] = value
     return out
 
 
+def _ensure_api_key() -> None:
+    """
+    Ensure the relay has an OpenAI API key configured.
+    """
+    if not OPENAI_API_KEY:
+        logger.error("OPENAI_API_KEY is not configured on the relay")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": "OPENAI_API_KEY is not configured on the relay",
+                    "type": "server_error",
+                    "code": "no_api_key",
+                }
+            },
+        )
+
+
 def _is_sse_request(request: Request) -> bool:
     """
-    Detect Server‑Sent Events (Responses API streaming).
+    Detect Server-Sent Events (SSE) requests by Accept header.
 
-    The official docs and your E2E use `Accept: text/event-stream` for
-    Responses streaming. We key off that header. 
+    SSE is used by the Responses API when `stream=true` and the client
+    requests `Accept: text/event-stream`. See official streaming docs.  # noqa: E501
     """
     accept = request.headers.get("accept", "")
     return "text/event-stream" in accept.lower()
 
 
-def _apply_beta_headers(path: str, headers: Dict[str, str]) -> None:
-    """
-    Attach OpenAI beta headers when hitting beta endpoints. 
-    """
-    # Assistants / Threads / Runs
-    if path.startswith("/v1/assistants") or path.startswith("/v1/threads") or path.startswith("/v1/runs"):
-        headers.setdefault("OpenAI-Beta", OPENAI_ASSISTANTS_BETA)
-
-    # Realtime endpoints
-    if path.startswith("/v1/realtime"):
-        headers.setdefault("OpenAI-Beta", OPENAI_REALTIME_BETA)
-
-
-def _missing_api_key_error() -> HTTPException:
-    return HTTPException(
-        status_code=500,
-        detail={
-            "error": {
-                "message": "Relay misconfigured: OPENAI_API_KEY is not set",
-                "type": "configuration_error",
-                "param": None,
-                "code": "missing_openai_api_key",
-            }
-        },
-    )
-
 # ---------------------------------------------------------------------------
-# SSE streaming proxy
-# ---------------------------------------------------------------------------
-
-
-async def _stream_sse_to_client(
-    method: str,
-    url: str,
-    *,
-    headers: Dict[str, str],
-    params: Dict[str, str],
-    body: Optional[bytes],
-    timeout: Union[float, httpx.Timeout],
-) -> StreamingResponse:
-    """
-    Open an SSE stream to OpenAI and pipe it directly to the client.
-
-    We manage the httpx client + stream lifetime *inside* the async generator
-    so that the connection stays open for the duration of the response.
-    This avoids the premature-close pattern that leads to httpx.ReadError.
-    """
-
-    async def aiter() -> AsyncIterator[bytes]:
-        try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                async with client.stream(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    params=params,
-                    content=body,
-                ) as upstream:
-                    async for chunk in upstream.aiter_raw():
-                        if chunk:
-                            # Pass through raw SSE bytes unchanged (data: ...\n\n)
-                            yield chunk
-        except httpx.ReadError as exc:
-            # Long‑lived SSE connections can end with a low‑level read error;
-            # we just log and stop the stream instead of crashing the app.
-            logger.warning("Upstream SSE ReadError from %s: %s", url, exc)
-        except httpx.HTTPError as exc:
-            logger.error("Upstream SSE HTTP error from %s: %s", url, exc)
-
-    # SSE contract: always text/event-stream
-    return StreamingResponse(
-        aiter(),
-        status_code=200,
-        media_type="text/event-stream",
-    )
-
-# ---------------------------------------------------------------------------
-# Main proxy entrypoint
+# Core /v1 proxy
 # ---------------------------------------------------------------------------
 
 
 async def forward_openai_request(
     request: Request,
     *,
+    method: Optional[str] = None,
     path_override: Optional[str] = None,
 ) -> Response:
     """
-    Generic proxy for all OpenAI‑compatible /v1/* endpoints.
+    Generic forwarder used by all /v1/* routers.
 
-    - Validates path and configuration.
-    - Copies relevant headers + injects Authorization and beta headers.
-    - For SSE (`Accept: text/event-stream`), uses StreamingResponse + async
-      generator to forward bytes from OpenAI.
-    - For non‑streaming requests, performs a normal httpx request and
-      returns a standard Response with filtered headers.
+    - Respects the incoming HTTP method (unless overridden).
+    - Forwards to OPENAI_API_BASE + path.
+    - For SSE (Accept: text/event-stream), streams upstream bytes via
+      StreamingResponse with robust error handling.
     """
-    if not OPENAI_API_KEY:
-        raise _missing_api_key_error()
+    _ensure_api_key()
 
-    method = request.method.upper()
+    method = (method or request.method).upper()
     path = path_override or request.url.path
 
     if not path.startswith("/v1"):
@@ -211,68 +162,210 @@ async def forward_openai_request(
             },
         )
 
-    url = OPENAI_API_BASE.rstrip("/") + path
-
     headers = _filter_request_headers(request.headers)
     headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
 
-    _apply_beta_headers(path, headers)
-
-    timeout: Union[float, httpx.Timeout] = httpx.Timeout(PROXY_TIMEOUT)
-
+    params = dict(request.query_params)
     body = await request.body()
-    params: Dict[str, str] = dict(request.query_params)
+
+    timeout = httpx.Timeout(PROXY_TIMEOUT)
     is_sse = _is_sse_request(request)
 
-    # Streaming Responses / SSE path
-    if is_sse:
-        return await _stream_sse_to_client(
-            method=method,
-            url=url,
-            headers=headers,
-            params=params,
-            body=body,
-            timeout=timeout,
+    async with httpx.AsyncClient(base_url=OPENAI_API_BASE, timeout=timeout) as client:
+        try:
+            if is_sse:
+                # SSE: maintain an open connection and forward bytes as they arrive.
+                upstream_ctx = client.stream(
+                    method,
+                    path,
+                    params=params,
+                    headers=headers,
+                    content=body if body else None,
+                )
+                upstream = await upstream_ctx.__aenter__()
+
+                resp_headers = _filter_response_headers(upstream.headers)
+                media_type = upstream.headers.get("content-type", "text/event-stream")
+
+                async def _aiter() -> Any:
+                    try:
+                        # Use aiter_bytes so httpx handles any content encoding.
+                        async for chunk in upstream.aiter_bytes():
+                            if chunk:
+                                yield chunk
+                    except (httpx.ReadError, httpx.HTTPError) as exc:
+                        # Treat upstream streaming errors as end-of-stream:
+                        # log and stop the iterator instead of crashing the app.
+                        logger.warning(
+                            "Upstream SSE error (%s %s): %r", method, path, exc
+                        )
+                    finally:
+                        await upstream_ctx.__aexit__(None, None, None)
+
+                return StreamingResponse(
+                    _aiter(),
+                    status_code=upstream.status_code,
+                    headers=resp_headers,
+                    media_type=media_type,
+                )
+
+            # Non-streaming: single request/response
+            upstream_response = await client.request(
+                method,
+                path,
+                params=params,
+                headers=headers,
+                content=body if body else None,
+            )
+        except httpx.RequestError as exc:
+            logger.error("Error forwarding request to OpenAI: %r", exc)
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error": {
+                        "message": "Error forwarding request to OpenAI",
+                        "type": "server_error",
+                        "code": "upstream_request_error",
+                        "extra": {"exception": str(exc)},
+                    }
+                },
+            ) from exc
+
+    resp_headers = _filter_response_headers(upstream_response.headers)
+
+    return Response(
+        content=upstream_response.content,
+        status_code=upstream_response.status_code,
+        headers=resp_headers,
+        media_type=upstream_response.headers.get("content-type"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Programmatic forwarding for /v1/actions/openai/forward
+# ---------------------------------------------------------------------------
+
+
+async def forward_openai_from_parts(
+    method: str,
+    path: str,
+    *,
+    query: Optional[Mapping[str, Any]] = None,
+    headers: Optional[Mapping[str, str]] = None,
+    body: Optional[Union[str, bytes, Mapping[str, Any], Any]] = None,
+    stream: bool = False,
+) -> Response:
+    """
+    Programmatic forwarding used by the Actions router.
+
+    Parameters
+    ----------
+    method:
+        HTTP method, e.g. "GET", "POST".
+    path:
+        OpenAI-compatible path. Must start with "/v1".
+    query:
+        Optional query parameters.
+    headers:
+        Optional additional headers from the caller. Authorization / X-Relay-Key
+        are stripped and replaced with relay's credentials.
+    body:
+        Request body; may be raw bytes/str or JSON-serializable.
+    stream:
+        If True, create an SSE stream to OpenAI and proxy it to the caller.
+    """
+    _ensure_api_key()
+
+    if not path.startswith("/v1"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "message": "path must start with /v1",
+                    "type": "invalid_request_error",
+                    "param": None,
+                    "code": None,
+                }
+            },
         )
 
-    # Non‑streaming path (standard JSON APIs, file uploads, etc.)
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+    method = method.upper()
+
+    base_headers = _filter_request_headers(headers or {})
+    base_headers["Authorization"] = f"Bearer {OPENAI_API_KEY}"
+
+    timeout = httpx.Timeout(PROXY_TIMEOUT)
+    params = dict(query or {})
+
+    # Normalize body into either JSON or raw content
+    json_body: Any = None
+    content_body: Optional[Union[str, bytes]] = None
+
+    if isinstance(body, (bytes, str)) or body is None:
+        content_body = body
+    else:
+        json_body = body
+
+    async with httpx.AsyncClient(base_url=OPENAI_API_BASE, timeout=timeout) as client:
+        try:
+            if stream:
+                upstream_ctx = client.stream(
+                    method,
+                    path,
+                    params=params,
+                    headers=base_headers,
+                    json=json_body,
+                    content=content_body,
+                )
+                upstream = await upstream_ctx.__aenter__()
+
+                resp_headers = _filter_response_headers(upstream.headers)
+                media_type = upstream.headers.get("content-type", "text/event-stream")
+
+                async def _aiter() -> Any:
+                    try:
+                        async for chunk in upstream.aiter_bytes():
+                            if chunk:
+                                yield chunk
+                    except (httpx.ReadError, httpx.HTTPError) as exc:
+                        logger.warning(
+                            "Upstream SSE error (from_parts %s %s): %r",
+                            method,
+                            path,
+                            exc,
+                        )
+                    finally:
+                        await upstream_ctx.__aexit__(None, None, None)
+
+                return StreamingResponse(
+                    _aiter(),
+                    status_code=upstream.status_code,
+                    headers=resp_headers,
+                    media_type=media_type,
+                )
+
+            # Non-streaming call
             upstream_response = await client.request(
-                method=method,
-                url=url,
-                headers=headers,
+                method,
+                path,
                 params=params,
-                content=body or None,
+                headers=base_headers,
+                json=json_body,
+                content=content_body,
             )
-    except httpx.TimeoutException as exc:
-        logger.error("Upstream OpenAI timeout on %s %s: %s", method, url, exc)
-        raise HTTPException(
-            status_code=504,
-            detail={
-                "error": {
-                    "message": "Upstream OpenAI request timed out",
-                    "type": "timeout_error",
-                    "param": None,
-                    "code": "upstream_timeout",
-                    "extra": {"url": url},
-                }
-            },
-        ) from exc
-    except httpx.HTTPError as exc:
-        logger.error("Upstream OpenAI HTTP error on %s %s: %s", method, url, exc)
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "error": {
-                    "message": "Error forwarding request to OpenAI",
-                    "type": "upstream_request_error",
-                    "param": None,
-                    "code": "upstream_request_error",
-                    "extra": {"exception": str(exc), "url": url},
-                }
-            },
-        ) from exc
+        except httpx.RequestError as exc:
+            logger.error("Error forwarding request (from_parts) to OpenAI: %r", exc)
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error": {
+                        "message": "Error forwarding request to OpenAI",
+                        "type": "server_error",
+                        "code": "upstream_request_error",
+                        "extra": {"exception": str(exc)},
+                    }
+                },
+            ) from exc
 
     resp_headers = _filter_response_headers(upstream_response.headers)
 
