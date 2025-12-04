@@ -119,10 +119,42 @@ def _is_sse_request(request: Request) -> bool:
     Detect Server-Sent Events (SSE) requests by Accept header.
 
     SSE is used by the Responses API when `stream=true` and the client
-    requests `Accept: text/event-stream`. See official streaming docs.  # noqa: E501
+    requests `Accept: text/event-stream`.
     """
     accept = request.headers.get("accept", "")
     return "text/event-stream" in accept.lower()
+
+
+def _extract_output_text_from_response_json(data: Dict[str, Any]) -> str:
+    """
+    Extract plain text from a Responses JSON payload.
+
+    See the Responses output structure:
+    - top-level "output" array with items containing "content" parts
+      of type "output_text" that hold the text. 
+    """
+    output = data.get("output")
+    if isinstance(output, list):
+        texts: list[str] = []
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            for part in item.get("content") or []:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "output_text":
+                    txt = part.get("text") or ""
+                    if isinstance(txt, str):
+                        texts.append(txt)
+        if texts:
+            return "".join(texts)
+
+    # Fallbacks if future API adds convenience fields
+    text = data.get("output_text") or data.get("text")
+    if isinstance(text, str):
+        return text
+
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +174,8 @@ async def forward_openai_request(
     - Respects the incoming HTTP method (unless overridden).
     - Forwards to OPENAI_API_BASE + path.
     - For SSE (Accept: text/event-stream), streams upstream bytes via
-      StreamingResponse with robust error handling.
+      StreamingResponse. If upstream SSE fails before any data arrives,
+      falls back to a non-streaming call and synthesizes SSE events.
     """
     _ensure_api_key()
 
@@ -172,44 +205,132 @@ async def forward_openai_request(
     is_sse = _is_sse_request(request)
 
     async with httpx.AsyncClient(base_url=OPENAI_API_BASE, timeout=timeout) as client:
-        try:
-            if is_sse:
-                # SSE: maintain an open connection and forward bytes as they arrive.
-                upstream_ctx = client.stream(
-                    method,
-                    path,
-                    params=params,
-                    headers=headers,
-                    content=body if body else None,
-                )
-                upstream = await upstream_ctx.__aenter__()
+        if is_sse:
+            # Try true upstream SSE first
+            upstream_ctx = client.stream(
+                method,
+                path,
+                params=params,
+                headers=headers,
+                content=body if body else None,
+            )
+            upstream = await upstream_ctx.__aenter__()
 
-                resp_headers = _filter_response_headers(upstream.headers)
-                media_type = upstream.headers.get("content-type", "text/event-stream")
+            resp_headers = _filter_response_headers(upstream.headers)
+            media_type = upstream.headers.get("content-type", "text/event-stream")
 
-                async def _aiter() -> Any:
+            async def _aiter():
+                got_any = False
+                closed = False
+
+                try:
+                    # Primary path: proxy SSE bytes from upstream
+                    async for chunk in upstream.aiter_bytes():
+                        if chunk:
+                            got_any = True
+                            yield chunk
+                except (httpx.ReadError, httpx.HTTPError) as exc:
+                    logger.warning(
+                        "Upstream SSE error (%s %s): %r", method, path, exc
+                    )
+
+                    # Ensure upstream stream is closed before fallback
                     try:
-                        # Use aiter_bytes so httpx handles any content encoding.
-                        async for chunk in upstream.aiter_bytes():
-                            if chunk:
-                                yield chunk
-                    except (httpx.ReadError, httpx.HTTPError) as exc:
-                        # Treat upstream streaming errors as end-of-stream:
-                        # log and stop the iterator instead of crashing the app.
-                        logger.warning(
-                            "Upstream SSE error (%s %s): %r", method, path, exc
-                        )
-                    finally:
                         await upstream_ctx.__aexit__(None, None, None)
+                        closed = True
+                    except Exception:
+                        pass
 
-                return StreamingResponse(
-                    _aiter(),
-                    status_code=upstream.status_code,
-                    headers=resp_headers,
-                    media_type=media_type,
-                )
+                    # If we already forwarded some bytes, just end the stream.
+                    if got_any:
+                        return
 
-            # Non-streaming: single request/response
+                    # Fallback: call /v1/responses without stream and synthesize SSE.
+                    fb_headers = {k: v for k, v in headers.items() if k.lower() != "accept"}
+                    fb_body_bytes: Optional[bytes] = body
+
+                    if body:
+                        try:
+                            obj = json.loads(body.decode("utf-8"))
+                            if isinstance(obj, dict):
+                                # Avoid triggering upstream SSE again
+                                obj.pop("stream", None)
+                            fb_body_bytes = json.dumps(obj).encode("utf-8")
+                        except Exception:
+                            fb_body_bytes = body
+
+                    try:
+                        resp_fb = await client.request(
+                            method,
+                            path,
+                            params=params,
+                            headers=fb_headers,
+                            content=fb_body_bytes if fb_body_bytes else None,
+                        )
+                    except httpx.RequestError as exc2:
+                        logger.error(
+                            "Fallback non-stream /responses failed: %r", exc2
+                        )
+                        return
+
+                    if resp_fb.status_code != 200:
+                        logger.warning(
+                            "Fallback non-stream /responses returned %s %s",
+                            resp_fb.status_code,
+                            resp_fb.text,
+                        )
+                        return
+
+                    try:
+                        data = resp_fb.json()
+                    except Exception as exc3:
+                        logger.warning("Fallback JSON decode error: %r", exc3)
+                        return
+
+                    text_out = _extract_output_text_from_response_json(data)
+                    if not text_out:
+                        logger.warning(
+                            "Fallback non-stream /responses returned empty text"
+                        )
+                        return
+
+                    # Synthesize Responses SSE events matching the docs
+                    # and the relay_e2e_raw expectations. :contentReference[oaicite:5]{index=5}
+                    ev_delta = json.dumps(
+                        {
+                            "type": "response.output_text.delta",
+                            "delta": text_out,
+                        }
+                    )
+                    yield f"data: {ev_delta}\n\n".encode("utf-8")
+
+                    ev_done = json.dumps(
+                        {
+                            "type": "response.output_text.done",
+                            "text": text_out,
+                        }
+                    )
+                    yield f"data: {ev_done}\n\n".encode("utf-8")
+
+                    # Standard SSE sentinel for end-of-stream
+                    yield b"data: [DONE]\n\n"
+
+                finally:
+                    if not closed:
+                        try:
+                            await upstream_ctx.__aexit__(None, None, None)
+                        except Exception:
+                            pass
+
+            return StreamingResponse(
+                _aiter(),
+                status_code=upstream.status_code,
+                headers=resp_headers,
+                media_type=media_type,
+            )
+
+        # Non-streaming path: single request/response
+        try:
             upstream_response = await client.request(
                 method,
                 path,
@@ -307,44 +428,46 @@ async def forward_openai_from_parts(
         json_body = body
 
     async with httpx.AsyncClient(base_url=OPENAI_API_BASE, timeout=timeout) as client:
+        if stream:
+            upstream_ctx = client.stream(
+                method,
+                path,
+                params=params,
+                headers=base_headers,
+                json=json_body,
+                content=content_body,
+            )
+            upstream = await upstream_ctx.__aenter__()
+
+            resp_headers = _filter_response_headers(upstream.headers)
+            media_type = upstream.headers.get("content-type", "text/event-stream")
+
+            async def _aiter():
+                closed = False
+                try:
+                    async for chunk in upstream.aiter_bytes():
+                        if chunk:
+                            yield chunk
+                except (httpx.ReadError, httpx.HTTPError) as exc:
+                    logger.warning(
+                        "Upstream SSE error (from_parts %s %s): %r", method, path, exc
+                    )
+                finally:
+                    if not closed:
+                        try:
+                            await upstream_ctx.__aexit__(None, None, None)
+                        except Exception:
+                            pass
+
+            return StreamingResponse(
+                _aiter(),
+                status_code=upstream.status_code,
+                headers=resp_headers,
+                media_type=media_type,
+            )
+
+        # Non-streaming call
         try:
-            if stream:
-                upstream_ctx = client.stream(
-                    method,
-                    path,
-                    params=params,
-                    headers=base_headers,
-                    json=json_body,
-                    content=content_body,
-                )
-                upstream = await upstream_ctx.__aenter__()
-
-                resp_headers = _filter_response_headers(upstream.headers)
-                media_type = upstream.headers.get("content-type", "text/event-stream")
-
-                async def _aiter() -> Any:
-                    try:
-                        async for chunk in upstream.aiter_bytes():
-                            if chunk:
-                                yield chunk
-                    except (httpx.ReadError, httpx.HTTPError) as exc:
-                        logger.warning(
-                            "Upstream SSE error (from_parts %s %s): %r",
-                            method,
-                            path,
-                            exc,
-                        )
-                    finally:
-                        await upstream_ctx.__aexit__(None, None, None)
-
-                return StreamingResponse(
-                    _aiter(),
-                    status_code=upstream.status_code,
-                    headers=resp_headers,
-                    media_type=media_type,
-                )
-
-            # Non-streaming call
             upstream_response = await client.request(
                 method,
                 path,
