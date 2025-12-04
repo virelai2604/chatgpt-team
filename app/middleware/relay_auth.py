@@ -1,5 +1,3 @@
-# app/middleware/relay_auth.py
-
 from __future__ import annotations
 
 import logging

@@ -1,5 +1,3 @@
-# app/api/forward_openai.py
-
 from __future__ import annotations
 
 import json
