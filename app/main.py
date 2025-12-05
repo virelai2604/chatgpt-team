@@ -1,4 +1,11 @@
-# app/main.py
+"""
+FastAPI application factory for the ChatGPT Team Relay.
+
+This module constructs the FastAPI instance, configures logging, attaches
+middleware, and registers all routers. It aligns the relay's behaviour
+with the OpenAI platform APIs by using the orchestrator and auth middleware
+and by including all API and tool routes.
+"""
 
 from __future__ import annotations
 
@@ -16,11 +23,15 @@ def create_app() -> FastAPI:
     """
     Application factory for the ChatGPT Team Relay.
 
-    - Configures logging
-    - Attaches middlewares (P4 orchestrator + relay auth)
-    - Registers all routers (API + actions)
+    Responsibilities:
+    - Configure logging once using the relay settings.
+    - Attach P4 orchestration and relay auth middleware.
+    - Register all API and tool routes under the appropriate prefixes.
+
+    Returns:
+        A fully configured FastAPI application ready for Uvicorn or Gunicorn.
     """
-    # Configure logging once, using global settings
+    # Configure logging at startup. This call is intended to be idempotent.
     configure_logging(settings)
 
     app = FastAPI(
@@ -28,7 +39,7 @@ def create_app() -> FastAPI:
         version=getattr(settings, "APP_VERSION", "0.1.0"),
     )
 
-    # Broad CORS – this is a relay, so UI clients may be anywhere.
+    # Broad CORS – the relay may be called from various UI clients.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -37,17 +48,19 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Upstream orchestration middleware (adds model / API base context)
+    # Attach the P4 orchestrator; this enriches request.state with an
+    # OpenAI client and relay configuration used by downstream routes.
     app.add_middleware(P4OrchestratorMiddleware)
 
-    # Relay auth middleware (Authorization: Bearer <RELAY_KEY>)
+    # Relay authentication. If RELAY_AUTH_ENABLED is true, requests must
+    # include Authorization: Bearer <RELAY_KEY>; otherwise this is a no-op.
     app.add_middleware(RelayAuthMiddleware)
 
-    # Routers: this is where app/api/routes.py is actually wired in.
+    # Register all routers (OpenAI-style endpoints, tools, actions, fallback)
     register_routes(app)
 
     return app
 
 
-# Uvicorn / gunicorn entrypoint
+# Uvicorn / Gunicorn entrypoint. ASGI servers will import "app".
 app = create_app()
