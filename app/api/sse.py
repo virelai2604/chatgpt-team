@@ -45,9 +45,7 @@ def format_sse_event(
     if event:
         lines.append(f"event: {event}")
 
-    # SSE data can span multiple lines; each must be prefixed with "data: "
     if data == "":
-        # Even empty data should still yield a data line
         lines.append("data:")
     else:
         for line in data.splitlines():
@@ -56,7 +54,6 @@ def format_sse_event(
     if retry is not None:
         lines.append(f"retry: {retry}")
 
-    # End of event frame
     payload = "\n".join(lines) + "\n\n"
     return payload.encode("utf-8")
 
@@ -74,7 +71,6 @@ def sse_error_event(
     if code:
         payload["code"] = code
 
-    # Minimal key=value;key=value encoding
     data_parts = [f"{k}={v}" for k, v in payload.items()]
     data_str = ";".join(data_parts)
 
@@ -83,14 +79,8 @@ def sse_error_event(
 
 class StreamingSSE(StreamingResponse):
     """
-    Thin wrapper around StreamingResponse that fixes the media type to
-    `text/event-stream` and expects an iterator/async-iterator of bytes.
-
-    Usage:
-        async def event_iter():
-            yield format_sse_event(event="message", data="hello")
-
-        return StreamingSSE(event_iter())
+    StreamingResponse wrapper that fixes the media type to `text/event-stream`
+    and expects an iterator/async-iterator of bytes.
     """
 
     def __init__(
@@ -111,7 +101,7 @@ async def _responses_event_stream(payload: Dict[str, Any]) -> AsyncIterator[byte
     """
     SSE bridge for the OpenAI Responses streaming API.
 
-    This generator expects the same body as /v1/responses, but will:
+    Expects the same body as /v1/responses, but will:
       - call client.responses.create(..., stream=True)
       - emit each event as a JSON server-sent event: `data: {...}\n\n`
       - terminate with `data: [DONE]\n\n`
@@ -119,40 +109,32 @@ async def _responses_event_stream(payload: Dict[str, Any]) -> AsyncIterator[byte
     client = get_async_openai_client()
     logger.info("Streaming /v1/responses:stream with payload: %s", payload)
 
-    # Ensure streaming enabled, but let caller override if they explicitly provide it.
     payload = dict(payload)
     payload.setdefault("stream", True)
 
     stream = await client.responses.create(**payload)  # stream=True above
 
     async for event in stream:
-        # OpenAI events are Pydantic models in the Python SDK.
         if hasattr(event, "model_dump_json"):
             data_json = event.model_dump_json()
         elif hasattr(event, "model_dump"):
             data_dict = event.model_dump()
             data_json = json.dumps(data_dict, default=str, separators=(",", ":"))
         else:
-            # Fallback for older / different event types.
             try:
                 data_json = json.dumps(event, default=str, separators=(",", ":"))
             except TypeError:
                 data_json = json.dumps(str(event))
 
-        # SSE frame
         chunk = f"data: {data_json}\n\n"
         yield chunk.encode("utf-8")
 
-    # Conventional end-of-stream marker
     yield b"data: [DONE]\n\n"
 
 
 @router.post("/responses:stream")
 async def responses_stream(
-    body: Dict[str, Any] = Body(
-        ...,
-        description="OpenAI Responses.create payload for streaming",
-    ),
+    body: Dict[str, Any] = Body(..., description="OpenAI Responses.create payload for streaming"),
 ) -> StreamingSSE:
     """
     SSE streaming endpoint for the Responses API.

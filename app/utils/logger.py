@@ -17,7 +17,7 @@ def configure_logging(level: Optional[str] = None) -> None:
     """
     logger = logging.getLogger(_LOGGER_ROOT_NAME)
     if logger.handlers:
-        # Already configured.
+        # Already configured
         return
 
     level_name = level or os.getenv("LOG_LEVEL", "INFO")
@@ -47,3 +47,7 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
         return logging.getLogger(_LOGGER_ROOT_NAME)
 
     return logging.getLogger(f"{_LOGGER_ROOT_NAME}.{name}")
+
+
+# Shared relay logger used by routes: `from app.utils.logger import relay_log as logger`
+relay_log = get_logger("relay")

@@ -14,11 +14,11 @@ from .middleware.validation import ValidationMiddleware
 from .api.routes import router as api_router
 from .api.sse import router as sse_router
 from .api.tools_api import router as tools_router
+from .routes.register_routes import register_relay_routes
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    # Use the configured log level from settings
     configure_logging(settings.log_level)
 
     app = FastAPI(
@@ -41,13 +41,17 @@ def create_app() -> FastAPI:
     # Error handlers
     register_exception_handlers(app)
 
-    # API routes
+    # Core OpenAI / streaming routes
     app.include_router(api_router)
     app.include_router(sse_router)
     app.include_router(tools_router)
 
+    # Catch-all /v1/* relay families
+    register_relay_routes(app)
+
     @app.get("/health", tags=["health"])
     def health() -> dict:
+        # Simple root health; more detailed JSON is under /v1/health
         return {"status": "ok"}
 
     return app
