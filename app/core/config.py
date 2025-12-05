@@ -122,7 +122,8 @@ def get_settings() -> Settings:
     )
 
     return Settings(
-        project_name=_get_env("PROJECT_NAME", "chatgpt-team-relay") or "chatgpt-team-relay",
+        project_name=_get_env("PROJECT_NAME", "chatgpt-team-relay")
+        or "chatgpt-team-relay",
         environment=environment,
         openai_api_key=openai_api_key,
         openai_base_url=openai_base_url,
