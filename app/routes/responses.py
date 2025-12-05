@@ -7,39 +7,73 @@ from fastapi import APIRouter, Request, Response
 from app.api.forward_openai import forward_openai_request
 from app.utils.logger import relay_log as logger
 
-router = APIRouter(
-    prefix="/v1",
-    tags=["responses"],
-)
+router = APIRouter(prefix="/v1", tags=["responses"])
 
 
-@router.api_route("/responses", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def proxy_responses_root(request: Request) -> Response:
+@router.post("/responses")
+async def create_response(request: Request) -> Response:
     """
-    Generic proxy for the Responses API root.
+    POST /v1/responses
 
-    Covers:
-      - POST /v1/responses        (create response; JSON or SSE stream)
-      - GET  /v1/responses        (future-safe)
+    Create a model response (core Responses API entrypoint).
     """
-    logger.info("→ [responses] %s %s", request.method, request.url.path)
+    logger.info("→ [responses] POST %s", request.url.path)
     return await forward_openai_request(request)
 
 
-@router.api_route(
-    "/responses/{path:path}",
-    methods=["GET", "POST", "DELETE", "PATCH", "HEAD", "OPTIONS"],
-)
-async def proxy_responses_subpaths(path: str, request: Request) -> Response:
+@router.get("/responses/{response_id}")
+async def retrieve_response(response_id: str, request: Request) -> Response:
     """
-    Catch-all for all other Responses subpaths.
+    GET /v1/responses/{response_id}
 
-    Examples:
-      - GET    /v1/responses/{response_id}
-      - DELETE /v1/responses/{response_id}
-      - POST   /v1/responses/{response_id}/cancel
-      - GET    /v1/responses/{response_id}/input_token_counts
-      - any future /v1/responses/* additions
+    Retrieve a single model response by ID.
     """
-    logger.info("→ [responses/*] %s %s", request.method, request.url.path)
+    logger.info("→ [responses] GET %s", request.url.path)
+    return await forward_openai_request(request)
+
+
+@router.delete("/responses/{response_id}")
+async def delete_response(response_id: str, request: Request) -> Response:
+    """
+    DELETE /v1/responses/{response_id}
+
+    Delete a response by ID.
+    """
+    logger.info("→ [responses] DELETE %s", request.url.path)
+    return await forward_openai_request(request)
+
+
+@router.post("/responses/{response_id}/cancel")
+async def cancel_response(response_id: str, request: Request) -> Response:
+    """
+    POST /v1/responses/{response_id}/cancel
+
+    Cancel a background response.
+    """
+    logger.info("→ [responses] POST %s", request.url.path)
+    return await forward_openai_request(request)
+
+
+@router.get("/responses/{response_id}/input_items")
+async def list_response_input_items(
+    response_id: str,
+    request: Request,
+) -> Response:
+    """
+    GET /v1/responses/{response_id}/input_items
+
+    List input items that were used to generate this response.
+    """
+    logger.info("→ [responses] GET %s", request.url.path)
+    return await forward_openai_request(request)
+
+
+@router.post("/responses/input_tokens")
+async def get_input_token_counts(request: Request) -> Response:
+    """
+    POST /v1/responses/input_tokens
+
+    Compute input token counts for a hypothetical response request.
+    """
+    logger.info("→ [responses] POST %s", request.url.path)
     return await forward_openai_request(request)
