@@ -113,8 +113,8 @@ async def _responses_event_stream(payload: Dict[str, Any]) -> AsyncIterator[byte
 
     This generator expects the same body as /v1/responses, but will:
       - call client.responses.create(..., stream=True)
-      - emit each event as a JSON server-sent event: `data: {...}\\n\\n`
-      - terminate with `data: [DONE]\\n\\n`
+      - emit each event as a JSON server-sent event: `data: {...}\n\n`
+      - terminate with `data: [DONE]\n\n`
     """
     client = get_async_openai_client()
     logger.info("Streaming /v1/responses:stream with payload: %s", payload)
@@ -149,7 +149,10 @@ async def _responses_event_stream(payload: Dict[str, Any]) -> AsyncIterator[byte
 
 @router.post("/responses:stream")
 async def responses_stream(
-    body: Dict[str, Any] = Body(..., description="OpenAI Responses.create payload for streaming"),
+    body: Dict[str, Any] = Body(
+        ...,
+        description="OpenAI Responses.create payload for streaming",
+    ),
 ) -> StreamingSSE:
     """
     SSE streaming endpoint for the Responses API.
