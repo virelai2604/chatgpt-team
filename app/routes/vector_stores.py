@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
+from app.utils.logger import relay_log as logger  # type: ignore[attr-defined]
 
 router = APIRouter(
     prefix="/v1",
@@ -14,13 +14,14 @@ router = APIRouter(
 
 
 @router.api_route("/vector_stores", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def proxy_vector_stores_root(request: Request) -> Response:
+async def vector_stores_root(request: Request) -> Response:
     """
-    Vector stores root.
+    Root for the Vector Stores API.
 
-    Covers:
-      - GET  /v1/vector_stores   (list stores)
-      - POST /v1/vector_stores   (create store)
+    Typical operations:
+
+      - GET  /v1/vector_stores   → list vector stores
+      - POST /v1/vector_stores   → create vector store
     """
     logger.info("→ [vector_stores] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
@@ -30,21 +31,19 @@ async def proxy_vector_stores_root(request: Request) -> Response:
     "/vector_stores/{path:path}",
     methods=["GET", "POST", "DELETE", "PATCH", "HEAD", "OPTIONS"],
 )
-async def proxy_vector_stores_subpaths(path: str, request: Request) -> Response:
+async def vector_stores_subpaths(path: str, request: Request) -> Response:
     """
-    Catch-all for vector store subresources.
+    Catch‑all for /v1/vector_stores/*.
 
-    Examples:
+    Examples, consistent with OpenAI Vector Stores API:
+
       - GET    /v1/vector_stores/{vector_store_id}
-      - POST   /v1/vector_stores/{vector_store_id}                 (update)
-      - DELETE /v1/vector_stores/{vector_store_id}                 (delete)
-      - POST   /v1/vector_stores/{vector_store_id}/files           (attach file)
-      - GET    /v1/vector_stores/{vector_store_id}/files           (list files)
-      - GET    /v1/vector_stores/{vector_store_id}/files/{file_id}
-      - DELETE /v1/vector_stores/{vector_store_id}/files/{file_id}
+      - DELETE /v1/vector_stores/{vector_store_id}
+      - GET    /v1/vector_stores/{vector_store_id}/files
+      - POST   /v1/vector_stores/{vector_store_id}/files
+      - GET    /v1/vector_stores/{vector_store_id}/file_batches
       - POST   /v1/vector_stores/{vector_store_id}/file_batches
-      - GET    /v1/vector_stores/{vector_store_id}/file_batches/{batch_id}
-      - any future /v1/vector_stores/* additions
+      - etc.
     """
     logger.info("→ [vector_stores/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)

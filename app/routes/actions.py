@@ -2,89 +2,48 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from fastapi import APIRouter, Request, Response
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-
-from app.api.forward_openai import forward_openai_from_parts
-from app.utils.logger import relay_log as logger
-
+from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger  # type: ignore[attr-defined]
 
 router = APIRouter(
-    prefix="/v1/actions",
+    prefix="/v1",
     tags=["actions"],
 )
 
 
-class OpenAIForwardPayload(BaseModel):
+@router.api_route("/actions", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def actions_root(request: Request) -> Response:
     """
-    Payload for `/v1/actions/openai/forward`.
+    Root for the Actions API.
 
-    Lets a GPT or other client ask the relay to perform an OpenAI API call
-    on its behalf (relay injects auth, base URL, and streaming semantics).
+    Typical operations (subject to upstream API evolution):
+
+      - GET  /v1/actions       → list actions
+      - POST /v1/actions       → create/register an action
     """
-
-    method: str = Field(
-        default="POST",
-        description="HTTP method, e.g. GET, POST, DELETE",
-    )
-    path: str = Field(
-        ...,
-        description="Relative OpenAI API path, e.g. /v1/responses or /v1/models",
-    )
-    query: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Query string parameters to append to the URL",
-    )
-    headers: Dict[str, str] = Field(
-        default_factory=dict,
-        description="Extra headers to send upstream (excluding Authorization)",
-    )
-    body: Optional[Any] = Field(
-        default=None,
-        description="JSON-serialisable body or raw text/bytes",
-    )
-    stream: bool = Field(
-        default=False,
-        description="If true, request streaming from the upstream API when supported",
-    )
+    logger.info("→ [actions] %s %s", request.method, request.url.path)
+    return await forward_openai_request(request)
 
 
-@router.post(
-    "/openai/forward",
-    name="actions_openai_forward",
-    summary="Forward a single OpenAI API call through the relay",
+@router.api_route(
+    "/actions/{path:path}",
+    methods=["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"],
 )
-async def actions_openai_forward(payload: OpenAIForwardPayload):
+async def actions_subpaths(path: str, request: Request) -> Response:
     """
-    Generic forwarder for OpenAI endpoints, to be called from ChatGPT Actions.
+    Catch‑all for /v1/actions/*.
 
-    Examples:
-      - Forward `/v1/responses` with stream=True
-      - Forward `/v1/models`
-      - Forward `/v1/embeddings`
+    Examples (aligned with ChatGPT‑style Actions concepts):
+
+      - GET    /v1/actions/{action_id}
+      - DELETE /v1/actions/{action_id}
+      - POST   /v1/actions/{action_id}/run
+      - POST   /v1/actions/{action_id}/test
+      - Future /v1/actions/* expansions
+
+    We intentionally do no interpretation here and rely on the upstream API.
     """
-    try:
-        return await forward_openai_from_parts(
-            method=payload.method,
-            path=payload.path,
-            query=payload.query,
-            headers=payload.headers,
-            body=payload.body,
-            stream=payload.stream,
-        )
-    except HTTPException:
-        # Let structured HTTP errors bubble up as‑is
-        raise
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.exception("actions_openai_forward failed: %r", exc)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": {
-                    "message": "Unexpected error forwarding OpenAI action",
-                    "type": "internal_error",
-                }
-            },
-        )
+    logger.info("→ [actions/*] %s %s", request.method, request.url.path)
+    return await forward_openai_request(request)

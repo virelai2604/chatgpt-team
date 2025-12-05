@@ -2,33 +2,42 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response
+from typing import Any
 
-from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
+from fastapi import APIRouter, Path
+
+from app.api.forward_openai import forward_models_list, forward_models_retrieve
+from app.utils.logger import get_logger
 
 router = APIRouter(
     prefix="/v1",
     tags=["models"],
 )
 
+logger = get_logger(__name__)
+
 
 @router.get("/models")
-async def list_models(request: Request) -> Response:
-    logger.info("→ [models] %s %s", request.method, request.url.path)
-    return await forward_openai_request(request)
+async def list_models() -> Any:
+    """
+    Proxy for the OpenAI Models API (list).
+
+    Equivalent to:
+        GET https://api.openai.com/v1/models
+    """
+    logger.info("Incoming /v1/models list request")
+    return await forward_models_list()
 
 
 @router.get("/models/{model_id}")
-async def retrieve_model(model_id: str, request: Request) -> Response:
-    logger.info("→ [models] %s %s", request.method, request.url.path)
-    return await forward_openai_request(request)
-
-
-@router.delete("/models/{model_id}")
-async def delete_model(model_id: str, request: Request) -> Response:
+async def retrieve_model(
+    model_id: str = Path(..., description="Model ID to retrieve"),
+) -> Any:
     """
-    DELETE /v1/models/{model_id} — delete fine-tuned model (OpenAI parity).
+    Proxy for the OpenAI Models API (retrieve a specific model).
+
+    Equivalent to:
+        GET https://api.openai.com/v1/models/{model_id}
     """
-    logger.info("→ [models] DELETE %s", request.url.path)
-    return await forward_openai_request(request)
+    logger.info("Incoming /v1/models/%s retrieve request", model_id)
+    return await forward_models_retrieve(model_id)

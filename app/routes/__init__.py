@@ -1,9 +1,18 @@
-"""
-app.routes package
+# app/routes/__init__.py
 
-Keep this file minimal to avoid circular imports.
-Routers are imported explicitly in app.routes.register_routes.
-"""
+from __future__ import annotations
 
-# Intentionally do not import submodules here.
-# register_routes.py will import concrete route modules directly.
+from fastapi import APIRouter
+
+from .register_routes import register_routes
+
+# Public router that aggregates all resource routers under /v1.
+router = APIRouter()
+
+# Wire up all sub‑routers (health, files, conversations, etc.).
+register_routes(router)
+
+__all__ = [
+    "router",
+    "register_routes",
+]
