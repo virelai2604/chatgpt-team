@@ -9,12 +9,12 @@ from fastapi import APIRouter, Body
 from app.api.forward_openai import forward_images_generate
 from app.utils.logger import get_logger
 
+logger = get_logger(__name__)
+
 router = APIRouter(
     prefix="/v1",
     tags=["images"],
 )
-
-logger = get_logger(__name__)
 
 
 @router.post("/images")
@@ -23,13 +23,10 @@ async def generate_image(
     body: Dict[str, Any] = Body(..., description="OpenAI Images.generate payload"),
 ) -> Any:
     """
-    Proxy for the OpenAI Images API.
+    Proxy for OpenAI Images API.
 
     Supports both /v1/images and /v1/images/generations path shapes to play
     nicely with different client assumptions.
-
-    Equivalent to:
-        client.images.generate(**body)
     """
     logger.info("Incoming /v1/images request")
     return await forward_images_generate(body)
