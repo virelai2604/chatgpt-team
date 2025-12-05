@@ -2,34 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from functools import lru_cache
-import os
 from typing import Optional
-
-
-def _get_env(name: str, default: Optional[str] = None, *, required: bool = False) -> str:
-    """
-    Read an environment variable with optional default and required flag.
-    Raises RuntimeError if required and missing/empty.
-    """
-    value = os.getenv(name, default)
-    if value is None or value == "":
-        if required:
-            raise RuntimeError(f"Missing required environment variable: {name}")
-        return default or ""
-    return value
-
-
-def _bool_env(name: str, default: bool = False) -> bool:
-    """
-    Parse a boolean environment variable.
-    Accepts: 1, true, yes, on (case-insensitive) as truthy.
-    """
-    value = os.getenv(name)
-    if value is None or value == "":
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass(frozen=True)
@@ -37,29 +13,25 @@ class Settings:
     """
     Central configuration for the ChatGPT Team Relay.
 
-    This is intentionally a simple dataclass so it can be used easily in tests
-    and by FastAPI startup hooks.
+    This is intentionally simple and environment-driven (12‑factor style).
     """
 
-    # Application identity
     project_name: str
     environment: str
 
-    # Upstream OpenAI configuration
+    # OpenAI core configuration
     openai_api_key: str
     openai_base_url: str
     openai_organization: Optional[str]
 
-    # HTTP behaviour for the OpenAI client
+    # HTTP client behaviour
     timeout_seconds: float
     max_retries: int
 
     # Logging
     log_level: str
 
-    # Relay auth / tools
-    # These are uppercase on purpose so that callers can use settings.RELAY_KEY
-    # as a clear signal these are env-style fields.
+    # Relay auth / tools manifest
     RELAY_KEY: Optional[str]
     RELAY_AUTH_ENABLED: bool
     TOOLS_MANIFEST: str
@@ -69,73 +41,62 @@ class Settings:
         return self.environment.lower() != "production"
 
 
+def _get_env(key: str, default: Optional[str] = None, *, required: bool = False) -> Optional[str]:
+    value = os.getenv(key, default)
+    if required and (value is None or value == ""):
+        raise RuntimeError(f"Environment variable {key} is required but not set")
+    return value
+
+
+def _bool_env(key: str, default: bool = False) -> bool:
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """
-    Load and cache settings from environment variables.
+    Load and cache configuration from environment.
 
-    Required:
-        OPENAI_API_KEY
-
-    Optional (with defaults):
-        PROJECT_NAME            (default: chatgpt-team-relay)
-        ENVIRONMENT             (default: development)
-        OPENAI_BASE_URL         (default: https://api.openai.com/v1)
-        OPENAI_ORG_ID / OPENAI_ORG / OPENAI_ORGANIZATION
-        OPENAI_TIMEOUT_SECONDS  (default: 20.0)
-        OPENAI_MAX_RETRIES      (default: 2)
-        LOG_LEVEL               (default: INFO)
-        RELAY_KEY               (auth key for the relay)
-        RELAY_AUTH_ENABLED      (default: True if RELAY_KEY set, else False)
-        TOOLS_MANIFEST          (default: app/manifests/tools_manifest.json)
+    This is safe to call from anywhere and keeps a single Settings instance
+    for the process lifetime.
     """
-    environment = _get_env("ENVIRONMENT", "development") or "development"
+    project_name = _get_env("PROJECT_NAME", "chatgpt-team-relay") or "chatgpt-team-relay"
+    environment = _get_env("ENVIRONMENT", _get_env("APP_ENV", "development")) or "development"
 
-    openai_api_key = _get_env("OPENAI_API_KEY", required=True)
-    openai_base_url = (
-        _get_env("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        or "https://api.openai.com/v1"
-    )
-
-    # Accept multiple organisation env names for flexibility
-    org = (
-        os.getenv("OPENAI_ORG_ID")
-        or os.getenv("OPENAI_ORG")
-        or os.getenv("OPENAI_ORGANIZATION")
-        or ""
-    )
+    openai_api_key = _get_env("OPENAI_API_KEY", required=True)  # type: ignore[assignment]
+    openai_base_url = _get_env("OPENAI_API_BASE", "https://api.openai.com/v1") or "https://api.openai.com/v1"
+    openai_organization = _get_env("OPENAI_ORGANIZATION")
 
     timeout_seconds = float(_get_env("OPENAI_TIMEOUT_SECONDS", "20.0") or "20.0")
     max_retries = int(_get_env("OPENAI_MAX_RETRIES", "2") or "2")
+
     log_level = _get_env("LOG_LEVEL", "INFO") or "INFO"
 
-    # Relay auth: prefer RELAY_KEY, then legacy RELAY_AUTH_TOKEN
-    relay_key = _get_env("RELAY_KEY") or _get_env("RELAY_AUTH_TOKEN") or ""
-    relay_auth_enabled = _bool_env(
-        "RELAY_AUTH_ENABLED",
-        default=bool(relay_key),
-    )
+    relay_key = _get_env("RELAY_KEY")
+    relay_auth_enabled = _bool_env("RELAY_AUTH_ENABLED", default=bool(relay_key))
 
-    tools_manifest = (
-        _get_env("TOOLS_MANIFEST", "app/manifests/tools_manifest.json")
-        or "app/manifests/tools_manifest.json"
-    )
+    tools_manifest = _get_env(
+        "TOOLS_MANIFEST",
+        "app/manifests/tools_manifest.json",
+    ) or "app/manifests/tools_manifest.json"
 
     return Settings(
-        project_name=_get_env("PROJECT_NAME", "chatgpt-team-relay")
-        or "chatgpt-team-relay",
+        project_name=project_name,
         environment=environment,
         openai_api_key=openai_api_key,
         openai_base_url=openai_base_url,
-        openai_organization=org or None,
+        openai_organization=openai_organization,
         timeout_seconds=timeout_seconds,
         max_retries=max_retries,
         log_level=log_level,
-        RELAY_KEY=relay_key or None,
+        RELAY_KEY=relay_key,
         RELAY_AUTH_ENABLED=relay_auth_enabled,
         TOOLS_MANIFEST=tools_manifest,
     )
 
 
-# Convenience instance for modules that want `from app.core.config import settings`
+# Backwards‑compatible module‑level settings object
 settings: Settings = get_settings()

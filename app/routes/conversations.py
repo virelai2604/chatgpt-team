@@ -36,12 +36,12 @@ async def proxy_conversations_subpaths(path: str, request: Request) -> Response:
 
     Examples:
       - GET    /v1/conversations/{conversation_id}
-      - POST   /v1/conversations/{conversation_id}              (update)
-      - DELETE /v1/conversations/{conversation_id}              (delete)
-      - GET    /v1/conversations/{conversation_id}/items        (list items)
-      - POST   /v1/conversations/{conversation_id}/items        (create item)
-      - GET    /v1/conversations/{conversation_id}/items/{id}   (retrieve item)
-      - DELETE /v1/conversations/{conversation_id}/items/{id}   (delete item)
+      - POST   /v1/conversations/{conversation_id}            (update)
+      - DELETE /v1/conversations/{conversation_id}            (delete)
+      - GET    /v1/conversations/{conversation_id}/items      (list items)
+      - POST   /v1/conversations/{conversation_id}/items      (create item)
+      - GET    /v1/conversations/{conversation_id}/items/{id} (retrieve item)
+      - DELETE /v1/conversations/{conversation_id}/items/{id} (delete item)
       - future /v1/conversations/* additions
     """
     logger.info("→ [conversations/*] %s %s", request.method, request.url.path)
