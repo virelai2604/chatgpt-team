@@ -9,18 +9,18 @@ from fastapi import APIRouter, Path
 from app.api.forward_openai import forward_models_list, forward_models_retrieve
 from app.utils.logger import get_logger
 
+logger = get_logger(__name__)
+
 router = APIRouter(
     prefix="/v1",
     tags=["models"],
 )
 
-logger = get_logger(__name__)
-
 
 @router.get("/models")
 async def list_models() -> Any:
     """
-    Proxy for the OpenAI Models API (list).
+    Proxy for OpenAI Models API (list).
 
     Equivalent to:
         GET https://api.openai.com/v1/models
@@ -34,10 +34,7 @@ async def retrieve_model(
     model_id: str = Path(..., description="Model ID to retrieve"),
 ) -> Any:
     """
-    Proxy for the OpenAI Models API (retrieve a specific model).
-
-    Equivalent to:
-        GET https://api.openai.com/v1/models/{model_id}
+    Proxy for OpenAI Models API (retrieve a specific model).
     """
     logger.info("Incoming /v1/models/%s retrieve request", model_id)
     return await forward_models_retrieve(model_id)
