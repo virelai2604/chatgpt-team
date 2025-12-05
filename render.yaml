@@ -2,7 +2,7 @@
 # Render Service Manifest
 # ChatGPT Team Relay — Ground Truth API v1.8
 # SDK Targets:
-#   - openai-python 2.8.x
+#   - openai-python 2.9.x
 #   - openai-node 6.9.x
 # ==============================================================
 
@@ -11,8 +11,10 @@ services:
     name: chatgpt-team-relay
     runtime: python
     repo: https://github.com/virelai2604/chatgpt-team
+    branch: main
     region: singapore
     plan: starter
+    autoDeploy: false
 
     buildCommand: |
       pip install --upgrade pip
@@ -20,6 +22,9 @@ services:
 
     startCommand: |
       uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+    # Use the relay health endpoint for Render's health checks
+    healthCheckPath: /v1/health
 
     envVars:
       # -------- Core relay / app mode --------
@@ -30,10 +35,9 @@ services:
 
       # -------- OpenAI upstream config --------
       - key: OPENAI_API_BASE
-        value: https://api.openai.com      # no /v1
-      # IMPORTANT: set the real API key in the Render dashboard (do NOT commit it)
+        value: https://api.openai.com
       - key: OPENAI_API_KEY
-        value: ""   # override in Render UI
+        sync: false          # set real key in Render UI
       - key: OPENAI_ASSISTANTS_BETA
         value: assistants=v2
       - key: OPENAI_REALTIME_BETA
@@ -63,9 +67,9 @@ services:
       - key: ENABLE_STREAM
         value: "true"
       - key: CHAIN_WAIT_MODE
-        value: "sequential"
+        value: sequential
 
-      # -------- CORS config (CSV, not JSON array) --------
+      # -------- CORS config (CSV, not JSON) --------
       - key: CORS_ALLOW_ORIGINS
         value: https://chat.openai.com,https://platform.openai.com
       - key: CORS_ALLOW_METHODS
@@ -88,25 +92,18 @@ services:
         value: "false"
 
       # -------- Auth / secrets for relay usage --------
-      # Use a strong random value here; set it in Render UI and in client envs.
       - key: RELAY_KEY
-        value: ""   # override in Render UI, e.g. via secrets or manual edit
-      # Secret used for ChatGPT Actions (if you wire actions → relay)
+        sync: false          # set in Render UI
       - key: CHATGPT_ACTIONS_SECRET
-        value: ""   # override in Render UI
+        sync: false          # set in Render UI if you use Actions
 
-    # (Optional) If you use static assets or schemas, keep them in repo:
-    #   - render.yaml
-    #   - .env                # not committed; use Render "Secret Files" for this
-    #   - schemas/openapi.yaml
-    #   - static/.well-known/ai-plugin.json
+version: "1"
 
 # ==============================================================
 # Notes:
-# - OPENAI_API_KEY / RELAY_KEY / CHATGPT_ACTIONS_SECRET should be
-#   set as secrets in the Render dashboard, not committed with values.
+# - OPENAI_API_KEY / RELAY_KEY / CHATGPT_ACTIONS_SECRET values live only
+#   in the Render dashboard (sync:false). The Blueprint will not overwrite them.
 # - Health checks hit /v1/health on the relay.
 # - The relay exposes OpenAI-compatible endpoints (responses, files,
-#   embeddings, vector stores, realtime, images, videos, etc.) and
-#   a local tools registry at /v1/tools for ChatGPT Actions.
+#   embeddings, vector stores, realtime, images, videos, tools).
 # ==============================================================
