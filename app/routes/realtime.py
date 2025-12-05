@@ -128,10 +128,10 @@ async def realtime_ws(websocket: WebSocket) -> None:
     WebSocket proxy between client and OpenAI Realtime WS.
 
     Client connects to:
-      ws(s)://relay-host/v1/realtime/ws?model=...&session_id=...
+      ws(s)://relay-host/v1/realtime/ws?model=.&session_id=.
 
     Relay connects to:
-      wss://api.openai.com/v1/realtime?model=...&session_id=...
+      wss://api.openai.com/v1/realtime?model=.&session_id=.
     """
     await websocket.accept(subprotocol="openai-realtime-v1")
 
