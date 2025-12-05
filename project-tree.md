@@ -12,6 +12,12 @@
   📄 relay_e2e_raw.py
   📄 render.yaml
   📄 requirements.txt
+  📁 chatgpt_team_relay.egg-info
+    📄 PKG-INFO
+    📄 SOURCES.txt
+    📄 dependency_links.txt
+    📄 requires.txt
+    📄 top_level.txt
   📁 static
     📁 .well-known
       📄 __init__.py
@@ -81,6 +87,7 @@
       📄 __init__.py
       📄 config.py
       📄 http_client.py
+      📄 logging.py
     📁 api
       📄 __init__.py
       📄 forward_openai.py

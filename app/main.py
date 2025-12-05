@@ -1,45 +1,26 @@
-"""
-FastAPI application factory for the ChatGPT Team Relay.
-
-This module constructs the FastAPI instance, configures logging, attaches
-middleware, and registers all routers. It aligns the relay's behaviour
-with the OpenAI platform APIs by using the orchestrator and auth middleware
-and by including all API and tool routes.
-"""
-
-from __future__ import annotations
-
+# app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
-from app.core.logging import configure_logging
-from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
-from app.middleware.relay_auth import RelayAuthMiddleware
-from app.routes.register_routes import register_routes
+from .core.config import get_settings
+from .utils.logger import configure_logging
+from .utils.error_handler import register_exception_handlers
+from .middleware.p4_orchestrator import P4OrchestratorMiddleware
+from .middleware.relay_auth import RelayAuthMiddleware
+from .middleware.validation import ValidationMiddleware
+from .api.routes import router as api_router
 
 
 def create_app() -> FastAPI:
-    """
-    Application factory for the ChatGPT Team Relay.
-
-    Responsibilities:
-    - Configure logging once using the relay settings.
-    - Attach P4 orchestration and relay auth middleware.
-    - Register all API and tool routes under the appropriate prefixes.
-
-    Returns:
-        A fully configured FastAPI application ready for Uvicorn or Gunicorn.
-    """
-    # Configure logging at startup. This call is intended to be idempotent.
-    configure_logging(settings)
+    settings = get_settings()
+    configure_logging()
 
     app = FastAPI(
-        title="ChatGPT Team Relay",
-        version=getattr(settings, "APP_VERSION", "0.1.0"),
+        title=settings.project_name,
+        version="0.1.0",
     )
 
-    # Broad CORS – the relay may be called from various UI clients.
+    # Middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -47,20 +28,21 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    # Attach the P4 orchestrator; this enriches request.state with an
-    # OpenAI client and relay configuration used by downstream routes.
     app.add_middleware(P4OrchestratorMiddleware)
-
-    # Relay authentication. If RELAY_AUTH_ENABLED is true, requests must
-    # include Authorization: Bearer <RELAY_KEY>; otherwise this is a no-op.
     app.add_middleware(RelayAuthMiddleware)
+    app.add_middleware(ValidationMiddleware)
 
-    # Register all routers (OpenAI-style endpoints, tools, actions, fallback)
-    register_routes(app)
+    # Error handlers
+    register_exception_handlers(app)
+
+    # API routes
+    app.include_router(api_router)
+
+    @app.get("/health", tags=["health"])
+    def health() -> dict:
+        return {"status": "ok"}
 
     return app
 
 
-# Uvicorn / Gunicorn entrypoint. ASGI servers will import "app".
 app = create_app()

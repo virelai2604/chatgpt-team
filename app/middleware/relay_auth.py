@@ -1,49 +1,32 @@
 # app/middleware/relay_auth.py
-
-from __future__ import annotations
-
-import logging
+from typing import Callable, Awaitable
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse, Response
 
-from app.core.config import settings
-from app.utils.authy import check_relay_key
+from ..core.config import get_settings
+from ..utils.logger import get_logger
 
-logger = logging.getLogger("relay.auth")
-
-SAFE_PATH_PREFIXES = (
-    "/health",
-    "/v1/health",
-    "/openapi.json",
-    "/docs",
-    "/redoc",
-)
+logger = get_logger(__name__)
 
 
 class RelayAuthMiddleware(BaseHTTPMiddleware):
     """
-    Simple Bearer-based auth for the relay itself.
+    Optional shared-secret auth in front of the relay.
 
-    - Enabled when settings.RELAY_AUTH_ENABLED is true.
-    - Expects Authorization: Bearer <RELAY_KEY>.
-    - Skips health and documentation endpoints.
+    If RELAY_AUTH_TOKEN is set in the environment, every request must include
+    an `x-relay-auth` header with the same value.
     """
 
-    async def dispatch(self, request: Request, call_next):
-        if not settings.RELAY_AUTH_ENABLED:
-            return await call_next(request)
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        settings = get_settings()
+        required_token = settings.relay_auth_token
 
-        path = request.url.path
+        if required_token:
+            provided = request.headers.get("x-relay-auth")
+            if not provided or provided != required_token:
+                logger.warning("Rejected request with missing/invalid x-relay-auth header")
+                return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
-        # Allow health/docs/metadata without auth
-        if path.startswith(SAFE_PATH_PREFIXES):
-            return await call_next(request)
-
-        auth_header = request.headers.get("Authorization")
-
-        # Raises HTTPException(401) on failure; FastAPI will convert to JSON error
-        check_relay_key(auth_header)
-
-        logger.debug("Relay auth ok for %s", path)
         return await call_next(request)
