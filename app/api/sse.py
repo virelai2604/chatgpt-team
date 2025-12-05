@@ -1,48 +1,101 @@
 # app/api/sse.py
+
 from __future__ import annotations
 
-import json
-from typing import Any, AsyncIterator
+import logging
+from typing import AsyncIterator, Awaitable, Callable, Iterable, Optional, Union
+
+from fastapi.responses import StreamingResponse
+
+logger = logging.getLogger("relay")
+
+SSEByteSource = Union[Iterable[bytes], AsyncIterator[bytes]]
 
 
-def format_sse_event(event: str, data: Any) -> bytes:
+def format_sse_event(
+    *,
+    event: str,
+    data: str,
+    id: Optional[str] = None,
+    retry: Optional[int] = None,
+) -> bytes:
     """
     Format a single Server-Sent Event (SSE) frame.
 
-    Produces bytes of the form:
-        event: <event>\n
-        data: <json-data>\n
-        \n
+    Output format (UTF-8):
+        id: <id>
+        event: <event>
+        data: <line1>
+        data: <line2>
+        retry: <retry>
 
-    This is handy for emitting synthetic events (e.g. fallback errors)
-    while still looking like OpenAI's SSE frames.
+    Followed by a blank line.
     """
-    if isinstance(data, str):
-        data_str = data
+    lines = []
+
+    if id is not None:
+        lines.append(f"id: {id}")
+
+    if event:
+        lines.append(f"event: {event}")
+
+    # SSE data can span multiple lines; each must be prefixed with "data: "
+    if data == "":
+        # Even empty data should still yield a data line
+        lines.append("data:")
     else:
-        data_str = json.dumps(data, separators=(",", ":"))
+        for line in data.splitlines():
+            lines.append(f"data: {line}")
 
-    lines = [
-        f"event: {event}",
-        f"data: {data_str}",
-        "",  # blank line terminator
-    ]
-    return ("\n".join(lines) + "\n").encode("utf-8")
+    if retry is not None:
+        lines.append(f"retry: {retry}")
+
+    # End of event frame
+    payload = "\n".join(lines) + "\n\n"
+    return payload.encode("utf-8")
 
 
-async def proxy_sse_bytes(
-    upstream_iter: AsyncIterator[bytes],
-) -> AsyncIterator[bytes]:
+def sse_error_event(
+    message: str,
+    code: Optional[str] = None,
+    *,
+    id: Optional[str] = None,
+) -> bytes:
     """
-    Simple SSE byte proxy:
-
-    - Accepts raw byte chunks from an upstream streaming response.
-    - Yields them as-is (filtering out empty keepalives).
-
-    This keeps the relay transparent: we don't reinterpret OpenAI's
-    SSE framing, we just pass it through.
+    Convenience helper for emitting an SSE 'error' event.
     """
-    async for chunk in upstream_iter:
-        if not chunk:
-            continue
-        yield chunk
+    payload = {"message": message}
+    if code:
+        payload["code"] = code
+
+    # JSON is fine, but keep it simple: key=value;key=value
+    data_parts = [f"{k}={v}" for k, v in payload.items()]
+    data_str = ";".join(data_parts)
+
+    return format_sse_event(event="error", data=data_str, id=id)
+
+
+class StreamingSSE(StreamingResponse):
+    """
+    Thin wrapper around StreamingResponse that fixes the media type to
+    `text/event-stream` and expects an iterator/async-iterator of bytes.
+
+    Usage:
+        async def event_iter():
+            yield format_sse_event(event="message", data="hello")
+
+        return StreamingSSE(event_iter())
+    """
+
+    def __init__(
+        self,
+        content: SSEByteSource,
+        status_code: int = 200,
+        headers: Optional[dict] = None,
+    ) -> None:
+        super().__init__(
+            content=content,
+            status_code=status_code,
+            headers=headers,
+            media_type="text/event-stream",
+        )
