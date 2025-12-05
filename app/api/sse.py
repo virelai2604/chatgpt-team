@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-import logging
-from typing import AsyncIterator, Awaitable, Callable, Iterable, Optional, Union
+import json
+from typing import Any, AsyncIterator, Dict, Iterable, Optional, Union
 
+from fastapi import APIRouter, Body
 from fastapi.responses import StreamingResponse
 
-logger = logging.getLogger("relay")
+from app.core.http_client import get_async_openai_client
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+router = APIRouter(prefix="/v1", tags=["openai-relay-streaming"])
 
 SSEByteSource = Union[Iterable[bytes], AsyncIterator[bytes]]
 
@@ -68,7 +74,7 @@ def sse_error_event(
     if code:
         payload["code"] = code
 
-    # JSON is fine, but keep it simple: key=value;key=value
+    # Minimal key=value;key=value encoding
     data_parts = [f"{k}={v}" for k, v in payload.items()]
     data_str = ";".join(data_parts)
 
@@ -99,3 +105,57 @@ class StreamingSSE(StreamingResponse):
             headers=headers,
             media_type="text/event-stream",
         )
+
+
+async def _responses_event_stream(payload: Dict[str, Any]) -> AsyncIterator[bytes]:
+    """
+    SSE bridge for the OpenAI Responses streaming API.
+
+    This generator expects the same body as /v1/responses, but will:
+      - call client.responses.create(..., stream=True)
+      - emit each event as a JSON server-sent event: `data: {...}\\n\\n`
+      - terminate with `data: [DONE]\\n\\n`
+    """
+    client = get_async_openai_client()
+    logger.info("Streaming /v1/responses:stream with payload: %s", payload)
+
+    # Ensure streaming enabled, but let caller override if they explicitly provide it.
+    payload = dict(payload)
+    payload.setdefault("stream", True)
+
+    stream = await client.responses.create(**payload)  # stream=True above
+
+    async for event in stream:
+        # OpenAI events are Pydantic models in the Python SDK.
+        if hasattr(event, "model_dump_json"):
+            data_json = event.model_dump_json()
+        elif hasattr(event, "model_dump"):
+            data_dict = event.model_dump()
+            data_json = json.dumps(data_dict, default=str, separators=(",", ":"))
+        else:
+            # Fallback for older / different event types.
+            try:
+                data_json = json.dumps(event, default=str, separators=(",", ":"))
+            except TypeError:
+                data_json = json.dumps(str(event))
+
+        # SSE frame
+        chunk = f"data: {data_json}\n\n"
+        yield chunk.encode("utf-8")
+
+    # Conventional end-of-stream marker
+    yield b"data: [DONE]\n\n"
+
+
+@router.post("/responses:stream")
+async def responses_stream(
+    body: Dict[str, Any] = Body(..., description="OpenAI Responses.create payload for streaming"),
+) -> StreamingSSE:
+    """
+    SSE streaming endpoint for the Responses API.
+
+    Mirrors the OpenAI Python SDK streaming usage:
+        stream = client.responses.create(..., stream=True)
+        for event in stream: ...
+    """
+    return StreamingSSE(_responses_event_stream(body))

@@ -12,53 +12,23 @@
   📄 relay_e2e_raw.py
   📄 render.yaml
   📄 requirements.txt
-  📁 chatgpt_team_relay.egg-info
-    📄 PKG-INFO
-    📄 SOURCES.txt
-    📄 dependency_links.txt
-    📄 requires.txt
-    📄 top_level.txt
-  📁 static
-    📁 .well-known
-      📄 __init__.py
-      📄 ai-plugin.json
-  📁 data
-    📄 conversations.csv
-    📄 conversations.db
-    📁 conversations
-      📄 conversations.db
-    📁 videos
-      📄 videos.db
-    📁 embeddings
-      📄 embeddings.db
-    📁 uploads
-      📄 attachments.db
-      📄 file_9aa498e1dbb0
-    📁 jobs
-      📄 jobs.db
-    📁 usage
-      📄 usage.db
-    📁 images
-      📄 images.db
-    📁 files
-      📄 files.db
-    📁 vector_stores
-      📄 vectors.db
-    📁 models
-      📄 models.db
-      📄 openai_models_categorized.csv
-      📄 openai_models_categorized.json
-  📁 schemas
-    📄 __init__.py
-    📄 openapi.yaml
   📁 app
     📄 __init__.py
     📄 main.py
-    📁 utils
+    📁 api
       📄 __init__.py
-      📄 authy.py
-      📄 error_handler.py
-      📄 logger.py
+      📄 forward_openai.py
+      📄 routes.py
+      📄 sse.py
+      📄 tools_api.py
+    📁 core
+      📄 __init__.py
+      📄 config.py
+      📄 http_client.py
+      📄 logging.py
+    📁 manifests
+      📄 __init__.py
+      📄 tools_manifest.json
     📁 middleware
       📄 __init__.py
       📄 p4_orchestrator.py
@@ -80,22 +50,52 @@
       📄 responses.py
       📄 vector_stores.py
       📄 videos.py
-    📁 manifests
+    📁 utils
       📄 __init__.py
-      📄 tools_manifest.json
-    📁 core
-      📄 __init__.py
-      📄 config.py
-      📄 http_client.py
-      📄 logging.py
-    📁 api
-      📄 __init__.py
-      📄 forward_openai.py
-      📄 routes.py
-      📄 sse.py
-      📄 tools_api.py
+      📄 authy.py
+      📄 error_handler.py
+      📄 logger.py
+  📁 chatgpt_team_relay.egg-info
+    📄 PKG-INFO
+    📄 SOURCES.txt
+    📄 dependency_links.txt
+    📄 requires.txt
+    📄 top_level.txt
+  📁 data
+    📄 conversations.csv
+    📄 conversations.db
+    📁 conversations
+      📄 conversations.db
+    📁 embeddings
+      📄 embeddings.db
+    📁 files
+      📄 files.db
+    📁 images
+      📄 images.db
+    📁 jobs
+      📄 jobs.db
+    📁 models
+      📄 models.db
+      📄 openai_models_categorized.csv
+      📄 openai_models_categorized.json
+    📁 uploads
+      📄 attachments.db
+      📄 file_9aa498e1dbb0
+    📁 usage
+      📄 usage.db
+    📁 vector_stores
+      📄 vectors.db
+    📁 videos
+      📄 videos.db
   📁 docs
     📄 README.md
+  📁 schemas
+    📄 __init__.py
+    📄 openapi.yaml
+  📁 static
+    📁 .well-known
+      📄 __init__.py
+      📄 ai-plugin.json
   📁 tests
     📄 __init__.py
     📄 client.py
