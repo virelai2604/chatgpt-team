@@ -16,8 +16,6 @@
     📁 .well-known
       📄 __init__.py
       📄 ai-plugin.json
-  📁 logs
-    📄 smoke_routes_local_20251120-192805.json
   📁 data
     📄 conversations.csv
     📄 conversations.db
@@ -82,9 +80,12 @@
     📁 core
       📄 __init__.py
       📄 config.py
+      📄 http_client.py
     📁 api
       📄 __init__.py
       📄 forward_openai.py
+      📄 routes.py
+      📄 sse.py
       📄 tools_api.py
   📁 docs
     📄 README.md
@@ -101,6 +102,7 @@
     📄 test_models_files_videos_extra_routes.py
     📄 test_realtime_and_infra.py
     📄 test_relay_auth_middleware.py
+    📄 test_relay_e2e.py
     📄 test_responses_and_conversations.py
     📄 test_responses_and_embeddings_sdk.py
     📄 test_responses_stream_http.py
