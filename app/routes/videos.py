@@ -2,44 +2,30 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response
+from typing import Any, Dict
 
-from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
+from fastapi import APIRouter, Body
+
+from app.api.forward_openai import forward_videos_create
+from app.utils.logger import get_logger
 
 router = APIRouter(
     prefix="/v1",
     tags=["videos"],
 )
 
+logger = get_logger(__name__)
 
-@router.api_route("/videos", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def proxy_videos_root(request: Request) -> Response:
+
+@router.post("/videos")
+async def create_video(
+    body: Dict[str, Any] = Body(..., description="OpenAI Videos.create payload"),
+) -> Any:
     """
-    Videos root.
+    Proxy for the OpenAI Videos API.
 
-    Covers:
-      - POST /v1/videos      (create job)
-      - GET  /v1/videos      (list jobs, per current docs)
+    Expects the same JSON body that you would send directly to:
+        POST https://api.openai.com/v1/videos
     """
-    logger.info("→ [videos] %s %s", request.method, request.url.path)
-    return await forward_openai_request(request)
-
-
-@router.api_route(
-    "/videos/{path:path}",
-    methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"],
-)
-async def proxy_videos_subpaths(path: str, request: Request) -> Response:
-    """
-    Catch-all for video-related subresources.
-
-    Examples:
-      - POST   /v1/videos/remix
-      - GET    /v1/videos/{video_id}
-      - GET    /v1/videos/{video_id}/content
-      - DELETE /v1/videos/{video_id}
-      - any future /v1/videos/* additions
-    """
-    logger.info("→ [videos/*] %s %s", request.method, request.url.path)
-    return await forward_openai_request(request)
+    logger.info("Incoming /v1/videos request")
+    return await forward_videos_create(body)

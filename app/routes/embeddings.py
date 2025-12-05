@@ -2,21 +2,30 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response
+from typing import Any, Dict
 
-from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
+from fastapi import APIRouter, Body
+
+from app.api.forward_openai import forward_embeddings_create
+from app.utils.logger import get_logger
 
 router = APIRouter(
     prefix="/v1",
     tags=["embeddings"],
 )
 
+logger = get_logger(__name__)
+
 
 @router.post("/embeddings")
-async def create_embedding(request: Request) -> Response:
+async def create_embedding(
+    body: Dict[str, Any] = Body(..., description="OpenAI Embeddings.create payload"),
+) -> Any:
     """
-    POST /v1/embeddings — standard embeddings creation endpoint.
+    Proxy for the OpenAI Embeddings API.
+
+    Expects the same JSON body that you would send directly to:
+        POST https://api.openai.com/v1/embeddings
     """
-    logger.info("→ [embeddings] %s %s", request.method, request.url.path)
-    return await forward_openai_request(request)
+    logger.info("Incoming /v1/embeddings request")
+    return await forward_embeddings_create(body)
