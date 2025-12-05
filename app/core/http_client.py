@@ -1,32 +1,68 @@
 # app/core/http_client.py
-from typing import Optional
-import threading
 
-import httpx
-from openai import OpenAI
+from __future__ import annotations
 
-from .config import get_settings
+from functools import lru_cache
+from typing import Any, Dict
 
-_client: Optional[OpenAI] = None
-_lock = threading.Lock()
+from openai import OpenAI, AsyncOpenAI
+
+from app.core.config import get_settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
+def _client_kwargs() -> Dict[str, Any]:
+    """
+    Build keyword arguments for OpenAI / AsyncOpenAI clients
+    from the shared Settings object.
+    """
+    settings = get_settings()
+    kwargs: Dict[str, Any] = {
+        "api_key": settings.openai_api_key,
+    }
+
+    # The Python SDK supports overriding base_url and organization.
+    if settings.openai_base_url:
+        kwargs["base_url"] = settings.openai_base_url
+    if getattr(settings, "openai_organization", None):
+        kwargs["organization"] = settings.openai_organization
+
+    # Optionally propagate timeout / retries if configured.
+    timeout = getattr(settings, "timeout_seconds", None)
+    if timeout is not None:
+        kwargs["timeout"] = timeout
+
+    max_retries = getattr(settings, "max_retries", None)
+    if max_retries is not None:
+        kwargs["max_retries"] = max_retries
+
+    logger.debug(
+        "Initializing OpenAI client with base_url=%s org=%s timeout=%s max_retries=%s",
+        kwargs.get("base_url"),
+        kwargs.get("organization"),
+        kwargs.get("timeout"),
+        kwargs.get("max_retries"),
+    )
+    return kwargs
+
+
+@lru_cache(maxsize=1)
 def get_openai_client() -> OpenAI:
     """
-    Lazily instantiate and cache a single OpenAI client configured
-    from environment-backed settings.
+    Singleton synchronous OpenAI client.
+
+    Use this for sync utilities or where FastAPI endpoints are sync.
     """
-    global _client
-    if _client is None:
-        with _lock:
-            if _client is None:
-                settings = get_settings()
-                timeout = httpx.Timeout(settings.timeout_seconds)
-                _client = OpenAI(
-                    api_key=settings.openai_api_key,
-                    base_url=settings.openai_base_url,
-                    organization=settings.openai_organization,
-                    timeout=timeout,
-                    max_retries=settings.max_retries,
-                )
-    return _client
+    return OpenAI(**_client_kwargs())
+
+
+@lru_cache(maxsize=1)
+def get_async_openai_client() -> AsyncOpenAI:
+    """
+    Singleton asynchronous OpenAI client.
+
+    Use this from async FastAPI endpoints for better concurrency.
+    """
+    return AsyncOpenAI(**_client_kwargs())

@@ -39,8 +39,7 @@ def configure_logging(settings: Any) -> None:
     directly.
 
     Args:
-        settings: Pydantic settings object (unused but required for API
-            compatibility).
+        settings: settings object (unused but required for API compatibility).
     """
     # Ensure that the root logger is configured. The get_logger call sets up
     # formatting and levels on first invocation.
