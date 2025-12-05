@@ -2,133 +2,68 @@
 
 from __future__ import annotations
 
-import os
-import platform
-from datetime import datetime, timezone
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.forward_openai import forward_openai_from_parts
-
-router = APIRouter(tags=["actions"])
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from app.utils.logger import relay_log as logger
 
 
-def _base_env() -> Dict[str, str]:
-    """
-    Shared environment snapshot used by ping and relay_info.
-    """
-    return {
-        "app_mode": os.getenv("APP_MODE", "development"),
-        "environment": os.getenv("ENVIRONMENT", "local"),
-        "base_openai_api": os.getenv("OPENAI_API_BASE", "https://api.openai.com"),
-        "default_model": os.getenv("DEFAULT_MODEL")
-        or os.getenv("DEFAULT_OPENAI_MODEL")
-        or "gpt-4.1-mini",
-    }
-
-
-def _flat_relay_info() -> Dict[str, Any]:
-    base = _base_env()
-    relay_name = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
-
-    return {
-        "relay_name": relay_name,
-        "environment": base["environment"],
-        "app_mode": base["app_mode"],
-        "base_openai_api": base["base_openai_api"],
-    }
-
-
-def _structured_relay_info() -> Dict[str, Any]:
-    base = _base_env()
-    relay_name = os.getenv("RELAY_NAME", "ChatGPT Team Relay")
-    build_version = os.getenv("BIFL_VERSION", "dev")
-
-    return {
-        "relay": {
-            "name": relay_name,
-            "version": build_version,
-            "environment": base["environment"],
-            "app_mode": base["app_mode"],
-        },
-        "upstream": {
-            "api_base": base["base_openai_api"],
-            "default_model": base["default_model"],
-        },
-        "host": {
-            "platform": platform.system(),
-            "platform_release": platform.release(),
-            "python_version": platform.python_version(),
-        },
-        "timestamp": _now_iso(),
-    }
+router = APIRouter(
+    prefix="/v1/actions",
+    tags=["actions"],
+)
 
 
 class OpenAIForwardPayload(BaseModel):
-    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
-    path: str = Field(..., description="OpenAI API path, must start with /v1")
-    query: Optional[Dict[str, Any]] = None
-    headers: Optional[Dict[str, str]] = None
-    body: Optional[Any] = None
+    """
+    Payload for `/v1/actions/openai/forward`.
+
+    Lets a GPT or other client ask the relay to perform an OpenAI API call
+    on its behalf (relay injects auth, base URL, and streaming semantics).
+    """
+
+    method: str = Field(
+        default="POST",
+        description="HTTP method, e.g. GET, POST, DELETE",
+    )
+    path: str = Field(
+        ...,
+        description="Relative OpenAI API path, e.g. /v1/responses or /v1/models",
+    )
+    query: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Query string parameters to append to the URL",
+    )
+    headers: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Extra headers to send upstream (excluding Authorization)",
+    )
+    body: Optional[Any] = Field(
+        default=None,
+        description="JSON-serialisable body or raw text/bytes",
+    )
     stream: bool = Field(
         default=False,
-        description="If true, forward as SSE stream (caller must also set Accept: text/event-stream).",
+        description="If true, request streaming from the upstream API when supported",
     )
 
 
-# -------- Relay info / ping -------------------------------------------------
-
-
-@router.get("/v1/actions/ping")
-@router.get("/relay/actions/ping")
-async def actions_ping() -> Dict[str, Any]:
+@router.post(
+    "/openai/forward",
+    name="actions_openai_forward",
+    summary="Forward a single OpenAI API call through the relay",
+)
+async def actions_openai_forward(payload: OpenAIForwardPayload):
     """
-    Simple ping endpoint used by tests and health checks.
-    """
-    env = _base_env()
-    return {
-        "status": "ok",
-        "now": _now_iso(),
-        "environment": env["environment"],
-        "app_mode": env["app_mode"],
-    }
+    Generic forwarder for OpenAI endpoints, to be called from ChatGPT Actions.
 
-
-@router.get("/v1/actions/relay_info")
-@router.get("/relay/actions/relay_info")
-async def actions_relay_info() -> Dict[str, Any]:
-    """
-    Structured relay metadata for diagnostics and debugging.
-    """
-    return _structured_relay_info()
-
-
-# -------- Generic OpenAI forwarder ------------------------------------------
-
-
-@router.post("/v1/actions/openai/forward")
-async def actions_openai_forward(payload: OpenAIForwardPayload, request: Request) -> Response:
-    """
-    Generic action entrypoint:
-
-      POST /v1/actions/openai/forward
-      {
-        "method": "POST",
-        "path": "/v1/embeddings",
-        "query": { ... },
-        "headers": { ... },
-        "body": { ... },
-        "stream": false
-      }
-
-    This is relay-native; it is not an OpenAI public API endpoint.
+    Examples:
+      - Forward `/v1/responses` with stream=True
+      - Forward `/v1/models`
+      - Forward `/v1/embeddings`
     """
     try:
         return await forward_openai_from_parts(
@@ -140,16 +75,16 @@ async def actions_openai_forward(payload: OpenAIForwardPayload, request: Request
             stream=payload.stream,
         )
     except HTTPException:
+        # Let structured HTTP errors bubble up as‑is
         raise
-    except Exception as exc:  # noqa: BLE001
-        # Wrap unexpected exceptions in an OpenAI-style error envelope
-        return JSONResponse(
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("actions_openai_forward failed: %r", exc)
+        raise HTTPException(
             status_code=500,
-            content={
+            detail={
                 "error": {
-                    "message": f"actions_openai_forward failed: {exc}",
-                    "type": "server_error",
-                    "code": "actions_forward_error",
+                    "message": "Unexpected error forwarding OpenAI action",
+                    "type": "internal_error",
                 }
             },
         )
