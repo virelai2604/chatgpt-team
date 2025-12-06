@@ -2,39 +2,34 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-from typing import Any, Dict
+from typing import Optional
 
-from openai import AsyncOpenAI, OpenAI  # OpenAI Python SDK v2 
+from openai import AsyncOpenAI, OpenAI
 
-from app.core.config import Settings, get_settings
-
-
-def _client_kwargs(settings: Settings) -> Dict[str, Any]:
-    kwargs: Dict[str, Any] = {
-        "api_key": settings.openai_api_key,
-        "base_url": settings.openai_base_url,
-        "timeout": settings.timeout_seconds,
-        "max_retries": settings.max_retries,
-    }
-    if settings.openai_organization:
-        kwargs["organization"] = settings.openai_organization
-    return kwargs
+from app.core.config import settings
 
 
-@lru_cache(maxsize=1)
-def get_openai_client() -> OpenAI:
+def get_openai_client(api_key: Optional[str] = None) -> OpenAI:
     """
-    Lazily constructed sync OpenAI client shared across the process.
+    Synchronous OpenAI client, using Settings as the single source of truth.
     """
-    settings = get_settings()
-    return OpenAI(**_client_kwargs(settings))
+    return OpenAI(
+        api_key=api_key or settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        organization=settings.openai_organization,
+        max_retries=settings.max_retries,
+        timeout=settings.timeout_seconds,
+    )
 
 
-@lru_cache(maxsize=1)
-def get_async_openai_client() -> AsyncOpenAI:
+def get_async_openai_client(api_key: Optional[str] = None) -> AsyncOpenAI:
     """
-    Lazily constructed async OpenAI client shared across the process.
+    Asynchronous OpenAI client for streaming / SSE use cases.
     """
-    settings = get_settings()
-    return AsyncOpenAI(**_client_kwargs(settings))
+    return AsyncOpenAI(
+        api_key=api_key or settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        organization=settings.openai_organization,
+        max_retries=settings.max_retries,
+        timeout=settings.timeout_seconds,
+    )

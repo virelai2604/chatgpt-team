@@ -1,107 +1,73 @@
 # app/utils/error_handler.py
-
-from __future__ import annotations
-
 from typing import Any, Dict
 
+import openai
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.utils.logger import get_logger
+from .logger import get_logger
 
-try:
-    # These are re-exported by the OpenAI Python SDK 2.x
-    from openai import OpenAIError, APIConnectionError, RateLimitError  # type: ignore
-except Exception:  # pragma: no cover - SDK may not be installed in some environments
-    OpenAIError = Exception  # type: ignore
-    APIConnectionError = Exception  # type: ignore
-    RateLimitError = Exception  # type: ignore
-
-logger = get_logger()
+logger = get_logger(__name__)
 
 
-def _error_payload(exc: Exception, code: int, extra: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {
-        "error": {
-            "type": exc.__class__.__name__,
-            "message": str(exc),
-        }
-    }
+def _base_error_payload(message: str, extra: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {"detail": message}
     if extra:
-        payload["error"].update(extra)
+        payload.update(extra)
     return payload
 
 
-def install_exception_handlers(app: FastAPI) -> None:
-    """Register shared exception handlers on the FastAPI app."""
-
-    @app.exception_handler(StarletteHTTPException)
-    async def http_exception_handler(
-        request: Request, exc: StarletteHTTPException
-    ) -> JSONResponse:
-        logger.warning("HTTP error %s on %s %s", exc.status_code, request.method, request.url.path)
-        return JSONResponse(
-            status_code=exc.status_code,
-            content=_error_payload(exc, exc.status_code),
-        )
-
+def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(
-        request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
         logger.warning(
-            "Request validation failed on %s %s: %s",
-            request.method,
-            request.url.path,
-            exc.errors(),
+            "Request validation error",
+            extra={"path": str(request.url), "errors": exc.errors()},
         )
         return JSONResponse(
             status_code=422,
-            content={
-                "error": {
-                    "type": "RequestValidationError",
-                    "message": "Invalid request payload",
-                    "details": exc.errors(),
-                }
-            },
+            content=_base_error_payload("Validation error", {"errors": exc.errors()}),
         )
 
-    @app.exception_handler(RateLimitError)  # type: ignore[misc]
-    async def openai_rate_limit_handler(
-        request: Request, exc: RateLimitError  # type: ignore[valid-type]
-    ) -> JSONResponse:
-        logger.warning("OpenAI rate limit exceeded: %s", exc)
+    @app.exception_handler(openai.APITimeoutError)
+    async def openai_timeout_handler(request: Request, exc: openai.APITimeoutError):
+        logger.error("OpenAI request timed out", exc_info=exc)
         return JSONResponse(
-            status_code=429,
-            content=_error_payload(exc, 429, {"hint": "Please retry after a short delay."}),
+            status_code=504,
+            content=_base_error_payload("Upstream OpenAI request timed out"),
         )
 
-    @app.exception_handler(APIConnectionError)  # type: ignore[misc]
-    async def openai_connection_handler(
-        request: Request, exc: APIConnectionError  # type: ignore[valid-type]
-    ) -> JSONResponse:
-        logger.error("OpenAI connection error: %s", exc)
+    @app.exception_handler(openai.APIStatusError)
+    async def openai_status_handler(request: Request, exc: openai.APIStatusError):
+        logger.error(
+            "OpenAI API status error",
+            extra={"status_code": exc.status_code, "request_id": exc.request_id},
+        )
         return JSONResponse(
-            status_code=502,
-            content=_error_payload(exc, 502, {"hint": "Upstream connection to OpenAI failed."}),
+            status_code=exc.status_code,
+            content=_base_error_payload(
+                exc.message,
+                {"request_id": exc.request_id, "status_code": exc.status_code},
+            ),
         )
 
-    @app.exception_handler(OpenAIError)  # type: ignore[misc]
-    async def openai_generic_handler(
-        request: Request, exc: OpenAIError  # type: ignore[valid-type]
-    ) -> JSONResponse:
-        logger.error("Unhandled OpenAI error: %s", exc)
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        logger.warning(
+            "HTTP error",
+            extra={"status_code": exc.status_code, "detail": exc.detail},
+        )
         return JSONResponse(
-            status_code=502,
-            content=_error_payload(exc, 502),
+            status_code=exc.status_code,
+            content=_base_error_payload(str(exc.detail)),
         )
 
     @app.exception_handler(Exception)
-    async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-        logger.exception("Unhandled server error on %s %s", request.method, request.url.path)
+    async def unhandled_exception_handler(request: Request, exc: Exception):
+        logger.exception("Unhandled server error")
         return JSONResponse(
             status_code=500,
-            content=_error_payload(exc, 500, {"hint": "Unexpected server error."}),
+            content=_base_error_payload("Internal server error"),
         )
