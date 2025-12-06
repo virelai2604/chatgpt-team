@@ -15,36 +15,32 @@ router = APIRouter(tags=["health"])
 
 def _base_status() -> Dict[str, Any]:
     """
-    Canonical health payload for the relay.
+    Canonical health payload for the relay and upstream OpenAI API.
 
-    - Matches tests/test_health_and_tools.py expectations:
-        object == "health"
-        status == "ok"
-        "environment" in root
-        "default_model" in root
-    - Also exposes richer nested diagnostic data for observability.
+    Exposes top-level keys that tests and dashboards expect:
+      - object: "health"
+      - status: "ok"
+      - environment: e.g. "development" / "production"
+      - default_model: primary model used by the relay
+      - realtime_model: default Realtime model
     """
-    # Default model is driven by env for flexibility and "buy-it-for-life" tuning.
-    # If unset, fall back to a sensible modern default.
-    default_model = os.getenv("DEFAULT_MODEL", "gpt-5.1-codex-max")
+    default_model = os.getenv("DEFAULT_MODEL", "gpt-5.1-mini")
+    realtime_model = os.getenv("REALTIME_MODEL", "gpt-4.1-mini")
 
     return {
-        # Test-facing top-level fields
         "object": "health",
         "status": "ok",
         "environment": settings.environment,
         "default_model": default_model,
-        # Relay metadata
+        "realtime_model": realtime_model,
         "relay": {
             "project_name": settings.project_name,
-            "environment": settings.environment,
+            "debug": settings.debug,
         },
-        # Upstream OpenAI metadata
         "upstream": {
             "api_base": settings.openai_base_url,
             "organization": settings.openai_organization,
         },
-        # Diagnostics
         "meta": {
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
@@ -55,9 +51,6 @@ def _base_status() -> Dict[str, Any]:
 async def health_root() -> Dict[str, Any]:
     """
     Legacy root health endpoint.
-
-    Kept for convenience; main tests target /v1/health but some tooling
-    may still probe /health.
     """
     return _base_status()
 
@@ -65,6 +58,6 @@ async def health_root() -> Dict[str, Any]:
 @router.get("/v1/health")
 async def health_v1() -> Dict[str, Any]:
     """
-    Primary health endpoint expected by tests and external tooling.
+    Versioned health endpoint under /v1 for clients that expect API-style paths.
     """
     return _base_status()
