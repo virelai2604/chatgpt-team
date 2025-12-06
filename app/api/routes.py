@@ -1,64 +1,113 @@
-# app/routes/register_routes.py
+# app/api/routes.py
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Dict
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Body, HTTPException, Path, status
 
-from . import (
-    actions,
-    batches,
-    containers,
-    conversations,
-    files,
-    health,
-    realtime,
-    vector_stores,
+from app.api.forward_openai import (
+    forward_embeddings_create,
+    forward_images_generate,
+    forward_models_list,
+    forward_models_retrieve,
+    forward_responses_create,
+    forward_videos_create,
 )
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+router = APIRouter(prefix="/v1", tags=["openai-sdk"])
 
 
-class _RouterLike(Protocol):
-    """
-    Minimal protocol for something that can have routers included.
+@router.post(
+    "/responses",
+    summary="Create a model response (Responses API)",
+)
+async def create_response(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    try:
+        return await forward_responses_create(payload)
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Error calling Responses API: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Error calling OpenAI Responses API",
+        )
 
-    Both FastAPI and APIRouter satisfy this (they expose include_router()).
-    """
 
-    def include_router(self, router: APIRouter, **kwargs) -> None:  # pragma: no cover - protocol
-        ...
+@router.post(
+    "/embeddings",
+    summary="Create embeddings",
+)
+async def create_embeddings(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    try:
+        return await forward_embeddings_create(payload)
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Error calling Embeddings API: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Error calling OpenAI Embeddings API",
+        )
 
 
-def register_routes(app: _RouterLike) -> None:
-    """
-    Register resource-family routers on the given FastAPI app or APIRouter.
+@router.post(
+    "/images",
+    summary="Generate images",
+)
+async def generate_images(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    try:
+        return await forward_images_generate(payload)
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Error calling Images API: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Error calling OpenAI Images API",
+        )
 
-    This centralises wiring so you can:
 
-        from app.routes import register_routes
-        register_routes(app)
+@router.post(
+    "/videos",
+    summary="Generate videos",
+)
+async def create_videos(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    try:
+        return await forward_videos_create(payload)
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Error calling Videos API: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Error calling OpenAI Videos API",
+        )
 
-    or:
 
-        from fastapi import APIRouter
-        from app.routes import register_routes
+@router.get(
+    "/models",
+    summary="List available models",
+)
+async def list_models() -> Dict[str, Any]:
+    try:
+        return await forward_models_list()
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Error listing models: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Error listing OpenAI models",
+        )
 
-        router = APIRouter()
-        register_routes(router)
-    """
 
-    # Health is special: it exposes both /health and /v1/health
-    app.include_router(health.router)
-
-    # Core REST resources (generic pass‑through via forward_openai_request)
-    app.include_router(files.router)
-    app.include_router(conversations.router)
-    app.include_router(containers.router)
-    app.include_router(batches.router)
-
-    # New capability surfaces
-    app.include_router(actions.router)
-    app.include_router(vector_stores.router)
-
-    # Realtime (HTTP + WS proxy)
-    app.include_router(realtime.router)
+@router.get(
+    "/models/{model_id}",
+    summary="Retrieve model metadata",
+)
+async def retrieve_model(
+    model_id: str = Path(..., description="Model ID to retrieve"),
+) -> Dict[str, Any]:
+    try:
+        return await forward_models_retrieve(model_id)
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Error retrieving model %s: %s", model_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Error retrieving OpenAI model {model_id}",
+        )
