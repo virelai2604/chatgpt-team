@@ -19,38 +19,17 @@ from .routes.register_routes import register_routes
 
 def create_app() -> FastAPI:
     """
-    Application factory for the ChatGPT Team Relay.
+    Application factory for the ChatGPT Team relay.
 
     Canonical wiring:
 
-    - /health, /v1/health:
-        app.routes.health (mounted via register_routes)
-
-    - Core REST families (generic HTTP proxy via forward_openai_request):
-        /v1/files
-        /v1/conversations
-        /v1/containers
-        /v1/batches
-        /v1/actions
-        /v1/vector_stores
-        /v1/realtime/*
-
-      (all mounted via register_routes)
-
-    - Canonical SDK-backed OpenAI endpoints (Python SDK v2.x):
-        /v1/responses
-        /v1/embeddings
-        /v1/images, /v1/images/generations
-        /v1/videos
-        /v1/models, /v1/models/{model_id}
-
-      (from app.api.routes)
-
-    - Streaming:
-        /v1/responses:stream (from app.api.sse)
-
-    - Tools:
-        /v1/tools (from app.api.tools_api)
+      - Shared config via app.core.config.get_settings()
+      - Logging via app.utils.logger.configure_logging()
+      - Middlewares: P4 orchestrator, relay auth, validation
+      - SDK-based OpenAI endpoints under /v1 (Responses, Embeddings, Images, Videos, Models)
+      - SSE streaming for Responses under /v1/responses:stream
+      - Tools manifest under /v1/tools
+      - Route families registered via app.routes.register_routes.register_routes()
     """
     settings = get_settings()
     # Use the configured log level from settings
@@ -76,17 +55,19 @@ def create_app() -> FastAPI:
     # Error handlers
     register_exception_handlers(app)
 
-    # Resource routes (health + REST relay + realtime)
+    # Core SDK / OpenAI API routes
+    app.include_router(api_router)       # /v1/* via OpenAI SDK & generic forward
+    app.include_router(sse_router)       # /v1/responses:stream SSE
+    app.include_router(tools_router)     # /v1/tools
+
+    # Route-family wiring (files, containers, batches, realtime, health, etc.)
     register_routes(app)
 
-    # SDK-based core OpenAI APIs
-    app.include_router(api_router)
-
-    # Streaming and tools
-    app.include_router(sse_router)
-    app.include_router(tools_router)
+    # NOTE: We no longer define an inline /health here.
+    # /health and /v1/health are provided by app.routes.health.
 
     return app
 
 
+# Global ASGI app for uvicorn and tests
 app = create_app()

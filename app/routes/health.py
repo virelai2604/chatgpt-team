@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter
@@ -13,57 +12,34 @@ from app.core.config import settings
 router = APIRouter(tags=["health"])
 
 
-# Sensible defaults; callers can override via environment if desired.
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-5.1-mini") or "gpt-5.1-mini"
-REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-4o-realtime-preview") or "gpt-4o-realtime-preview"
-
-
-def _base_status() -> Dict[str, Any]:
+def _health_payload() -> Dict[str, Any]:
     """
-    Base health payload used by both /health and /v1/health.
+    Build a compact, test-friendly health payload.
 
-    Top-level fields are kept simple (matching tests), while nested sections
-    provide richer introspection for operators.
+    This matches tests/test_health_and_tools.py expectations:
+      - object == "health"
+      - status == "ok"
+      - environment present
+      - default_model present
     """
-    now = datetime.now(timezone.utc).isoformat()
+    environment = getattr(settings, "environment", "development") or "development"
+    # Default model can be overridden via env; otherwise use a sensible OpenAI default
+    default_model = os.getenv("DEFAULT_MODEL", "gpt-4.1-mini")
 
     return {
-        # Tests expect these:
         "object": "health",
         "status": "ok",
-        "environment": settings.environment,
-        "default_model": DEFAULT_MODEL,
-        # Additional structured info (not required by tests, but useful in practice)
-        "relay": {
-            "project_name": settings.project_name,
-            "environment": settings.environment,
-        },
-        "upstream": {
-            "base_url": settings.openai_base_url,
-            "organization": settings.openai_organization,
-            "realtime_model": REALTIME_MODEL,
-        },
-        "meta": {
-            "timestamp": now,
-        },
+        "environment": environment,
+        "default_model": default_model,
     }
 
 
 @router.get("/health")
-async def health_root() -> Dict[str, Any]:
-    """
-    Root health endpoint.
-
-    Simple, unauthenticated liveness probe for load balancers and basic checks.
-    """
-    return _base_status()
-
-
 @router.get("/v1/health")
-async def health_v1() -> Dict[str, Any]:
+async def health() -> Dict[str, Any]:
     """
-    Versioned health endpoint.
+    Health endpoint available under both /health and /v1/health.
 
-    Used by tests and by clients that expect a /v1-prefixed path alongside other APIs.
+    Returns a simple JSON payload summarising relay status and configuration.
     """
-    return _base_status()
+    return _health_payload()
