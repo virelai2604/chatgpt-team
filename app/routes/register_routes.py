@@ -2,63 +2,45 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from fastapi import FastAPI
 
-from fastapi import APIRouter, FastAPI
-
-from . import (
+from app.routes import (
     actions,
     batches,
     containers,
     conversations,
     files,
     health,
+    images,
     realtime,
     vector_stores,
+    videos,
 )
 
 
-class _RouterLike(Protocol):
+def register_routes(app: FastAPI) -> None:
     """
-    Minimal protocol for something that can have routers included.
+    Central place to wire all "generic" route families that mostly forward
+    to OpenAI via forward_openai_request.
 
-    Both FastAPI and APIRouter satisfy this (they expose include_router()).
+    We deliberately *exclude* the typed /v1 endpoints that are already
+    handled via app/api/routes.py (responses, embeddings, models, etc.)
+    to avoid duplicate registrations.
     """
-
-    def include_router(self, router: APIRouter, **kwargs) -> None:  # pragma: no cover - protocol
-        ...
-
-
-def register_routes(app: _RouterLike) -> None:
-    """
-    Register resource-family routers on the given FastAPI app or APIRouter.
-
-    This centralises wiring so you can:
-
-        from app.routes import register_routes
-        register_routes(app)
-
-    or:
-
-        from fastapi import APIRouter
-        from app.routes import register_routes
-
-        router = APIRouter()
-        register_routes(router)
-    """
-
-    # Health is special: it exposes both /health and /v1/health
+    # Health
     app.include_router(health.router)
 
-    # Core REST resources (generic pass‑through via forward_openai_request)
+    # File / vector / container families (generic proxying)
     app.include_router(files.router)
-    app.include_router(conversations.router)
+    app.include_router(vector_stores.router)
     app.include_router(containers.router)
     app.include_router(batches.router)
 
-    # New capability surfaces
-    app.include_router(actions.router)
-    app.include_router(vector_stores.router)
-
-    # Realtime (HTTP + WS proxy)
+    # Conversation / realtime / actions
+    app.include_router(conversations.router)
     app.include_router(realtime.router)
+    app.include_router(actions.router)
+
+    # Media extensions that are primarily pass-through
+    app.include_router(images.router)
+    app.include_router(videos.router)
