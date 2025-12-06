@@ -3,34 +3,51 @@
 from __future__ import annotations
 
 import logging
-import sys
+import os
 from typing import Optional
 
+_LOGGER_ROOT_NAME = "chatgpt_team_relay"
 
-_LOGGER_CONFIGURED = False
 
-
-def configure_logging(level: str = "INFO") -> None:
+def configure_logging(level: Optional[str] = None) -> None:
     """
-    Configure root logging once, in a simple JSON-ish console format.
+    Configure the root relay logger.
 
-    Called from app/main.py with the level coming from Settings.
+    Idempotent: calling it multiple times will not duplicate handlers.
     """
-    global _LOGGER_CONFIGURED
-    if _LOGGER_CONFIGURED:
+    logger = logging.getLogger(_LOGGER_ROOT_NAME)
+    if logger.handlers:
+        # Already configured
         return
 
-    logging.basicConfig(
-        level=level.upper(),
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-        stream=sys.stdout,
+    level_name = level or os.getenv("LOG_LEVEL", "INFO")
+    log_level = getattr(logging, level_name.upper(), logging.INFO)
+
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
-    _LOGGER_CONFIGURED = True
+    handler.setFormatter(formatter)
+
+    logger.setLevel(log_level)
+    logger.addHandler(handler)
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """
-    Small wrapper around logging.getLogger so we only have a single
-    configuration surface.
+    Get a child logger under the relay root.
+
+    Example:
+        logger = get_logger(__name__)
     """
-    return logging.getLogger(name if name else __name__)
+    configure_logging()
+
+    if not name:
+        return logging.getLogger(_LOGGER_ROOT_NAME)
+
+    return logging.getLogger(f"{_LOGGER_ROOT_NAME}.{name}")
+
+
+# Shared relay logger used by routes: `from app.utils.logger import relay_log as logger`
+relay_log = get_logger("relay")

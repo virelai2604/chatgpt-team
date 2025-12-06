@@ -11,93 +11,92 @@ from typing import Optional
 @dataclass(frozen=True)
 class Settings:
     """
-    Single source of truth for relay configuration.
+    Central configuration for the ChatGPT Team Relay.
 
-    Backed by environment variables, but kept as a simple dataclass so the
-    rest of the codebase stays framework-agnostic and fast to import.
+    This is intentionally simple and environment-driven (12‑factor style).
     """
 
-    # Project / environment
     project_name: str
-    environment: str  # e.g. "development", "staging", "production"
+    environment: str
 
-    # OpenAI API
+    # OpenAI core configuration
     openai_api_key: str
     openai_base_url: str
     openai_organization: Optional[str]
+
+    # HTTP client behaviour
     timeout_seconds: float
     max_retries: int
+
+    # Logging
     log_level: str
 
-    # Relay auth
-    relay_key: Optional[str]
-    relay_auth_enabled: bool
+    # Relay auth / tools manifest
+    RELAY_KEY: Optional[str]
+    RELAY_AUTH_ENABLED: bool
+    TOOLS_MANIFEST: str
 
-    # Tools / validation
-    tools_manifest: str
-    validation_schema_path: Optional[str]
+    @property
+    def debug(self) -> bool:
+        return self.environment.lower() != "production"
 
 
-def _get_env(name: str, default: Optional[str] = None, *, required: bool = False) -> str:
-    value = os.getenv(name, default)
-    if required and not value:
-        raise RuntimeError(f"Missing required environment variable: {name}")
+def _get_env(key: str, default: Optional[str] = None, *, required: bool = False) -> Optional[str]:
+    value = os.getenv(key, default)
+    if required and (value is None or value == ""):
+        raise RuntimeError(f"Environment variable {key} is required but not set")
     return value
 
 
-def _bool_env(name: str, default: bool = False) -> bool:
-    raw = os.getenv(name)
+def _bool_env(key: str, default: bool = False) -> bool:
+    raw = os.getenv(key)
     if raw is None:
         return default
-    return raw.lower() in {"1", "true", "yes", "on"}
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """
-    Load settings once from environment. All other modules should import this
-    function (or the module-level `settings`) instead of reading os.environ
-    directly.
+    Load and cache configuration from environment.
+
+    This is safe to call from anywhere and keeps a single Settings instance
+    for the process lifetime.
     """
-    project_name = _get_env("PROJECT_NAME", "ChatGPT Team Relay")
-    environment = _get_env("ENVIRONMENT", "development")
+    project_name = _get_env("PROJECT_NAME", "chatgpt-team-relay") or "chatgpt-team-relay"
+    environment = _get_env("ENVIRONMENT", _get_env("APP_ENV", "development")) or "development"
 
-    openai_api_key = _get_env("OPENAI_API_KEY", required=True)
-    openai_base_url = _get_env("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    openai_api_key = _get_env("OPENAI_API_KEY", required=True)  # type: ignore[assignment]
+    openai_base_url = _get_env("OPENAI_API_BASE", "https://api.openai.com/v1") or "https://api.openai.com/v1"
+    openai_organization = _get_env("OPENAI_ORGANIZATION")
 
-    openai_org = (
-        os.getenv("OPENAI_ORG_ID")
-        or os.getenv("OPENAI_ORGANIZATION")
-        or os.getenv("OPENAI_ORG")
-    )
+    timeout_seconds = float(_get_env("OPENAI_TIMEOUT_SECONDS", "20.0") or "20.0")
+    max_retries = int(_get_env("OPENAI_MAX_RETRIES", "2") or "2")
 
-    timeout_seconds = float(_get_env("OPENAI_TIMEOUT_SECONDS", "20.0"))
-    max_retries = int(_get_env("OPENAI_MAX_RETRIES", "2"))
-    log_level = _get_env("LOG_LEVEL", "INFO")
+    log_level = _get_env("LOG_LEVEL", "INFO") or "INFO"
 
-    relay_key = os.getenv("RELAY_KEY")
+    relay_key = _get_env("RELAY_KEY")
     relay_auth_enabled = _bool_env("RELAY_AUTH_ENABLED", default=bool(relay_key))
 
     tools_manifest = _get_env(
-        "TOOLS_MANIFEST", "app/manifests/tools_manifest.json"
-    )
-    validation_schema_path = os.getenv("VALIDATION_SCHEMA_PATH")
+        "TOOLS_MANIFEST",
+        "app/manifests/tools_manifest.json",
+    ) or "app/manifests/tools_manifest.json"
 
     return Settings(
         project_name=project_name,
         environment=environment,
         openai_api_key=openai_api_key,
         openai_base_url=openai_base_url,
-        openai_organization=openai_org,
+        openai_organization=openai_organization,
         timeout_seconds=timeout_seconds,
         max_retries=max_retries,
         log_level=log_level,
-        relay_key=relay_key,
-        relay_auth_enabled=relay_auth_enabled,
-        tools_manifest=tools_manifest,
-        validation_schema_path=validation_schema_path,
+        RELAY_KEY=relay_key,
+        RELAY_AUTH_ENABLED=relay_auth_enabled,
+        TOOLS_MANIFEST=tools_manifest,
     )
 
 
-# Convenient singleton for modules that just need readonly configuration.
+# Backwards‑compatible module‑level settings object
 settings: Settings = get_settings()
