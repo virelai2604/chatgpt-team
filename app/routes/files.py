@@ -1,44 +1,37 @@
 # app/routes/files.py
 
-from __future__ import annotations
-
 from fastapi import APIRouter, Request, Response
 
 from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
 
 router = APIRouter(
-    prefix="/v1",
+    prefix="/files",
     tags=["files"],
 )
 
 
-@router.api_route("/files", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def proxy_files_root(request: Request) -> Response:
-    """
-    Files root.
-
-    Covers:
-      - GET  /v1/files   (list)
-      - POST /v1/files   (create/upload)
-    """
-    logger.info("→ [files] %s %s", request.method, request.url.path)
-    return await forward_openai_request(request)
-
-
 @router.api_route(
-    "/files/{path:path}",
-    methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"],
+    "",
+    methods=["GET", "POST"],
 )
-async def proxy_files_subpaths(path: str, request: Request) -> Response:
+@router.api_route(
+    "/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+)
+async def proxy_files(request: Request, path: str = "") -> Response:
     """
-    Catch-all for Files subresources.
+    Catch-all proxy for OpenAI Files API.
 
     Examples:
-      - GET    /v1/files/{file_id}
-      - DELETE /v1/files/{file_id}
-      - GET    /v1/files/{file_id}/content
-      - future /v1/files/* additions (e.g. uploads interoperability)
+      - GET  /v1/files                -> GET  /files
+      - POST /v1/files                -> POST /files
+      - GET  /v1/files/{file_id}      -> GET  /files/{file_id}
+      - DELETE /v1/files/{file_id}    -> DELETE /files/{file_id}
+      - POST /v1/files/{file_id}/...  -> POST /files/{file_id}/...
+
+    The actual forwarding logic lives in `forward_openai_request`, which:
+      - Clones method, headers, query params, and body.
+      - Normalises the path (usually stripping the `/v1` prefix).
+      - Sends to OpenAI base_url using your configured HTTP client.
     """
-    logger.info("→ [files/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)

@@ -24,7 +24,7 @@ async def create_embedding(
     """
     Proxy for OpenAI Embeddings API.
 
-    Expects the same JSON body that you would send directly to:
+    Mirrors:
         POST https://api.openai.com/v1/embeddings
     """
     logger.info("Incoming /v1/embeddings request")

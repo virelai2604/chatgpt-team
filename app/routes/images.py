@@ -28,5 +28,5 @@ async def generate_image(
     Supports both /v1/images and /v1/images/generations path shapes to play
     nicely with different client assumptions.
     """
-    logger.info("Incoming /v1/images request")
+    logger.info("Incoming %s request to images endpoint", "/v1/images")
     return await forward_images_generate(body)
