@@ -1,75 +1,62 @@
 # app/routes/register_routes.py
 
-from fastapi import FastAPI
+from __future__ import annotations
 
-# Core SDK-based OpenAI routers
-from app.api.routes import router as api_router
-from app.api.sse import router as sse_router
+from typing import Protocol
 
-# Health + infra
-from app.routes import health as health_routes
-from app.routes import realtime as realtime_routes
+from fastapi import APIRouter, FastAPI
 
-# Catch-all route families (each should define `router: APIRouter`)
-from app.routes import actions as actions_routes
-from app.routes import batches as batches_routes
-from app.routes import containers as containers_routes
-from app.routes import conversations as conversations_routes
-from app.routes import embeddings as embeddings_routes
-from app.routes import files as files_routes
-from app.routes import images as images_routes
-from app.routes import models as models_routes
-from app.routes import vector_stores as vector_stores_routes
-from app.routes import videos as videos_routes
+from . import (
+    actions,
+    batches,
+    containers,
+    conversations,
+    embeddings,
+    files,
+    health,
+    images,
+    models,
+    realtime,
+    responses,
+    vector_stores,
+    videos,
+)
 
 
-def register_routes(app: FastAPI) -> None:
+class _RouterLike(Protocol):
     """
-    Central registry for all routers.
-
-    Canonical shape:
-
-      - /health                  -> health_routes.router
-      - /v1/realtime/...         -> realtime_routes.router
-      - /v1/responses, /v1/...   -> api_router
-      - /v1/responses:stream     -> sse_router
-      - /v1/files/...            -> files_routes.router
-      - /v1/models/...           -> models_routes.router
-      - /v1/vector_stores/...    -> vector_stores_routes.router
-      - /v1/batches/...          -> batches_routes.router
-      - /v1/containers/...       -> containers_routes.router
-      - /v1/conversations/...    -> conversations_routes.router
-      - /v1/actions/...          -> actions_routes.router
-      - /v1/embeddings/...       -> embeddings_routes.router
-      - /v1/images/...           -> images_routes.router
-      - /v1/videos/...           -> videos_routes.router
+    Minimal protocol for FastAPI app / APIRouter objects that support include_router.
     """
 
-    # Health / infra (no /v1 prefix)
-    app.include_router(health_routes.router)
+    def include_router(self, router: APIRouter, **kwargs) -> None:  # pragma: no cover - structural
+        ...
 
-    # Realtime infra under /v1
-    app.include_router(realtime_routes.router, prefix="/v1")
 
-    # Canonical SDK-based OpenAI endpoints (responses, embeddings, images, videos, models)
-    app.include_router(api_router, prefix="/v1")
+def register_routes(app: _RouterLike) -> None:
+    """
+    Register all route families defined under app.routes.* on the given app or router.
 
-    # Streaming Responses (`/v1/responses:stream`)
-    app.include_router(sse_router, prefix="/v1")
+    This centralises wiring so you can:
 
-    # Route families using generic forwarder (forward_openai_request)
-    route_families = [
-        actions_routes,
-        batches_routes,
-        containers_routes,
-        conversations_routes,
-        embeddings_routes,
-        files_routes,
-        images_routes,
-        models_routes,
-        vector_stores_routes,
-        videos_routes,
-    ]
+        from app.routes import register_routes
+        register_routes(app)
+    """
 
-    for module in route_families:
-        app.include_router(module.router, prefix="/v1")
+    # Health + meta
+    app.include_router(health.router)
+
+    # Core OpenAI-ish resources (thin proxies that use forward_openai_request)
+    app.include_router(models.router)
+    app.include_router(files.router)
+    app.include_router(vector_stores.router)
+    app.include_router(embeddings.router)
+    app.include_router(responses.router)
+    app.include_router(images.router)
+    app.include_router(videos.router)
+
+    # Higher-level / orchestration routes
+    app.include_router(realtime.router)
+    app.include_router(conversations.router)
+    app.include_router(actions.router)
+    app.include_router(batches.router)
+    app.include_router(containers.router)
