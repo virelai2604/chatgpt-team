@@ -1,29 +1,39 @@
 # app/main.py
+
+from __future__ import annotations
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import get_settings
-from app.utils.logger import configure_logging
-from app.utils.error_handler import register_exception_handlers
-from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
-from app.middleware.relay_auth import RelayAuthMiddleware
-from app.middleware.validation import ValidationMiddleware
-from app.routes.register_routes import register_routes
-from app.api.routes import router as api_router
-from app.api.sse import router as sse_router
+from .core.config import get_settings
+from .utils.logger import configure_logging
+from .utils.error_handler import register_exception_handlers
+from .middleware.p4_orchestrator import P4OrchestratorMiddleware
+from .middleware.relay_auth import RelayAuthMiddleware
+from .middleware.validation import ValidationMiddleware
+from .api.sse import router as sse_router
 from .api.tools_api import router as tools_router
+from .routes import register_routes
 
 
 def create_app() -> FastAPI:
+    """
+    Application factory for the ChatGPT Team Relay.
+
+    Wires:
+      - Core OpenAI relay routes under /v1 (via app.routes.*)
+      - SSE streaming routes under /v1/responses:stream
+      - Tools manifest routes under /v1/tools/*
+    """
     settings = get_settings()
-    configure_logging()
+    configure_logging(settings.log_level)
 
     app = FastAPI(
         title=settings.project_name,
         version="0.1.0",
     )
 
-    # Middleware
+    # CORS – allow typical browser/front-end access; tighten in production as needed.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -31,6 +41,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # P4 orchestration + auth + validation
     app.add_middleware(P4OrchestratorMiddleware)
     app.add_middleware(RelayAuthMiddleware)
     app.add_middleware(ValidationMiddleware)
@@ -38,13 +50,12 @@ def create_app() -> FastAPI:
     # Error handlers
     register_exception_handlers(app)
 
-    # Route families under app.routes.*
-    register_routes(app)
-
-    # SDK/OpenAI proxy + streaming
-    app.include_router(api_router)
+    # SSE + Tools routes
     app.include_router(sse_router)
     app.include_router(tools_router)
+
+    # All resource /v1/* and health routes
+    register_routes(app)
 
     return app
 
