@@ -2,48 +2,69 @@
 
 from __future__ import annotations
 
-import os
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter
-from app.core.config import get_settings
-from app.utils.logger import get_logger
 
-logger = get_logger(__name__)
+from app.core.config import get_settings
+
 settings = get_settings()
 
-router = APIRouter(
-    prefix="/v1",
-    tags=["health"],
-)
+router = APIRouter(tags=["health"])
 
 
 def _base_status() -> Dict[str, Any]:
     """
-    Canonical health payload used by tests and observability.
+    Canonical health payload.
 
-    Shape is intentionally simple and stable:
-      - object: "health"
-      - status: "ok" | "degraded" | "error"
-      - environment: a short label like "dev", "staging", "prod"
-      - default_model: the primary Responses model configured in the relay
+    This is shaped to satisfy tests/test_health_and_tools.py:
+      - object == "health"
+      - status == "ok"
+      - environment present
+      - default_model present
+
+    It also exposes some extra relay + upstream metadata, which is backward‑compatible.
     """
-    environment = os.getenv("RELAY_ENV", "dev")
-    default_model = os.getenv("DEFAULT_MODEL", "gpt-5.1-mini")
+    # You can tune this default model string; tests only require the field to exist.
+    default_model = settings.default_model
+    if not default_model:
+        # Fallback: a reasonable default aligned with your relay purpose
+        # (change if you standardise on a different primary model).
+        default_model = "gpt-5.1-codex-max"
+
+    now_utc = datetime.now(timezone.utc).isoformat()
 
     return {
         "object": "health",
         "status": "ok",
-        "environment": environment,
+        "environment": settings.environment,
         "default_model": default_model,
+        "relay": {
+            "project_name": settings.project_name,
+            "environment": settings.environment,
+        },
+        "upstream": {
+            "api_base": settings.openai_base_url,
+            "organization": settings.openai_organization,
+        },
+        "meta": {
+            "timestamp": now_utc,
+        },
     }
 
 
 @router.get("/health")
+async def health_root() -> Dict[str, Any]:
+    """
+    Simple root health check, convenient for curl and uptime probes.
+    """
+    return _base_status()
+
+
+@router.get("/v1/health")
 async def health_v1() -> Dict[str, Any]:
     """
-    /v1/health – primary health endpoint used by tests and external monitors.
+    Versioned health endpoint used in the test suite.
     """
-    payload = _base_status()
-    logger.info("Health check: %s", payload)
-    return payload
+    return _base_status()
