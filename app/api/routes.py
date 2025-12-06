@@ -1,102 +1,64 @@
-# app/api/routes.py
+# app/routes/register_routes.py
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Protocol
 
-from fastapi import APIRouter, Body, Path
+from fastapi import APIRouter, FastAPI
 
-from app.api.forward_openai import (
-    forward_embeddings_create,
-    forward_images_generate,
-    forward_models_list,
-    forward_models_retrieve,
-    forward_responses_create,
-    forward_videos_create,
+from . import (
+    actions,
+    batches,
+    containers,
+    conversations,
+    files,
+    health,
+    realtime,
+    vector_stores,
 )
-from app.utils.logger import get_logger
-
-logger = get_logger(__name__)
-
-# Canonical Phase‑2 router: typed SDK-based endpoints
-router = APIRouter(prefix="/v1", tags=["openai-relay"])
 
 
-@router.post("/responses")
-async def create_response(
-    body: Dict[str, Any] = Body(..., description="OpenAI Responses.create payload"),
-) -> Any:
+class _RouterLike(Protocol):
     """
-    Proxy for OpenAI Responses API.
+    Minimal protocol for something that can have routers included.
 
-    Expects the same JSON body that you would send directly to:
-        POST https://api.openai.com/v1/responses
+    Both FastAPI and APIRouter satisfy this (they expose include_router()).
     """
-    logger.info("Incoming /v1/responses request")
-    return await forward_responses_create(body)
+
+    def include_router(self, router: APIRouter, **kwargs) -> None:  # pragma: no cover - protocol
+        ...
 
 
-@router.post("/embeddings")
-async def create_embedding(
-    body: Dict[str, Any] = Body(..., description="OpenAI Embeddings.create payload"),
-) -> Any:
+def register_routes(app: _RouterLike) -> None:
     """
-    Proxy for OpenAI Embeddings API.
+    Register resource-family routers on the given FastAPI app or APIRouter.
 
-    Expects the same JSON body that you would send directly to:
-        POST https://api.openai.com/v1/embeddings
+    This centralises wiring so you can:
+
+        from app.routes import register_routes
+        register_routes(app)
+
+    or:
+
+        from fastapi import APIRouter
+        from app.routes import register_routes
+
+        router = APIRouter()
+        register_routes(router)
     """
-    logger.info("Incoming /v1/embeddings request")
-    return await forward_embeddings_create(body)
 
+    # Health is special: it exposes both /health and /v1/health
+    app.include_router(health.router)
 
-@router.post("/images")
-@router.post("/images/generations")
-async def generate_image(
-    body: Dict[str, Any] = Body(..., description="OpenAI Images.generate payload"),
-) -> Any:
-    """
-    Proxy for OpenAI Images API.
+    # Core REST resources (generic pass‑through via forward_openai_request)
+    app.include_router(files.router)
+    app.include_router(conversations.router)
+    app.include_router(containers.router)
+    app.include_router(batches.router)
 
-    Supports both /v1/images and /v1/images/generations path shapes to play
-    nicely with different client assumptions.
-    """
-    logger.info("Incoming /v1/images request")
-    return await forward_images_generate(body)
+    # New capability surfaces
+    app.include_router(actions.router)
+    app.include_router(vector_stores.router)
 
-
-@router.post("/videos")
-async def create_video(
-    body: Dict[str, Any] = Body(..., description="OpenAI Videos.create payload"),
-) -> Any:
-    """
-    Proxy for OpenAI Videos API.
-
-    Expects the same JSON body you would send directly to:
-        POST https://api.openai.com/v1/videos
-    """
-    logger.info("Incoming /v1/videos request")
-    return await forward_videos_create(body)
-
-
-@router.get("/models")
-async def list_models() -> Any:
-    """
-    Proxy for OpenAI Models API (list).
-
-    Equivalent to:
-        GET https://api.openai.com/v1/models
-    """
-    logger.info("Incoming /v1/models list request")
-    return await forward_models_list()
-
-
-@router.get("/models/{model_id}")
-async def retrieve_model(
-    model_id: str = Path(..., description="Model ID to retrieve"),
-) -> Any:
-    """
-    Proxy for OpenAI Models API (retrieve a specific model).
-    """
-    logger.info("Incoming /v1/models/%s retrieve request", model_id)
-    return await forward_models_retrieve(model_id)
+    # Realtime (HTTP + WS proxy)
+    app.include_router(realtime.router)
