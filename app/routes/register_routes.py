@@ -6,27 +6,16 @@ from typing import Protocol
 
 from fastapi import APIRouter, FastAPI
 
-# Local route families (generic pass‑through + extra capabilities)
 from . import (
     actions,
     batches,
     containers,
     conversations,
-    embeddings,
     files,
     health,
-    images,
-    models,
     realtime,
-    responses,
     vector_stores,
-    videos,
 )
-
-# SDK‑driven core OpenAI APIs and tools under /v1
-from app.api import routes as api_routes
-from app.api import sse as sse_routes
-from app.api import tools_api as tools_routes
 
 
 class _RouterLike(Protocol):
@@ -42,7 +31,7 @@ class _RouterLike(Protocol):
 
 def register_routes(app: _RouterLike) -> None:
     """
-    Register all resource routers on the given FastAPI app or APIRouter.
+    Register all *resource* routers on the given FastAPI app or APIRouter.
 
     This centralises wiring so you can:
 
@@ -56,50 +45,35 @@ def register_routes(app: _RouterLike) -> None:
 
         router = APIRouter()
         register_routes(router)
+
+    Design:
+
+    - This module is responsible for REST-style relay families and infra:
+        * /health, /v1/health
+        * /v1/files
+        * /v1/conversations
+        * /v1/containers
+        * /v1/batches
+        * /v1/actions
+        * /v1/vector_stores
+        * /v1/realtime/*
+    - The *typed* SDK endpoints (/v1/responses, /v1/embeddings, /v1/images,
+      /v1/videos, /v1/models) are owned by app.api.routes and are mounted in
+      app.main to keep a clear separation of concerns.
     """
 
-    # ------------------------------------------------------------------
-    # Health – exposes both /health and /v1/health
-    # ------------------------------------------------------------------
+    # Health is special: it exposes both /health and /v1/health
     app.include_router(health.router)
 
-    # ------------------------------------------------------------------
-    # SDK‑driven core model APIs (Python SDK /v1 layer)
-    # ------------------------------------------------------------------
-    # /v1/responses, /v1/embeddings, /v1/images, /v1/videos, /v1/models
-    app.include_router(api_routes.router)
-
-    # /v1/responses:stream – SSE streaming wrapper for Responses API
-    app.include_router(sse_routes.router)
-
-    # /v1/tools – serve tools manifest in OpenAI list format
-    app.include_router(tools_routes.router)
-
-    # ------------------------------------------------------------------
     # Core REST resources (generic pass‑through via forward_openai_request)
-    # ------------------------------------------------------------------
     app.include_router(files.router)
     app.include_router(conversations.router)
     app.include_router(containers.router)
     app.include_router(batches.router)
 
-    # ------------------------------------------------------------------
     # New capability surfaces
-    # ------------------------------------------------------------------
     app.include_router(actions.router)
     app.include_router(vector_stores.router)
 
-    # ------------------------------------------------------------------
-    # Legacy / transitional SDK routes
-    # (kept for compatibility if you still hit these modules directly)
-    # ------------------------------------------------------------------
-    app.include_router(responses.router)
-    app.include_router(embeddings.router)
-    app.include_router(images.router)
-    app.include_router(videos.router)
-    app.include_router(models.router)
-
-    # ------------------------------------------------------------------
     # Realtime (HTTP + WS proxy)
-    # ------------------------------------------------------------------
     app.include_router(realtime.router)
