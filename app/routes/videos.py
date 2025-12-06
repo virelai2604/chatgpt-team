@@ -24,7 +24,7 @@ async def create_video(
     """
     Proxy for OpenAI Videos API.
 
-    Expects the same JSON body you would send directly to:
+    Mirrors:
         POST https://api.openai.com/v1/videos
     """
     logger.info("Incoming /v1/videos request")

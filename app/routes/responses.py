@@ -24,7 +24,7 @@ async def create_response(
     """
     Proxy for OpenAI Responses API.
 
-    Expects the same JSON body that you would send directly to:
+    Mirrors:
         POST https://api.openai.com/v1/responses
     """
     logger.info("Incoming /v1/responses request")

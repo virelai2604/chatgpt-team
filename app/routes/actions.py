@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response
+from typing import Any, Dict, List
 
-from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger  # keep consistent with other route families
+from fastapi import APIRouter, Body
+
+from app.api.tools_api import _load_tools_manifest  # reuse manifest loader
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(
     prefix="/v1",
@@ -13,31 +17,59 @@ router = APIRouter(
 )
 
 
-@router.api_route("/actions", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def actions_root(request: Request) -> Response:
+def _tools_as_actions() -> List[Dict[str, Any]]:
     """
-    Root for Actions.
+    Interpret tools from the manifest as generic 'actions'.
 
-    Examples:
-      - GET  /v1/actions   (list actions)
-      - POST /v1/actions   (create/define an action)
+    For now we simply surface them 1:1 as actions. You can tighten
+    this later once the P4 orchestration story is fully fleshed out.
     """
-    logger.info("→ [actions] %s %s", request.method, request.url.path)
-    return await forward_openai_request(request)
+    tools = _load_tools_manifest()
+    actions: List[Dict[str, Any]] = []
+
+    for tool in tools:
+        # Pass through as-is but mark the 'kind' to make downstream
+        # filtering easier for frontends or agents.
+        action = dict(tool)
+        action.setdefault("kind", "tool")
+        actions.append(action)
+
+    return actions
 
 
-@router.api_route(
-    "/actions/{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-)
-async def actions_subpaths(path: str, request: Request) -> Response:
+@router.get("/tools/actions")
+async def list_actions() -> Dict[str, Any]:
     """
-    Catch‑all for /v1/actions/* subresources.
+    GET /v1/tools/actions – list all configured actions.
 
-    This is intentionally generic and will forward things like:
-      - /v1/actions/{action_id}
-      - /v1/actions/{action_id}/runs
-      - /v1/actions/{action_id}/versions/{version_id}
+    Currently this is a thin wrapper around the tools manifest, returned
+    as an OpenAI-style list object.
     """
-    logger.info("→ [actions/*] %s %s", request.method, request.url.path)
-    return await forward_openai_request(request)
+    actions = _tools_as_actions()
+    logger.info("Listing %d actions from tools manifest", len(actions))
+    return {"object": "list", "data": actions}
+
+
+@router.post("/tools/actions/call")
+async def call_action(
+    payload: Dict[str, Any] = Body(..., description="Minimal action invocation payload"),
+) -> Dict[str, Any]:
+    """
+    POST /v1/tools/actions/call – minimal echo-style action call.
+
+    This is intentionally conservative: it does not perform any external
+    side effects. It's useful for tests, demos, or as a shim that you can
+    later swap out for true P4 orchestration.
+    """
+    action_id = payload.get("id") or payload.get("name")
+    logger.info("Received tools/actions.call for action_id=%s", action_id)
+
+    return {
+        "object": "action.call",
+        "status": "ok",
+        "id": action_id,
+        "input": payload.get("input"),
+        "meta": {
+            "message": "Action call handled by relay stub; no external side effects.",
+        },
+    }
