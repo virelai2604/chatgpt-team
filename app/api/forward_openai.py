@@ -19,21 +19,25 @@ def _to_plain(result: Any) -> Any:
     """
     Convert OpenAI SDK result objects into JSON-serializable dicts when possible.
 
-    Handles both Pydantic v2 (`model_dump`) and older-style `.to_dict()`
-    response objects.
+    Newer SDK responses are Pydantic v2 models; older ones may expose `to_dict`.
+    If neither works we return the object and let FastAPI handle serialization.
     """
+    # Pydantic v2-style
     if hasattr(result, "model_dump"):
         try:
             return result.model_dump()
         except TypeError:
+            # Some objects may not support model_dump with no args
             pass
 
+    # Older-style helper
     if hasattr(result, "to_dict"):
         try:
             return result.to_dict()
         except TypeError:
             pass
 
+    # Fall back to returning the object; FastAPI may know how to serialize it.
     return result
 
 
@@ -122,6 +126,7 @@ async def forward_models_retrieve(model_id: str) -> Any:
 
 # ---------------------------------------------------------------------------
 # Generic catch‑all proxy for /v1/* subroutes
+# Used by app/routes/files.py, batches.py, containers.py, etc.
 # ---------------------------------------------------------------------------
 
 
@@ -133,6 +138,7 @@ async def _forward_to_openai(request: Request, path: str) -> Response:
         request: Incoming FastAPI Request.
         path: Path under the upstream base (e.g. "files", "files/123/content").
     """
+    # Build upstream URL; base is typically https://api.openai.com/v1
     base = _settings.openai_base_url.rstrip("/")
     url = f"{base}/{path.lstrip('/')}"
     params: Dict[str, str] = dict(request.query_params)
@@ -182,6 +188,7 @@ async def _forward_to_openai(request: Request, path: str) -> Response:
         },
     )
 
+    # Filter response headers to avoid conflicts with FastAPI/Uvicorn
     response_headers = {
         k: v
         for k, v in upstream.headers.items()
@@ -205,8 +212,10 @@ def _extract_upstream_path(request: Request) -> str:
     from the incoming path so we don't double it.
     """
     raw_path = request.url.path  # e.g. "/v1/files/abc"
+    # Normalise and remove leading slash
     path = raw_path.lstrip("/")  # "v1/files/abc" or "files/abc"
 
+    # If our base already includes /v1, drop leading "v1/" from the path.
     base = _settings.openai_base_url.rstrip("/")
     if base.endswith("/v1") and path.startswith("v1/"):
         path = path[len("v1/") :]
@@ -223,7 +232,11 @@ async def forward_openai_request(request: Request) -> Response:
       - app/routes/batches.py
       - app/routes/containers.py
       - app/routes/conversations.py
-      - and any future /v1/* route families.
+      - app/routes/vector_stores.py
+      - and any other future /v1/* route families.
+
+    This keeps all subroutes on the same config-driven HTTP proxy while
+    the main, high-traffic endpoints use the typed SDK helpers above.
     """
     path = _extract_upstream_path(request)
     return await _forward_to_openai(request, path)
