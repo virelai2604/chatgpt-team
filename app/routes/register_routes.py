@@ -11,10 +11,15 @@ from . import (
     batches,
     containers,
     conversations,
+    embeddings,
     files,
     health,
+    images,
+    models,
     realtime,
+    responses,
     vector_stores,
+    videos,
 )
 
 
@@ -31,7 +36,7 @@ class _RouterLike(Protocol):
 
 def register_routes(app: _RouterLike) -> None:
     """
-    Register all *resource* routers on the given FastAPI app or APIRouter.
+    Register all resource routers on the given FastAPI app or APIRouter.
 
     This centralises wiring so you can:
 
@@ -45,21 +50,6 @@ def register_routes(app: _RouterLike) -> None:
 
         router = APIRouter()
         register_routes(router)
-
-    Design:
-
-    - This module is responsible for REST-style relay families and infra:
-        * /health, /v1/health
-        * /v1/files
-        * /v1/conversations
-        * /v1/containers
-        * /v1/batches
-        * /v1/actions
-        * /v1/vector_stores
-        * /v1/realtime/*
-    - The *typed* SDK endpoints (/v1/responses, /v1/embeddings, /v1/images,
-      /v1/videos, /v1/models) are owned by app.api.routes and are mounted in
-      app.main to keep a clear separation of concerns.
     """
 
     # Health is special: it exposes both /health and /v1/health
@@ -74,6 +64,13 @@ def register_routes(app: _RouterLike) -> None:
     # New capability surfaces
     app.include_router(actions.router)
     app.include_router(vector_stores.router)
+
+    # SDK‑driven core model APIs
+    app.include_router(responses.router)
+    app.include_router(embeddings.router)
+    app.include_router(images.router)
+    app.include_router(videos.router)
+    app.include_router(models.router)
 
     # Realtime (HTTP + WS proxy)
     app.include_router(realtime.router)
