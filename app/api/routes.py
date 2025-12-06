@@ -18,6 +18,7 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Canonical Phase‑2 router: typed SDK-based endpoints
 router = APIRouter(prefix="/v1", tags=["openai-relay"])
 
 
