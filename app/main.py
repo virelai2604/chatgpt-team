@@ -11,6 +11,7 @@ from app.middleware.validation import ValidationMiddleware
 from app.routes.register_routes import register_routes
 from app.api.routes import router as api_router
 from app.api.sse import router as sse_router
+from .api.tools_api import router as tools_router
 
 
 def create_app() -> FastAPI:
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     # SDK/OpenAI proxy + streaming
     app.include_router(api_router)
     app.include_router(sse_router)
+    app.include_router(tools_router)
 
     return app
 
