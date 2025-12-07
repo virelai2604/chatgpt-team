@@ -1,29 +1,45 @@
 # app/routes/models.py
 
-from fastapi import APIRouter, Request, Response
+from __future__ import annotations
 
-from app.api.forward_openai import forward_openai_request
+from typing import Any
 
-router = APIRouter(
-    prefix="/models",
-    tags=["models"],
+from fastapi import APIRouter, Path
+
+from app.api.forward_openai import (
+    forward_models_list,
+    forward_models_retrieve,
 )
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+router = APIRouter(prefix="/v1", tags=["models"])
 
 
-@router.api_route(
-    "",
-    methods=["GET"],
-)
-@router.api_route(
-    "/{path:path}",
-    methods=["GET"],
-)
-async def proxy_models(request: Request, path: str = "") -> Response:
+@router.get("/models")
+async def list_models() -> Any:
     """
-    Catch-all proxy for OpenAI Models API.
+    List available OpenAI models via the SDK.
 
-    Normal cases:
-      - GET /v1/models           -> list models
-      - GET /v1/models/{model}   -> retrieve model
+    Equivalent to:
+        GET https://api.openai.com/v1/models
+        client.models.list()
     """
-    return await forward_openai_request(request)
+    logger.info("Incoming /v1/models list request")
+    return await forward_models_list()
+
+
+@router.get("/models/{model_id}")
+async def retrieve_model(
+    model_id: str = Path(..., description="Model ID to retrieve"),
+) -> Any:
+    """
+    Retrieve a single model by ID.
+
+    Equivalent to:
+        GET https://api.openai.com/v1/models/{model_id}
+        client.models.retrieve(model_id)
+    """
+    logger.info("Incoming /v1/models/%s retrieve request", model_id)
+    return await forward_models_retrieve(model_id)
