@@ -18,7 +18,8 @@ from .api.tools_api import router as tools_router
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    # Use the configured log level from settings
+
+    # Logging
     configure_logging(settings.log_level)
 
     app = FastAPI(
@@ -29,10 +30,10 @@ def create_app() -> FastAPI:
     # Middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.cors_allow_origins or ["*"],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=settings.cors_allow_methods or ["*"],
+        allow_headers=settings.cors_allow_headers or ["*"],
     )
     app.add_middleware(P4OrchestratorMiddleware)
     app.add_middleware(RelayAuthMiddleware)
@@ -41,12 +42,12 @@ def create_app() -> FastAPI:
     # Error handlers
     register_exception_handlers(app)
 
-    # API routes
+    # API routes (versioned & tools)
     app.include_router(api_router)
     app.include_router(sse_router)
     app.include_router(tools_router)
 
-    # Simple bare /health in addition to routes/health router (if you keep that)
+    # Simple bare /health (unversioned). Note: this still passes through middleware.
     @app.get("/health", tags=["health"])
     def health() -> dict:
         return {"status": "ok"}

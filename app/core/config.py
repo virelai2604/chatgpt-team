@@ -162,7 +162,6 @@ def get_settings() -> Settings:
     """
     Load settings once and cache them for the process lifetime.
     """
-
     project_name = "chatgpt-team-relay"
 
     # Core

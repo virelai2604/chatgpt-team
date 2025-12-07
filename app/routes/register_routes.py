@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter
 
 from . import (
     actions,
@@ -38,21 +38,16 @@ def register_routes(app: _RouterLike) -> None:
     """
     Register all resource routers on the given FastAPI app or APIRouter.
 
-    This centralises wiring so you can:
+    Example:
 
+        from fastapi import FastAPI
         from app.routes import register_routes
+
+        app = FastAPI()
         register_routes(app)
-
-    or:
-
-        from fastapi import APIRouter
-        from app.routes import register_routes
-
-        router = APIRouter()
-        register_routes(router)
     """
 
-    # Health is special: it exposes both /health and /v1/health
+    # Health exposes both /health and /v1/health
     app.include_router(health.router)
 
     # Core REST resources (generic pass‑through via forward_openai_request)
