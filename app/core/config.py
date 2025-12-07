@@ -1,3 +1,4 @@
+# app/core/config.py
 from __future__ import annotations
 
 import os
@@ -7,14 +8,9 @@ from typing import List, Optional
 
 
 def _get_env(key: str, default: Optional[str] = None, *, required: bool = False) -> str:
-    """
-    Read an environment variable with optional default and
-    a 'required' flag that raises if missing.
-    """
     value = os.getenv(key, default)
     if required and (value is None or value == ""):
         raise RuntimeError(f"Environment variable {key} is required but not set")
-    # Always return a string (no None)
     return value or ""
 
 
@@ -128,8 +124,17 @@ class Settings:
     def relay_auth_enabled(self) -> bool:
         return self.RELAY_AUTH_ENABLED
 
+    # 👇 existing alias for the raw value (optional but nice)
     @property
     def openai_api_base(self) -> str:
+        return self.OPENAI_API_BASE
+
+    # 👇 NEW: alias expected by http_client.py & forward_openai.py
+    @property
+    def openai_base_url(self) -> str:
+        """
+        Backwards‑compatible alias used by the HTTP client and proxy.
+        """
         return self.OPENAI_API_BASE
 
     @property
@@ -159,9 +164,6 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """
-    Load settings once and cache them for the process lifetime.
-    """
     project_name = "chatgpt-team-relay"
 
     # Core
@@ -174,6 +176,7 @@ def get_settings() -> Settings:
     log_color = _get_bool("LOG_COLOR", True)
 
     # OpenAI upstream
+    # Default to official API; you can override with OPENAI_API_BASE in .env
     openai_api_base = _get_env("OPENAI_API_BASE", "https://api.openai.com/v1")
     openai_api_key = _get_env("OPENAI_API_KEY", required=True)
     openai_assistants_beta = _get_env("OPENAI_ASSISTANTS_BETA", "assistants=v2")
@@ -197,8 +200,11 @@ def get_settings() -> Settings:
     chain_wait_mode = _get_env("CHAIN_WAIT_MODE", "sequential")
 
     # Auth / secrets
-    relay_auth_enabled = _get_bool("RELAY_AUTH_ENABLED", False)
-    relay_key = os.getenv("RELAY_KEY")
+    relay_auth_enabled = _get_bool(
+        "RELAY_AUTH_ENABLED",
+        bool(os.getenv("RELAY_KEY") or os.getenv("RELAY_AUTH_TOKEN")),
+    )
+    relay_key = os.getenv("RELAY_KEY") or os.getenv("RELAY_AUTH_TOKEN")
     chatgpt_actions_secret = os.getenv("CHATGPT_ACTIONS_SECRET")
 
     # CORS
@@ -211,7 +217,7 @@ def get_settings() -> Settings:
     validation_schema_path = _get_env("VALIDATION_SCHEMA_PATH", "")
 
     # HTTP client behavior
-    timeout_seconds = relay_timeout  # reuse relay timeout
+    timeout_seconds = relay_timeout
     max_retries = 3
 
     return Settings(
@@ -249,5 +255,4 @@ def get_settings() -> Settings:
     )
 
 
-# Convenient module-level singleton
 settings: Settings = get_settings()
