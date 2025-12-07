@@ -1,141 +1,254 @@
-# app/core/config.py
-
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from functools import lru_cache
-import os
-from typing import Optional
+from typing import List, Optional
 
 
-def _get_env(name: str, default: Optional[str] = None, *, required: bool = False) -> str:
+def _get_env(key: str, default: Optional[str] = None, *, required: bool = False) -> str:
     """
-    Read an environment variable with optional default and required flag.
-    Raises RuntimeError if required and missing/empty.
+    Read an environment variable with optional default and
+    a 'required' flag that raises if missing.
     """
-    value = os.getenv(name, default)
-    if value is None or value == "":
-        if required:
-            raise RuntimeError(f"Missing required environment variable: {name}")
-        return default or ""
-    return value
+    value = os.getenv(key, default)
+    if required and (value is None or value == ""):
+        raise RuntimeError(f"Environment variable {key} is required but not set")
+    # Always return a string (no None)
+    return value or ""
 
 
-def _bool_env(name: str, default: bool = False) -> bool:
-    """
-    Parse a boolean environment variable.
-    Accepts: 1, true, yes, on (case-insensitive) as truthy.
-    """
-    value = os.getenv(name)
-    if value is None or value == "":
+def _get_bool(key: str, default: bool = False) -> bool:
+    value = os.getenv(key)
+    if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-@dataclass(frozen=True)
+def _get_int(key: str, default: int) -> int:
+    value = os.getenv(key)
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        raise RuntimeError(f"Environment variable {key} must be an integer, got {value!r}")
+
+
+def _get_csv(key: str, default: str = "") -> List[str]:
+    raw = os.getenv(key, default)
+    if not raw:
+        return []
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+@dataclass(slots=True)
 class Settings:
     """
-    Central configuration for the ChatGPT Team Relay.
+    Central configuration object for the relay.
 
-    This is intentionally a simple dataclass so it can be used easily in tests
-    and by FastAPI startup hooks.
+    NOTE:
+    - Fields are stored in UPPERCASE (matching env vars).
+    - Lowercase properties are provided as aliases so existing code
+      can use e.g. settings.default_model, settings.environment, etc.
     """
 
-    # Application identity
+    # Project identity
     project_name: str
-    environment: str
 
-    # Upstream OpenAI configuration
-    openai_api_key: str
-    openai_base_url: str
-    openai_organization: Optional[str]
-
-    # HTTP behaviour for the OpenAI client
-    timeout_seconds: float
-    max_retries: int
+    # Core relay / app mode
+    APP_MODE: str
+    ENVIRONMENT: str
 
     # Logging
-    log_level: str  # <-- this is the attribute you should use
+    LOG_LEVEL: str
+    LOG_FORMAT: str
+    LOG_COLOR: bool
 
-    # Relay auth / tools
-    # These are uppercase on purpose so that callers can use settings.RELAY_KEY
-    # as a clear signal these are env-style fields.
-    RELAY_KEY: Optional[str]
+    # OpenAI upstream
+    OPENAI_API_BASE: str
+    OPENAI_API_KEY: str
+    OPENAI_ASSISTANTS_BETA: str
+    OPENAI_REALTIME_BETA: str
+    OPENAI_ORGANIZATION: Optional[str]
+
+    # Default models
+    DEFAULT_MODEL: str
+    REALTIME_MODEL: str
+
+    # Relay runtime
+    RELAY_HOST: str
+    RELAY_PORT: int
+    RELAY_NAME: str
+    RELAY_TIMEOUT: int
+    PROXY_TIMEOUT: int
+    PYTHON_VERSION: str
+
+    # Streaming / orchestration
+    ENABLE_STREAM: bool
+    CHAIN_WAIT_MODE: str
+
+    # Auth / secrets
     RELAY_AUTH_ENABLED: bool
+    RELAY_KEY: Optional[str]
+    CHATGPT_ACTIONS_SECRET: Optional[str]
+
+    # CORS
+    CORS_ALLOW_ORIGINS: List[str]
+    CORS_ALLOW_METHODS: List[str]
+    CORS_ALLOW_HEADERS: List[str]
+
+    # Tools & validation
     TOOLS_MANIFEST: str
+    VALIDATION_SCHEMA_PATH: str
+
+    # HTTP client behavior
+    timeout_seconds: int
+    max_retries: int
+
+    # --------- Convenience alias properties (lowercase) ---------
 
     @property
-    def debug(self) -> bool:
-        return self.environment.lower() != "production"
+    def environment(self) -> str:
+        return self.ENVIRONMENT
+
+    @property
+    def app_mode(self) -> str:
+        return self.APP_MODE
+
+    @property
+    def default_model(self) -> str:
+        return self.DEFAULT_MODEL
+
+    @property
+    def realtime_model(self) -> str:
+        return self.REALTIME_MODEL
+
+    @property
+    def relay_auth_enabled(self) -> bool:
+        return self.RELAY_AUTH_ENABLED
+
+    @property
+    def openai_api_base(self) -> str:
+        return self.OPENAI_API_BASE
+
+    @property
+    def openai_api_key(self) -> str:
+        return self.OPENAI_API_KEY
+
+    @property
+    def openai_organization(self) -> Optional[str]:
+        return self.OPENAI_ORGANIZATION
+
+    @property
+    def log_level(self) -> str:
+        return self.LOG_LEVEL
+
+    @property
+    def cors_allow_origins(self) -> List[str]:
+        return self.CORS_ALLOW_ORIGINS
+
+    @property
+    def cors_allow_methods(self) -> List[str]:
+        return self.CORS_ALLOW_METHODS
+
+    @property
+    def cors_allow_headers(self) -> List[str]:
+        return self.CORS_ALLOW_HEADERS
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """
-    Load and cache settings from environment variables.
-
-    Required:
-        OPENAI_API_KEY
-
-    Optional (with defaults):
-        PROJECT_NAME            (default: chatgpt-team-relay)
-        ENVIRONMENT             (default: development)
-        OPENAI_BASE_URL         (default: https://api.openai.com/v1)
-        OPENAI_ORG_ID / OPENAI_ORG / OPENAI_ORGANIZATION
-        OPENAI_TIMEOUT_SECONDS  (default: 20.0)
-        OPENAI_MAX_RETRIES      (default: 2)
-        LOG_LEVEL               (default: INFO)
-        RELAY_KEY               (auth key for the relay)
-        RELAY_AUTH_ENABLED      (default: True if RELAY_KEY set, else False)
-        TOOLS_MANIFEST          (default: app/manifests/tools_manifest.json)
+    Load settings once and cache them for the process lifetime.
     """
-    environment = _get_env("ENVIRONMENT", "development") or "development"
 
+    project_name = "chatgpt-team-relay"
+
+    # Core
+    app_mode = _get_env("APP_MODE", "development")
+    environment = _get_env("ENVIRONMENT", "development")
+
+    # Logging
+    log_level = _get_env("LOG_LEVEL", "info")
+    log_format = _get_env("LOG_FORMAT", "console")
+    log_color = _get_bool("LOG_COLOR", True)
+
+    # OpenAI upstream
+    openai_api_base = _get_env("OPENAI_API_BASE", "https://api.openai.com/v1")
     openai_api_key = _get_env("OPENAI_API_KEY", required=True)
-    openai_base_url = (
-        _get_env("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        or "https://api.openai.com/v1"
-    )
+    openai_assistants_beta = _get_env("OPENAI_ASSISTANTS_BETA", "assistants=v2")
+    openai_realtime_beta = _get_env("OPENAI_REALTIME_BETA", "realtime=v1")
+    openai_organization = os.getenv("OPENAI_ORGANIZATION")
 
-    # Accept multiple organisation env names for flexibility
-    org = (
-        os.getenv("OPENAI_ORG_ID")
-        or os.getenv("OPENAI_ORG")
-        or os.getenv("OPENAI_ORGANIZATION")
-        or ""
-    )
+    # Default models
+    default_model = _get_env("DEFAULT_MODEL", "gpt-4o-mini")
+    realtime_model = _get_env("REALTIME_MODEL", "gpt-4o-realtime-preview")
 
-    timeout_seconds = float(_get_env("OPENAI_TIMEOUT_SECONDS", "20.0") or "20.0")
-    max_retries = int(_get_env("OPENAI_MAX_RETRIES", "2") or "2")
-    log_level = _get_env("LOG_LEVEL", "INFO") or "INFO"
+    # Relay runtime
+    relay_host = _get_env("RELAY_HOST", "0.0.0.0")
+    relay_port = _get_int("RELAY_PORT", 10000)
+    relay_name = _get_env("RELAY_NAME", "ChatGPT Team Relay (local dev)")
+    relay_timeout = _get_int("RELAY_TIMEOUT", 120)
+    proxy_timeout = _get_int("PROXY_TIMEOUT", 120)
+    python_version = _get_env("PYTHON_VERSION", "")
 
-    # Relay auth: prefer RELAY_KEY, then legacy RELAY_AUTH_TOKEN
-    relay_key = _get_env("RELAY_KEY") or _get_env("RELAY_AUTH_TOKEN") or ""
-    relay_auth_enabled = _bool_env(
-        "RELAY_AUTH_ENABLED",
-        default=bool(relay_key),
-    )
+    # Streaming / orchestration
+    enable_stream = _get_bool("ENABLE_STREAM", True)
+    chain_wait_mode = _get_env("CHAIN_WAIT_MODE", "sequential")
 
-    tools_manifest = (
-        _get_env("TOOLS_MANIFEST", "app/manifests/tools_manifest.json")
-        or "app/manifests/tools_manifest.json"
-    )
+    # Auth / secrets
+    relay_auth_enabled = _get_bool("RELAY_AUTH_ENABLED", False)
+    relay_key = os.getenv("RELAY_KEY")
+    chatgpt_actions_secret = os.getenv("CHATGPT_ACTIONS_SECRET")
+
+    # CORS
+    cors_allow_origins = _get_csv("CORS_ALLOW_ORIGINS")
+    cors_allow_methods = _get_csv("CORS_ALLOW_METHODS")
+    cors_allow_headers = _get_csv("CORS_ALLOW_HEADERS")
+
+    # Tools & validation
+    tools_manifest = _get_env("TOOLS_MANIFEST", "app/manifests/tools_manifest.json")
+    validation_schema_path = _get_env("VALIDATION_SCHEMA_PATH", "")
+
+    # HTTP client behavior
+    timeout_seconds = relay_timeout  # reuse relay timeout
+    max_retries = 3
 
     return Settings(
-        project_name=_get_env("PROJECT_NAME", "chatgpt-team-relay")
-        or "chatgpt-team-relay",
-        environment=environment,
-        openai_api_key=openai_api_key,
-        openai_base_url=openai_base_url,
-        openai_organization=org or None,
+        project_name=project_name,
+        APP_MODE=app_mode,
+        ENVIRONMENT=environment,
+        LOG_LEVEL=log_level,
+        LOG_FORMAT=log_format,
+        LOG_COLOR=log_color,
+        OPENAI_API_BASE=openai_api_base,
+        OPENAI_API_KEY=openai_api_key,
+        OPENAI_ASSISTANTS_BETA=openai_assistants_beta,
+        OPENAI_REALTIME_BETA=openai_realtime_beta,
+        OPENAI_ORGANIZATION=openai_organization,
+        DEFAULT_MODEL=default_model,
+        REALTIME_MODEL=realtime_model,
+        RELAY_HOST=relay_host,
+        RELAY_PORT=relay_port,
+        RELAY_NAME=relay_name,
+        RELAY_TIMEOUT=relay_timeout,
+        PROXY_TIMEOUT=proxy_timeout,
+        PYTHON_VERSION=python_version,
+        ENABLE_STREAM=enable_stream,
+        CHAIN_WAIT_MODE=chain_wait_mode,
+        RELAY_AUTH_ENABLED=relay_auth_enabled,
+        RELAY_KEY=relay_key,
+        CHATGPT_ACTIONS_SECRET=chatgpt_actions_secret,
+        CORS_ALLOW_ORIGINS=cors_allow_origins,
+        CORS_ALLOW_METHODS=cors_allow_methods,
+        CORS_ALLOW_HEADERS=cors_allow_headers,
+        TOOLS_MANIFEST=tools_manifest,
+        VALIDATION_SCHEMA_PATH=validation_schema_path,
         timeout_seconds=timeout_seconds,
         max_retries=max_retries,
-        log_level=log_level,
-        RELAY_KEY=relay_key or None,
-        RELAY_AUTH_ENABLED=relay_auth_enabled,
-        TOOLS_MANIFEST=tools_manifest,
     )
 
 
-# Convenience instance for modules that want `from app.core.config import settings`
+# Convenient module-level singleton
 settings: Settings = get_settings()

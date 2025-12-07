@@ -18,7 +18,7 @@ from .api.tools_api import router as tools_router
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    # ✅ Use the configured log level from Settings (lowercase attribute)
+    # Use the configured log level from settings
     configure_logging(settings.log_level)
 
     app = FastAPI(
@@ -41,11 +41,12 @@ def create_app() -> FastAPI:
     # Error handlers
     register_exception_handlers(app)
 
-    # API routes (these mount /v1/... including /v1/models, /v1/embeddings, etc.)
+    # API routes
     app.include_router(api_router)
     app.include_router(sse_router)
     app.include_router(tools_router)
 
+    # Simple bare /health in addition to routes/health router (if you keep that)
     @app.get("/health", tags=["health"])
     def health() -> dict:
         return {"status": "ok"}
