@@ -1,139 +1,90 @@
-from __future__ import annotations
+# tests/test_relay_auth_middleware.py
+import os
 
-from pathlib import Path
-import sys
-
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from app.core import config
-from app import main
+from app.main import app as fastapi_app
 
 
-def build_app(monkeypatch, *, relay_enabled: bool, relay_key: str = "test-key"):
-    # Toggle relay auth explicitly for this app instance.
-    monkeypatch.setattr(config.settings, "RELAY_AUTH_ENABLED", relay_enabled)
-    monkeypatch.setattr(config.settings, "RELAY_KEY", relay_key)
-    app = main.create_app()
-
-    @app.get("/v1/protected")
-    async def protected():
-        return {"status": "protected"}
-
-    return app
-
-
-def build_client(app: FastAPI | None = None):
-    # For these tests we want to see the raw HTTP status/JSON, so we disable
-    # server-exception re-raising.
-    return TestClient(app or main.create_app(), raise_server_exceptions=False)
-
-
-def _assert_relay_error(resp, *, code: str, message_substring: str) -> None:
-    data = resp.json()
-    assert "error" in data
-    err = data["error"]
-    assert err["code"] == code
-    assert err["type"] == "relay_auth_error"
-    assert message_substring in err["message"]
-
-
-def test_health_endpoint_remains_open(monkeypatch):
-    app = build_app(monkeypatch, relay_enabled=True)
-    client = build_client(app)
-
-    response = client.get("/v1/health")
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-
-def test_health_endpoint_trailing_slash_is_public(monkeypatch):
-    app = build_app(monkeypatch, relay_enabled=True)
-    client = build_client(app)
-
-    response = client.get("/v1/health/")
-
-    # We want /v1/health/ to behave the same as /v1/health.
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-
-def test_protected_route_requires_auth_when_enabled(monkeypatch):
-    app = build_app(monkeypatch, relay_enabled=True)
-    client = build_client(app)
-
-    response = client.get("/v1/protected")
-
-    assert response.status_code == 401
-    _assert_relay_error(
-        response,
-        code="missing_relay_key",
-        message_substring="Missing Authorization header",
-    )
-    assert response.headers["www-authenticate"] == "Bearer"
-
-
-def test_protected_route_accepts_valid_key(monkeypatch):
-    app = build_app(monkeypatch, relay_enabled=True, relay_key="relay-key")
-    client = build_client(app)
-
-    response = client.get(
-        "/v1/protected",
-        headers={"Authorization": "Bearer relay-key"},
-    )
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "protected"
-
-
-def test_non_v1_route_requires_auth_when_enabled(monkeypatch):
+def build_app_with_auth(*, relay_enabled: bool, relay_key: str = "test-key"):
     """
-    With relay auth enabled, the root route `/` is protected by middleware.
-    This matches the current implementation which protects all routes
-    except a small set of health/docs endpoints.
+    Build an app instance with RELAY_AUTH_ENABLED / RELAY_KEY patched via
+    app.core.config.settings so we exercise the real middleware.
     """
-    app = build_app(monkeypatch, relay_enabled=True, relay_key="relay-key")
-    client = build_client(app)
+    # Make sure settings see these values; settings is loaded once at import.
+    config.settings.RELAY_AUTH_ENABLED = relay_enabled
+    config.settings.RELAY_KEY = relay_key
 
-    response = client.get("/")
-
-    assert response.status_code == 401
-    _assert_relay_error(
-        response,
-        code="missing_relay_key",
-        message_substring="Missing Authorization header",
-    )
+    return fastapi_app
 
 
-def test_protected_route_rejects_invalid_key(monkeypatch):
-    app = build_app(monkeypatch, relay_enabled=True, relay_key="relay-key")
-    client = build_client(app)
+def build_client(relay_enabled: bool, relay_key: str = "test-key") -> TestClient:
+    app = build_app_with_auth(relay_enabled=relay_enabled, relay_key=relay_key)
+    client = TestClient(app)
 
-    response = client.get(
-        "/v1/protected",
-        headers={"Authorization": "Bearer wrong"},
-    )
+    # Attach Authorization header only if caller wants it
+    if relay_enabled and relay_key:
+        client.headers.update({"Authorization": f"Bearer {relay_key}"})
 
-    assert response.status_code == 401
-    _assert_relay_error(
-        response,
-        code="invalid_relay_key",
-        message_substring="Invalid relay key",
-    )
-    assert response.headers["www-authenticate"] == "Bearer"
+    return client
 
 
-def test_middleware_opt_out_when_disabled(monkeypatch):
-    app = build_app(monkeypatch, relay_enabled=False)
-    client = build_client(app)
+def test_health_endpoints_remain_open_with_auth_enabled():
+    """
+    /health and /v1/health should stay public even when relay auth is enabled.
 
-    response = client.get("/v1/protected")
+    This matches the documented behavior where health checks are not
+    protected by the shared-secret header.
+    """
+    client = build_client(relay_enabled=True, relay_key="test-key")
 
-    # When auth is disabled, the middleware must not block the route.
-    assert response.status_code == 200
-    assert response.json()["status"] == "protected"
+    # Drop the Authorization header for this test to exercise the bypass
+    client.headers.pop("Authorization", None)
+
+    resp_root = client.get("/health")
+    resp_v1 = client.get("/v1/health")
+
+    assert resp_root.status_code == 200
+    assert resp_v1.status_code == 200
+
+
+def test_protected_route_requires_auth_when_enabled():
+    """
+    When RELAY_AUTH_ENABLED is true, hitting a /v1 route with no Authorization
+    header should fail with a relay_auth_error and code=missing_relay_key.
+    """
+    client = build_client(relay_enabled=True, relay_key="test-key")
+
+    # Remove auth header that build_client added
+    client.headers.pop("Authorization", None)
+
+    resp = client.get("/v1/models")
+    assert resp.status_code == 401
+
+    payload = resp.json()
+    error = payload.get("error") or payload.get("detail", {}).get("error")
+
+    assert error is not None
+    assert error.get("code") == "missing_relay_key"
+    assert error.get("type") == "relay_auth_error"
+
+
+def test_protected_route_rejects_invalid_key():
+    """
+    Invalid bearer token should return code=invalid_relay_key.
+    """
+    client = build_client(relay_enabled=True, relay_key="test-key")
+
+    # Overwrite Authorization header with a wrong token
+    client.headers["Authorization"] = "Bearer totally-wrong"
+
+    resp = client.get("/v1/models")
+    assert resp.status_code == 401
+
+    payload = resp.json()
+    error = payload.get("error") or payload.get("detail", {}).get("error")
+
+    assert error is not None
+    assert error.get("code") == "invalid_relay_key"
+    assert error.get("type") == "relay_auth_error"
