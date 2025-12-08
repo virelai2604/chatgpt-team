@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from fastapi import APIRouter, Request, Response
 
-from fastapi import APIRouter, Body
-
-from app.api.forward_openai import forward_images_generate
-from app.utils.logger import get_logger
-
-logger = get_logger(__name__)
+from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger
 
 router = APIRouter(
     prefix="/v1",
@@ -17,16 +13,41 @@ router = APIRouter(
 )
 
 
-@router.post("/images")
 @router.post("/images/generations")
-async def generate_image(
-    body: Dict[str, Any] = Body(..., description="OpenAI Images.generate payload"),
-) -> Any:
+@router.post("/images")
+async def create_image(request: Request) -> Response:
     """
-    Proxy for OpenAI Images API.
+    Image generation passthrough.
 
-    Supports both /v1/images and /v1/images/generations path shapes to play
-    nicely with different client assumptions.
+    Covers:
+      - POST /v1/images/generations
+      - POST /v1/images
+
+    Tests:
+      - test_image_generations_forward
+
+    They assert:
+      * HTTP 200
+      * JSON body matches the stub from `forward_spy`
+        (echo_path == "/v1/images/generations", echo_method == "POST")
     """
-    logger.info("Incoming %s request to images endpoint", "/v1/images")
-    return await forward_images_generate(body)
+    logger.info("→ [images] %s %s", request.method, request.url.path)
+    return await forward_openai_request(request)
+
+
+@router.post("/images/edits")
+async def edit_image(request: Request) -> Response:
+    """
+    Image edits passthrough.
+
+    This is used by:
+      - test_image_edits_forward
+
+    The test stubs the upstream endpoint:
+      POST https://api.openai.com/v1/images/edits
+
+    Our job is simply to forward the request and return whatever
+    upstream sends (status code + JSON body).
+    """
+    logger.info("→ [images] %s %s (edits)", request.method, request.url.path)
+    return await forward_openai_request(request)

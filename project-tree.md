@@ -101,7 +101,6 @@
     📄 __init__.py
     📄 client.py
     📄 conftest.py
-    📄 test_actions_and_orchestrator.py
     📄 test_embeddings_images_videos.py
     📄 test_files_and_vectorstores.py
     📄 test_health_and_tools.py
@@ -111,6 +110,4 @@
     📄 test_relay_auth_middleware.py
     📄 test_responses_and_conversations.py
     📄 test_responses_and_embeddings_sdk.py
-    📄 test_routes_forwarding_smoke.py
-    📄 test_validation_middleware.py
     📁 downloads
