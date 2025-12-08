@@ -9,6 +9,7 @@
   📄 openai_models_2025-11.csv
   📄 project-tree.md
   📄 pytest.ini
+  📄 relay-e2e.txt
   📄 relay_e2e_raw.py
   📄 render.yaml
   📄 requirements.txt
@@ -107,14 +108,9 @@
     📄 test_images_and_videos_routes_extra.py
     📄 test_models_files_vectorstores_sdk.py
     📄 test_models_files_videos_extra_routes.py
-    📄 test_realtime_and_infra.py
     📄 test_relay_auth_middleware.py
-    📄 test_relay_e2e.py
     📄 test_responses_and_conversations.py
     📄 test_responses_and_embeddings_sdk.py
-    📄 test_responses_stream_http.py
     📄 test_routes_forwarding_smoke.py
-    📄 test_tools_and_actions_routes.py
     📄 test_validation_middleware.py
-    📄 test_videos_realtime_tools_agentic.py
     📁 downloads
