@@ -1,352 +1,216 @@
-from __future__ import annotations
-
+# tests/conftest.py
 import json
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import httpx
 import pytest
-from starlette.testclient import TestClient
+from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import app as fastapi_app
+
+# Re-use the shared client logic from tests/client.py so the Authorization
+# header is always correct for the relay.
+from .client import client as shared_client  # noqa: F401
 
 
-# ---------------------------------------------------------------------------
-# Base async backend for pytest-anyio
-# ---------------------------------------------------------------------------
+# --- OpenAI HTTP stub -----------------------------------------------------
 
 
-@pytest.fixture(scope="session")
-def anyio_backend() -> str:
+class FakeResponse:
+    def __init__(self, status_code: int = 200, json_data: Optional[Dict[str, Any]] = None):
+        self.status_code = status_code
+        self._json_data = json_data or {}
+
+    def json(self) -> Dict[str, Any]:
+        return self._json_data
+
+
+class FakeAsyncClient:
     """
-    Ensure async tests run with asyncio backend.
+    Minimal httpx.AsyncClient stub that pretends to be the OpenAI backend.
+
+    We only implement what forward_openai uses: .post()/.get() returning
+    an object with .json().
     """
-    return "asyncio"
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
+        self.base_url = kwargs.get("base_url")
+
+    async def __aenter__(self) -> "FakeAsyncClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def get(self, url: str, *args: Any, **kwargs: Any) -> FakeResponse:
+        return _build_openai_stub_response("GET", url, kwargs.get("json"))
+
+    async def post(self, url: str, *args: Any, **kwargs: Any) -> FakeResponse:
+        return _build_openai_stub_response("POST", url, kwargs.get("json"))
 
 
-# ---------------------------------------------------------------------------
-# Shared TestClient for tests
-# ---------------------------------------------------------------------------
+def _build_openai_stub_response(method: str, url: str, body: Optional[Dict[str, Any]]) -> FakeResponse:
+    """
+    Return a small, deterministic payload that looks like the real OpenAI API
+    but is fast and completely local.
+    """
+    # Normalise path (strip any host prefix)
+    if "://" in url:
+        path = url.split("://", 1)[1]
+        path = path[path.find("/") :]
+    else:
+        path = url
+
+    # Models
+    if path.startswith("/v1/models"):
+        return FakeResponse(
+            200,
+            {
+                "object": "list",
+                "data": [
+                    {"id": "gpt-4o-mini", "object": "model"},
+                    {"id": "gpt-4.1-mini", "object": "model"},
+                ],
+            },
+        )
+
+    # Embeddings
+    if path.startswith("/v1/embeddings"):
+        return FakeResponse(
+            200,
+            {
+                "object": "list",
+                "data": [
+                    {
+                        "object": "embedding",
+                        "index": 0,
+                        "embedding": [0.1, 0.2, 0.3],
+                    }
+                ],
+            },
+        )
+
+    # Responses (chat-style)
+    if path.startswith("/v1/responses"):
+        return FakeResponse(
+            200,
+            {
+                "id": "resp_test",
+                "object": "response",
+                "model": (body or {}).get("model", "gpt-4o-mini"),
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {"type": "output_text", "text": "stubbed response from FakeAsyncClient"}
+                        ],
+                    }
+                ],
+            },
+        )
+
+    # Images
+    if path.startswith("/v1/images"):
+        return FakeResponse(
+            200,
+            {
+                "created": 1234567890,
+                "data": [{"b64_json": "fake-base64-image"}],
+            },
+        )
+
+    # Videos (if you wire /v1/videos/generations through)
+    if path.startswith("/v1/videos"):
+        return FakeResponse(
+            200,
+            {
+                "created": 1234567890,
+                "data": [{"id": "video_123", "status": "completed"}],
+            },
+        )
+
+    # Files
+    if path.startswith("/v1/files"):
+        return FakeResponse(
+            200,
+            {
+                "object": "list",
+                "data": [
+                    {
+                        "id": "file_test",
+                        "object": "file",
+                        "filename": "relay-e2e.txt",
+                        "bytes": 10,
+                    }
+                ],
+            },
+        )
+
+    # Vector stores
+    if path.startswith("/v1/vector_stores"):
+        return FakeResponse(
+            200,
+            {
+                "object": "list",
+                "data": [
+                    {"id": "vs_test", "object": "vector_store", "name": "stub-store"},
+                ],
+            },
+        )
+
+    # Fallback: just echo what we got, so tests can inspect it
+    return FakeResponse(
+        200,
+        {
+            "method": method,
+            "path": path,
+            "body": body or {},
+        },
+    )
+
+
+@pytest.fixture
+def forward_spy(monkeypatch: pytest.MonkeyPatch) -> Dict[str, Any]:
+    """
+    Fixture that lets tests inspect which URL/body the relay tried to send
+    to OpenAI via httpx.AsyncClient.
+    """
+    calls: Dict[str, Any] = {}
+
+    original_async_client = httpx.AsyncClient
+
+    def _make_fake_client(*args: Any, **kwargs: Any) -> FakeAsyncClient:
+        calls["last_args"] = args
+        calls["last_kwargs"] = kwargs
+        return FakeAsyncClient(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", _make_fake_client)
+
+    yield calls
+
+    # Restore for safety (not strictly necessary in tests, but harmless)
+    httpx.AsyncClient = original_async_client  # type: ignore[assignment]
+
+
+# --- FastAPI TestClient fixture -------------------------------------------
 
 
 @pytest.fixture
 def client() -> TestClient:
     """
-    Starlette TestClient bound to our FastAPI app.
+    Main TestClient fixture used by most tests.
 
-    Ensures APP_MODE/ENVIRONMENT defaults for test runs.
+    - Ensures ENVIRONMENT/APP_MODE defaults.
+    - Reuses the shared client from tests/client.py so that:
+      * Authorization: Bearer <RELAY_KEY> is always attached.
+      * Relay auth (authy.check_relay_key) passes by default.
     """
     os.environ.setdefault("APP_MODE", "test")
     os.environ.setdefault("ENVIRONMENT", "test")
-    os.environ.setdefault("OPENAI_API_BASE", "https://api.openai.com")
+    os.environ.setdefault("OPENAI_API_BASE", "https://api.openai.com/v1")
     os.environ.setdefault("DEFAULT_MODEL", "gpt-4o-mini")
-    return TestClient(app)
 
-
-# ---------------------------------------------------------------------------
-# Spy object for orchestrator / forwarding tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def forward_spy() -> Dict[str, Any]:
-    """
-    Mutable dict capturing "upstream" call details when FakeAsyncClient is used.
-    """
-    return {
-        "called": False,
-        "method": None,
-        "url": None,
-        "path": None,
-        "subpath": None,
-        "body": "",
-        "json": None,
-    }
-
-
-# ---------------------------------------------------------------------------
-# OpenAI stub payloads
-# ---------------------------------------------------------------------------
-
-
-def _echo_payload(path: str, method: str, body: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Generic echo payload used by most stubbed /v1 routes.
-
-    Tests typically assert:
-      - object == "test_proxy"
-      - echo_path == <expected path>
-      - echo_method == <expected method>
-      - forward_spy["json"] == payload  (for POSTs with JSON bodies)
-    """
-    return {
-        "object": "test_proxy",
-        "echo_path": path,
-        "echo_method": method,
-        "echo_json": body,
-    }
-
-
-def _build_openai_stub_response(
-    path: str,
-    method: str,
-    json_body: Any,
-) -> Tuple[int, Dict[str, Any], Dict[str, str]]:
-    """
-    Build a fake OpenAI-style response for the given path/method/body.
-
-    IMPORTANT:
-    - Never returns None.
-    - Always returns (status_code, payload, headers).
-    - Provides explicit stubs for the endpoints used by "pure local" tests,
-      plus a safe generic fallback for any other /v1/* path.
-    """
-    method = method.upper()
-
-    if json_body is None:
-        body: Dict[str, Any] = {}
-    elif isinstance(json_body, dict):
-        body = json_body
-    else:
-        # If the body is not a dict (e.g. list or string), wrap it.
-        body = {"data": json_body}
-
-    headers: Dict[str, str] = {}
-
-    # ------------------------------------------------------------------
-    # 1) Endpoints that tests expect to return a "test_proxy" echo payload
-    # ------------------------------------------------------------------
-    proxy_echo_paths = {
-        # embeddings / images / videos (basic forward tests)
-        "/v1/embeddings",
-        "/v1/images/generations",
-        "/v1/videos/generations",
-        # files
-        "/v1/files",
-        # models
-        "/v1/models",
-        # realtime
-        "/v1/realtime/sessions",
-    }
-
-    if path in proxy_echo_paths:
-        return 200, _echo_payload(path, method, body), headers
-
-    # Files detail / content
-    if path.startswith("/v1/files/"):
-        # All file detail/content operations in tests only check
-        # echo_* fields.
-        return 200, _echo_payload(path, method, body), headers
-
-    # Vector store routes
-    if path == "/v1/vector_stores" or path.startswith("/v1/vector_stores/"):
-        return 200, _echo_payload(path, method, body), headers
-
-    # Model detail routes
-    if path.startswith("/v1/models/"):
-        # For pure-local tests we treat this as a proxy echo as well.
-        return 200, _echo_payload(path, method, body), headers
-
-    # Responses API (proxy-style tests)
-    if path == "/v1/responses":
-        # create + list (POST/GET) – tests only assert on echo_* + spy
-        return 200, _echo_payload(path, method, body), headers
-
-    if path.startswith("/v1/responses/"):
-        # single response + cancel – echo only
-        return 200, _echo_payload(path, method, body), headers
-
-    # Conversations API (your local store; tests still treat as proxy echo)
-    if path == "/v1/conversations" or path.startswith("/v1/conversations/"):
-        return 200, _echo_payload(path, method, body), headers
-
-    # ------------------------------------------------------------------
-    # 2) Audio special-case used by orchestrator "unknown path" test
-    # ------------------------------------------------------------------
-    if path.startswith("/v1/audio/speech") and method == "POST":
-        # Test only cares about status_code in (200, 404) and that the JSON
-        # body was forwarded; we keep the response simple.
-        payload = _echo_payload(path, method, body)
-        return 404, payload, headers
-
-    # ------------------------------------------------------------------
-    # 3) Generic fallback for any other /v1/* path
-    # ------------------------------------------------------------------
-    if path.startswith("/v1/"):
-        payload = _echo_payload(path, method, body)
-        return 200, payload, headers
-
-    # ------------------------------------------------------------------
-    # 4) Non-/v1 paths – minimal OK JSON
-    # ------------------------------------------------------------------
-    payload = _echo_payload(path, method, body)
-    return 200, payload, headers
-
-
-# ---------------------------------------------------------------------------
-# Autouse patch: httpx.AsyncClient → FakeAsyncClient
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def patch_httpx_async_client(
-    monkeypatch: pytest.MonkeyPatch,
-    request: pytest.FixtureRequest,
-    forward_spy: Dict[str, Any],
-) -> None:
-    """
-    For tests that do NOT use httpx_mock, stub all upstream OpenAI calls.
-
-    For tests that *do* use httpx_mock (e.g. test_routes_forwarding_smoke),
-    we leave httpx.AsyncClient alone so pytest_httpx can intercept the real
-    HTTP layer and count calls correctly.
-
-    Additionally, when the 'requests_mock' fixture is present (used by
-    tests/test_images_and_videos_routes_extra.py), we provide more
-    realistic OpenAI-style stubs for the specific endpoints those tests
-    exercise (images edits, video metadata/content, delete error paths).
-    """
-    # If this test uses the pytest_httpx fixture, do not patch.
-    if "httpx_mock" in request.fixturenames:
-        yield
-        return
-
-    # Extra upstream-like stubs are needed for the images/videos extra tests.
-    use_extra_stubs = "requests_mock" in request.fixturenames
-
-    class FakeAsyncClient:
-        def __init__(
-            self,
-            *args: Any,
-            base_url: Optional[str] = None,
-            **kwargs: Any,
-        ) -> None:
-            self._base_url = str(base_url) if base_url is not None else ""
-
-        async def __aenter__(self) -> "FakeAsyncClient":
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-            # Compose full URL if base_url is set and url is relative
-            if self._base_url and not (
-                url.startswith("http://") or url.startswith("https://")
-            ):
-                full_url = self._base_url.rstrip("/") + "/" + url.lstrip("/")
-            else:
-                full_url = url
-
-            parsed = httpx.URL(full_url)
-            path = parsed.path
-            method_upper = method.upper()
-
-            json_body = kwargs.get("json")
-            body_content = kwargs.get("content", b"")
-
-            if isinstance(body_content, bytes):
-                body_text = body_content.decode("utf-8", "ignore")
-            else:
-                body_text = str(body_content or "")
-
-            # If no explicit json= was passed, but content looks like JSON, parse it.
-            if json_body is None:
-                text = body_text.lstrip()
-                if text.startswith("{") or text.startswith("["):
-                    try:
-                        json_body = json.loads(text)
-                    except Exception:
-                        json_body = None
-
-            # Fill spy for orchestrator tests
-            forward_spy["called"] = True
-            forward_spy["method"] = method_upper
-            forward_spy["url"] = full_url
-            forward_spy["path"] = path
-            if path.startswith("/v1/videos/"):
-                forward_spy["subpath"] = path.split("/v1/videos/")[-1]
-            else:
-                forward_spy["subpath"] = None
-            forward_spy["body"] = body_text
-            forward_spy["json"] = json_body
-
-            # ------------------------------------------------------------------
-            # Extra stubs for tests/test_images_and_videos_routes_extra.py
-            # These tests use the `requests_mock` fixture, which we detect
-            # via `use_extra_stubs`, and expect realistic OpenAI responses.
-            # ------------------------------------------------------------------
-            if use_extra_stubs:
-                # POST /v1/images/edits → JSON image edit response
-                if path == "/v1/images/edits" and method_upper == "POST":
-                    payload = {
-                        "created": 1234567890,
-                        "data": [
-                            {
-                                "url": "https://example.test/generated-image.png",
-                            }
-                        ],
-                    }
-                    return httpx.Response(status_code=200, json=payload)
-
-                # GET /v1/videos/video_123 → video metadata
-                if path == "/v1/videos/video_123" and method_upper == "GET":
-                    payload = {
-                        "id": "video_123",
-                        "object": "video",
-                        "status": "completed",
-                        "duration": 8,
-                        "model": "sora-1",
-                    }
-                    return httpx.Response(status_code=200, json=payload)
-
-                # GET /v1/videos/video_123/content → binary MP4 bytes
-                if path == "/v1/videos/video_123/content" and method_upper == "GET":
-                    # Simulate the same tiny MP4 payload as the test
-                    video_bytes = b"\x00\x00\x00\x14ftypmp42"
-                    headers = {"content-type": "video/mp4"}
-                    return httpx.Response(
-                        status_code=200,
-                        content=video_bytes,
-                        headers=headers,
-                    )
-
-                # DELETE /v1/videos/video_404 → 404 error passthrough
-                if path == "/v1/videos/video_404" and method_upper == "DELETE":
-                    payload = {
-                        "error": {
-                            "message": "Video 'video_404' not found",
-                            "type": "invalid_request_error",
-                        }
-                    }
-                    return httpx.Response(status_code=404, json=payload)
-
-                # DELETE /v1/models/bad-model → 404 error passthrough
-                if path == "/v1/models/bad-model" and method_upper == "DELETE":
-                    payload = {
-                        "error": {
-                            "message": "Model 'bad-model' does not exist",
-                            "type": "invalid_request_error",
-                        }
-                    }
-                    return httpx.Response(status_code=404, json=payload)
-
-            # ------------------------------------------------------------------
-            # Default stub behavior for all other calls
-            # ------------------------------------------------------------------
-            status_code, payload, headers = _build_openai_stub_response(
-                path, method_upper, json_body
-            )
-            return httpx.Response(status_code=status_code, json=payload, headers=headers)
-
-        async def get(self, url: str, **kwargs: Any) -> httpx.Response:
-            return await self.request("GET", url, **kwargs)
-
-        async def post(self, url: str, **kwargs: Any) -> httpx.Response:
-            return await self.request("POST", url, **kwargs)
-
-        async def delete(self, url: str, **kwargs: Any) -> httpx.Response:
-            return await self.request("DELETE", url, **kwargs)
-
-    monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
-    yield
+    # The shared_client already wraps the imported FastAPI app.
+    return shared_client  # type: ignore[return-value]
