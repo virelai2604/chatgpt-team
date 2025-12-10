@@ -114,7 +114,4 @@
       📄 __init__.py
       📄 test_render_images_videos_integration.py
       📄 test_render_relay.py
-      📄 test_render_relay_basic - Copy (3).py
-      📄 test_render_relay_basic - Copy (4).py
-      📄 test_render_relay_basic - Copy.py
       📄 test_render_relay_basic.py
