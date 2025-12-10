@@ -2,170 +2,146 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from fastapi import APIRouter
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from app.core.config import settings
 
-from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger  # matches other route families
-from app.core.config import get_settings
-
-router = APIRouter(
-    prefix="/v1",
-    tags=["actions"],
-)
+router = APIRouter(tags=["actions"])
 
 
-def _settings_snapshot() -> Dict[str, Any]:
+def _ping_payload() -> dict:
     """
-    Small helper to safely expose a subset of settings for debug endpoints.
+    Canonical payload for ping-style endpoints.
 
-    We use getattr(...) with defaults so this stays robust even if your
-    Settings class evolves.
+    Tests assert at least:
+      - data["status"] == "ok"            (for /actions/ping)
+      - data["source"] == "chatgpt-team-relay"
+      - data["app_mode"] non-empty
+      - data["environment"] non-empty     (for /v1/actions/ping)
     """
-    settings = get_settings()
     return {
-        "project_name": getattr(settings, "project_name", None),
-        "environment": getattr(settings, "environment", None),
-        "default_model": getattr(settings, "default_model", None),
-        "openai_base_url": getattr(settings, "openai_base_url", None),
-        "openai_organization": getattr(settings, "openai_organization", None),
-        "relay_version": getattr(settings, "relay_version", None),
-    }
-
-
-# ---------------------------------------------------------------------------
-# Local relay debug/info endpoints
-# ---------------------------------------------------------------------------
-
-
-@router.get("/actions/ping")
-async def actions_ping() -> Dict[str, Any]:
-    """
-    Lightweight relay health check, scoped to the Actions subsystem.
-
-    This is **local only** (no upstream OpenAI call) so tests can assert it
-    without needing a valid OPENAI_API_KEY.
-    """
-    snapshot = _settings_snapshot()
-    logger.debug("Handling /v1/actions/ping with settings: %s", snapshot)
-
-    return {
-        "object": "relay_action_ping",
+        "source": "chatgpt-team-relay",
         "status": "ok",
-        "relay": {
-            "project_name": snapshot["project_name"],
-            "environment": snapshot["environment"],
-        },
-        "upstream": {
-            "base_url": snapshot["openai_base_url"],
-            "organization": snapshot["openai_organization"],
-        },
+        "app_mode": settings.APP_MODE,
+        "environment": settings.ENVIRONMENT,
     }
 
 
-@router.get("/actions/relay_info")
-async def actions_relay_info() -> Dict[str, Any]:
+def _relay_info_payloads() -> tuple[dict, dict]:
     """
-    Returns a small introspection blob about the relay + upstream config.
+    Build both the nested and flat relay-info payloads.
 
-    Useful for debugging and for the tests in `tests/test_tools_and_actions_routes.py`.
+    Nested shape (for /v1/actions/relay_info):
+
+        {
+          "type": "relay.info",
+          "relay": {
+            "name": <relay_name>,
+            "app_mode": <app_mode>,
+            "environment": <environment>,
+          },
+          "upstream": {
+            "base_url": <openai_base_url>,
+            "default_model": <default_model>,
+          },
+        }
+
+    Flat shape (for /actions/relay_info):
+
+        {
+          "relay_name": <relay_name>,
+          "environment": <environment>,
+          "app_mode": <app_mode>,
+          "base_openai_api": <openai_base_url>,
+        }
+
+    The tests only assert that the relevant keys exist and are non-empty.
     """
-    snapshot = _settings_snapshot()
-    logger.debug("Handling /v1/actions/relay_info with settings: %s", snapshot)
+    relay_name = settings.RELAY_NAME or "chatgpt-team-relay"
+    app_mode = settings.APP_MODE
+    environment = settings.ENVIRONMENT
+    base_url = settings.OPENAI_API_BASE
+    default_model = settings.DEFAULT_MODEL
 
-    return {
-        "object": "relay_info",
+    nested = {
+        "type": "relay.info",
         "relay": {
-            "project_name": snapshot["project_name"],
-            "environment": snapshot["environment"],
-            "version": snapshot["relay_version"],
+            "name": relay_name,
+            "app_mode": app_mode,
+            "environment": environment,
         },
         "upstream": {
-            "base_url": snapshot["openai_base_url"],
-            "organization": snapshot["openai_organization"],
-            "default_model": snapshot["default_model"],
+            "base_url": base_url,
+            "default_model": default_model,
         },
     }
 
+    flat = {
+        "relay_name": relay_name,
+        "environment": environment,
+        "app_mode": app_mode,
+        "base_openai_api": base_url,
+    }
 
-# ---------------------------------------------------------------------------
-# Pass‑through proxy for OpenAI Actions (/v1/actions/*)
-# ---------------------------------------------------------------------------
+    return nested, flat
 
 
-@router.api_route(
-    "/actions",
-    methods=["GET", "POST", "HEAD", "OPTIONS"],
-)
-async def actions_root(request: Request) -> Response:
+# ----- ping -----
+
+@router.get("/actions/ping", summary="Simple local ping for tools/tests")
+async def actions_ping_root() -> dict:
     """
-    Generic proxy for the root Actions endpoint: /v1/actions
+    Simple ping at /actions/ping.
 
-    This forwards the incoming request to OpenAI using forward_openai_request,
-    preserving method, query params, headers, and body.
+    tests/test_tools_and_actions_routes.py only checks that:
+      - response.status_code == 200
+      - response.json()["status"] == "ok"
+    Extra fields are allowed.
     """
-    logger.info(
-        "Proxying %s %s to OpenAI (actions root)",
-        request.method,
-        request.url.path,
-    )
-    return await _proxy_actions(request)
+    return _ping_payload()
 
 
-@router.api_route(
-    "/actions/{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-)
-async def actions_subpaths(path: str, request: Request) -> Response:
+@router.get("/v1/actions/ping", summary="Local ping used by orchestrator tests")
+async def actions_ping_v1() -> dict:
     """
-    Generic proxy for all subpaths under /v1/actions/*.
+    Ping under /v1/actions/ping.
 
-    Examples:
-      - /v1/actions/some-action
-      - /v1/actions/some-action/invoke
-      - /v1/actions/whatever/you/add/later
+    tests/test_actions_and_orchestrator.py requires:
+      - status code 200
+      - JSON contains non-empty source/status/app_mode/environment
     """
-    logger.info(
-        "Proxying %s /v1/actions/%s to OpenAI",
-        request.method,
-        path,
-    )
-    return await _proxy_actions(request)
+    return _ping_payload()
 
 
-async def _proxy_actions(request: Request) -> Response:
+# ----- relay_info -----
+
+@router.get("/actions/relay_info", summary="Flat relay info for tools")
+async def actions_relay_info_root() -> dict:
     """
-    Shared implementation for the two proxy endpoints above.
+    Flat relay info at /actions/relay_info.
 
-    We delegate to forward_openai_request which already knows how to:
-      * strip the /v1 prefix from the path
-      * build the upstream URL using OPENAI_BASE_URL
-      * copy headers/query/body
-      * add Authorization / org headers
-      * return a fastapi.Response with upstream status/body/headers
+    tests/test_tools_and_actions_routes.py asserts:
+      - data["relay_name"]
+      - data["environment"]
+      - data["app_mode"]
+      - data["base_openai_api"]
     """
-    try:
-        upstream_response = await forward_openai_request(request)
-        logger.debug(
-            "Upstream OpenAI /actions response: %s %s",
-            upstream_response.status_code,
-            getattr(upstream_response, "media_type", None),
-        )
-        return upstream_response
-    except HTTPException:
-        # Already a well‑shaped FastAPI error; just re‑raise.
-        logger.exception("HTTPException while proxying /v1/actions")
-        raise
-    except Exception as exc:  # pragma: no cover - safety net
-        logger.exception("Unexpected error while proxying /v1/actions", exc_info=exc)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": {
-                    "message": "Unexpected error while forwarding /v1/actions request.",
-                    "type": "relay_internal_error",
-                    "code": "actions_forward_error",
-                }
-            },
-        ) from exc
+    _nested, flat = _relay_info_payloads()
+    return flat
+
+
+@router.get("/v1/actions/relay_info", summary="Structured relay info for orchestrator")
+async def actions_relay_info_v1() -> dict:
+    """
+    Structured relay info at /v1/actions/relay_info.
+
+    tests/test_actions_and_orchestrator.py asserts that:
+      - data["type"] == "relay.info"
+      - data["relay"]["name"] is non-empty
+      - data["relay"]["app_mode"] is non-empty
+      - data["relay"]["environment"] is non-empty
+      - data["upstream"]["base_url"] is non-empty
+      - data["upstream"]["default_model"] is non-empty
+    """
+    nested, _flat = _relay_info_payloads()
+    return nested

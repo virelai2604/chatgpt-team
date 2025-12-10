@@ -14,6 +14,7 @@ from .middleware.validation import ValidationMiddleware
 from .api.routes import router as api_router
 from .api.sse import router as sse_router
 from .api.tools_api import router as tools_router
+from .routes.health import router as health_router
 
 
 def create_app() -> FastAPI:
@@ -47,10 +48,8 @@ def create_app() -> FastAPI:
     app.include_router(sse_router)
     app.include_router(tools_router)
 
-    # Simple bare /health (unversioned). Note: this still passes through middleware.
-    @app.get("/health", tags=["health"])
-    def health() -> dict:
-        return {"status": "ok"}
+    # Health routes (includes /health and /v1/health)
+    app.include_router(health_router)
 
     return app
 
