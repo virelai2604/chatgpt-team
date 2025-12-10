@@ -70,12 +70,13 @@ def _json_or_skip(resp: requests.Response) -> dict:
     """
     Try to decode JSON. If that fails, treat this as a hard failure.
     """
- try:
-    data = resp.json()
-except ValueError as exc:
-    raise AssertionError(
+try:
+    payload = resp.json()
+except Exception as exc:
+    pytest.fail(
         f"Expected JSON but got: {resp.status_code} {resp.text[:200]!r}"
-    ) from exc
+    )
+
 
 
 # ---------------------------------------------------------------------------
