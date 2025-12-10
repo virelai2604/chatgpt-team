@@ -17,14 +17,20 @@ def _base_status() -> Dict[str, Any]:
     Base health payload used by both /health and /v1/health.
 
     Tests expect:
-      - object == "health"
-      - status == "ok"
+      - top-level "object" == "health"
+      - top-level "status" == "ok"
       - top-level "environment" key
+      - top-level "default_model" key
+      - nested "relay", "upstream", "meta" objects
     """
     return {
+        # Top-level fields required by tests
         "object": "health",
         "status": "ok",
         "environment": settings.ENVIRONMENT,
+        "default_model": settings.DEFAULT_MODEL,
+
+        # Structured detail
         "relay": {
             "name": settings.RELAY_NAME,
             "environment": settings.ENVIRONMENT,
@@ -58,4 +64,3 @@ async def health_v1() -> Dict[str, Any]:
     Versioned health endpoint, matching the /v1 namespace.
     """
     return _base_status()
-    

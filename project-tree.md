@@ -9,7 +9,6 @@
   📄 openai_models_2025-11.csv
   📄 project-tree.md
   📄 pytest.ini
-  📄 relay-e2e.txt
   📄 relay_e2e_raw.py
   📄 render.yaml
   📄 requirements.txt
@@ -111,3 +110,11 @@
     📄 test_responses_and_conversations.py
     📄 test_responses_and_embeddings_sdk.py
     📁 downloads
+    📁 integration
+      📄 __init__.py
+      📄 test_render_images_videos_integration.py
+      📄 test_render_relay.py
+      📄 test_render_relay_basic - Copy (3).py
+      📄 test_render_relay_basic - Copy (4).py
+      📄 test_render_relay_basic - Copy.py
+      📄 test_render_relay_basic.py
