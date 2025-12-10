@@ -17,24 +17,28 @@ def _get_expected_key() -> str:
     """
     Return the configured relay key or a safe local-dev default.
 
-    If RELAY_KEY is not set we fall back to "dummy-local-relay-key",
-    which matches relay_e2e_raw.py and the docs.
+    In this project, if RELAY_KEY is not set we fall back to
+    "dummy-local-relay-key", which is also what the e2e script uses.
     """
     key = settings.RELAY_KEY
     if not key:
+        # Local dev default – matches relay_e2e_raw.py and docs
         return "dummy-local-relay-key"
     return key
 
 
-def _extract_bearer_token(auth_header: Optional[str]) -> Optional[str]:
+def _extract_bearer_token(auth_header: Optional[str]) -> str:
     """
     Parse Authorization header of form 'Bearer <token>'.
 
-    Returns token string, or None if header is missing.
-    Raises HTTPException with string `detail` on malformed cases.
+    Raises HTTPException with string `detail` on error, matching the
+    expectations in test_relay_auth_middleware.
     """
-    if auth_header is None:
-        return None
+    if not auth_header:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization header",
+        )
 
     try:
         scheme, token = auth_header.split(" ", 1)
@@ -60,43 +64,19 @@ def _extract_bearer_token(auth_header: Optional[str]) -> Optional[str]:
     return token
 
 
-def check_relay_key(
-    auth_header: Optional[str],
-    x_relay_key: Optional[str],
-) -> None:
+def check_relay_key(auth_header: Optional[str]) -> None:
     """
-    Validate incoming relay key.
-
-    Priority:
-      1. X-Relay-Key header (used by relay_e2e_raw.py)
-      2. Authorization: Bearer <token> (used by OpenAI SDK client)
+    Validate Authorization header of form 'Bearer <token>' against settings.RELAY_KEY.
 
     If RELAY_AUTH_ENABLED is False, this is a no-op.
-
-    On failure, raises HTTPException(status_code=..., detail="<string>").
+    On failure, raises HTTPException(401, detail="<string>") – the tests
+    assert on that exact shape.
     """
     # If auth is disabled, skip entirely
     if not settings.RELAY_AUTH_ENABLED:
         return
 
-    # Prefer explicit X-Relay-Key
-    token: Optional[str] = None
-    if x_relay_key:
-        token = x_relay_key.strip()
-        if not token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing relay key",
-            )
-    else:
-        # Fall back to Authorization header
-        token = _extract_bearer_token(auth_header)
-
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing relay key",
-        )
+    token = _extract_bearer_token(auth_header)
 
     expected = _get_expected_key().encode("utf-8")
     provided = token.encode("utf-8")
