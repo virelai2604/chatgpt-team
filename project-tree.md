@@ -9,7 +9,6 @@
   📄 openai_models_2025-11.csv
   📄 project-tree.md
   📄 pytest.ini
-  📄 relay_e2e_raw.py
   📄 render.yaml
   📄 requirements.txt
   📁 app
@@ -100,18 +99,5 @@
     📄 __init__.py
     📄 client.py
     📄 conftest.py
-    📄 test_embeddings_images_videos.py
-    📄 test_files_and_vectorstores.py
-    📄 test_health_and_tools.py
-    📄 test_images_and_videos_routes_extra.py
-    📄 test_models_files_vectorstores_sdk.py
-    📄 test_models_files_videos_extra_routes.py
-    📄 test_relay_auth_middleware.py
-    📄 test_responses_and_conversations.py
-    📄 test_responses_and_embeddings_sdk.py
+    📄 test_local_e2e.py
     📁 downloads
-    📁 integration
-      📄 __init__.py
-      📄 test_render_images_videos_integration.py
-      📄 test_render_relay.py
-      📄 test_render_relay_basic.py

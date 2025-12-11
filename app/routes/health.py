@@ -49,6 +49,14 @@ def _base_status() -> Dict[str, Any]:
         },
     }
 
+@router.get("/", include_in_schema=False)
+async def root_health() -> Dict[str, Any]:
+    """
+    Public root health endpoint used by local e2e tests.
+
+    Returns the same payload as /health and /v1/health.
+    """
+    return _base_status()
 
 @router.get("/health")
 async def health_root() -> Dict[str, Any]:
