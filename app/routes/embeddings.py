@@ -11,21 +11,44 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(
-    prefix="/v1",
-    tags=["embeddings"],
-)
+router = APIRouter(prefix="/v1", tags=["openai-relay"])
 
 
 @router.post("/embeddings")
-async def create_embedding(
-    body: Dict[str, Any] = Body(..., description="OpenAI Embeddings.create payload"),
-) -> Any:
+async def create_embeddings(
+    body: Dict[str, Any] = Body(
+        ...,
+        description="OpenAI Embeddings.create payload",
+    ),
+) -> Dict[str, Any]:
     """
-    Proxy for OpenAI Embeddings API.
+    Relay endpoint for /v1/embeddings.
 
-    Mirrors:
-        POST https://api.openai.com/v1/embeddings
+    This forwards the request body to OpenAI's embeddings.create using the
+    official AsyncOpenAI SDK and returns the plain JSON result.
+
+    The response shape matches the OpenAI API:
+
+      {
+        "object": "list",
+        "data": [
+          {
+            "object": "embedding",
+            "index": 0,
+            "embedding": [float, float, ...]
+          },
+          ...
+        ],
+        ...
+      }
+
+    which is exactly what the integration test asserts against.
     """
     logger.info("Incoming /v1/embeddings request")
-    return await forward_embeddings_create(body)
+    logger.debug("Embeddings request body: %s", body)
+
+    result = await forward_embeddings_create(body)
+
+    # `forward_embeddings_create` already returns plain data (dict/list), so we
+    # can return it directly and let FastAPI/Starlette JSON encode it.
+    return result  # type: ignore[return-value]

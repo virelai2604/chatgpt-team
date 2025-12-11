@@ -2,257 +2,147 @@
 
 from __future__ import annotations
 
-import json
-from typing import Any, AsyncIterator, Dict, Optional
-from urllib.parse import urljoin
+import logging
+from typing import Any, Dict, Mapping, Optional
 
-import httpx
-from fastapi import Request, Response
-from fastapi.responses import StreamingResponse
+from openai import AsyncOpenAI
 
 from app.core.config import settings
-from app.core.http_client import get_async_openai_client
-from app.utils.logger import get_logger
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Helpers for working with the typed OpenAI SDK
+# Shared client helper
 # ---------------------------------------------------------------------------
+
+
+_client: Optional[AsyncOpenAI] = None
+
+
+async def get_async_openai_client() -> AsyncOpenAI:
+    """
+    Lazily construct and cache a single AsyncOpenAI client for the relay.
+
+    This uses the API key and base URL from settings so that all routes
+    share the same configuration.
+    """
+    global _client
+    if _client is None:
+        logger.info("Initializing AsyncOpenAI client for relay")
+        _client = AsyncOpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            base_url=settings.OPENAI_BASE_URL,
+        )
+    return _client
 
 
 def _to_plain(result: Any) -> Any:
     """
-    Convert pydantic / OpenAI SDK objects to plain JSON-serializable Python
-    structures for returning in FastAPI responses.
+    Convert OpenAI SDK models (Pydantic-based) into plain Python data structures
+    that FastAPI/JSON can serialize without involving Pydantic again.
+
+    This helper is intentionally conservative: it only special-cases the
+    OpenAI types that implement `model_dump` / `model_dump_json` and otherwise
+    returns values as-is.
     """
-    if hasattr(result, "model_dump_json"):
-        # OpenAI SDK 2.x models
-        return json.loads(result.model_dump_json())
+    # OpenAI Python 1.x models
     if hasattr(result, "model_dump"):
+        # `model_dump()` returns dict / list of primitive types
         return result.model_dump()
+
+    # Async streams / streaming managers are *not* meant to be serialized;
+    # callers must handle them separately and never run them through this helper.
     return result
+
+
+# ---------------------------------------------------------------------------
+# Typed helpers for specific endpoints
+# ---------------------------------------------------------------------------
 
 
 async def forward_responses_create(payload: Dict[str, Any]) -> Any:
     """
-    Forward to OpenAI Responses API.
+    Forward a non-streaming Responses.create call via the AsyncOpenAI client.
 
-    Non-streaming:
-        client.responses.create(**payload)
-
-    Streaming:
-        client.responses.create(stream=True, event_handler=...)
+    NOTE: This helper is *non-streaming only*. Callers MUST NOT pass
+    `stream=True` here. Streaming should be handled in the route code
+    (e.g. wrapping the SDK's stream in a StreamingResponse / SSE).
     """
-    client = get_async_openai_client()
+    if payload.get("stream"):
+        # This is a guard so we don't accidentally hand an AsyncStream back to
+        # FastAPI's JSON response machinery (which caused 500s before).
+        raise ValueError(
+            "forward_responses_create() must not be used with stream=True; "
+            "handle streaming in the route and use the SDK's streaming API "
+            "directly there."
+        )
+
+    client = await get_async_openai_client()
     logger.debug("Forwarding /v1/responses payload: %s", payload)
+
     result = await client.responses.create(**payload)
-    return _to_plain(result)
-
-
-async def forward_responses_create_streaming(
-    payload: Dict[str, Any],
-) -> AsyncIterator[Any]:
-    """
-    Forward a streaming Responses.create(**payload, stream=True) call.
-
-    Returns an async iterator of event objects. The routes layer is responsible
-    for translating those into SSE bytes.
-    """
-    client = get_async_openai_client()
-    logger.debug("Forwarding /v1/responses (streaming) payload: %s", payload)
-
-    # Ensure stream=True
-    payload = dict(payload)
-    payload["stream"] = True
-
-    # The SDK returns an async iterator of events
-    async with client.responses.stream(**payload) as stream:
-        async for event in stream:
-            yield event
-
-
-async def forward_responses_compact(payload: Dict[str, Any]) -> Any:
-    """
-    Forward to OpenAI Responses compact endpoint:
-
-        POST https://api.openai.com/v1/responses/compact
-
-    Python SDK equivalent:
-
-        client.responses.compact(**payload)
-
-    Requires openai-python 2.10.0+ (Responses.compact is part of the
-    modern Responses API surface).
-    """
-    client = get_async_openai_client()
-    logger.debug("Forwarding /v1/responses/compact payload: %s", payload)
-    result = await client.responses.compact(**payload)
     return _to_plain(result)
 
 
 async def forward_embeddings_create(payload: Dict[str, Any]) -> Any:
     """
-    Typed helper for /v1/embeddings.
+    Forward an embeddings.create call via the AsyncOpenAI client.
 
-    Equivalent to:
-        client.embeddings.create(**payload)
+    We intentionally *do not* force `encoding_format="base64"` here so that
+    the response shape matches the official OpenAI API and the tests'
+    expectations: `embedding` is a `list[float]`.
+
+    If the caller explicitly sets `encoding_format` in the payload, we honor it.
     """
-    client = get_async_openai_client()
+    client = await get_async_openai_client()
     logger.debug("Forwarding /v1/embeddings payload: %s", payload)
+
+    # Do NOT override encoding_format unless you have a specific reason.
+    # The default is float vectors, which is what tests expect.
     result = await client.embeddings.create(**payload)
     return _to_plain(result)
 
 
-async def forward_models_list() -> Any:
-    """
-    Typed helper for listing models via the SDK.
-
-    Equivalent to:
-        client.models.list()
-    """
-    client = get_async_openai_client()
-    logger.debug("Forwarding /v1/models list request")
-    result = await client.models.list()
-    return _to_plain(result)
-
-
-async def forward_models_retrieve(model_id: str) -> Any:
-    """
-    Typed helper for retrieving a single model.
-
-    Equivalent to:
-        client.models.retrieve(model_id)
-    """
-    client = get_async_openai_client()
-    logger.debug("Forwarding /v1/models/%s retrieve request", model_id)
-    result = await client.models.retrieve(model_id)
-    return _to_plain(result)
-
-
 # ---------------------------------------------------------------------------
-# Generic raw HTTP forwarder for any other /v1/* path
+# Generic HTTP-style forwarder (if you use it elsewhere in the app)
 # ---------------------------------------------------------------------------
 
 
-async def _do_forward(
+async def forward_openai_request(
     method: str,
     path: str,
-    request: Request,
-    stream: bool = False,
-) -> Response:
+    json: Optional[Mapping[str, Any]] = None,
+    params: Optional[Mapping[str, Any]] = None,
+) -> Any:
     """
-    Generic forwarding logic used by forward_openai_request.
+    Low-level passthrough for miscellaneous OpenAI endpoints that don't
+    have a dedicated helper yet.
 
-    - Builds the upstream URL by joining OPENAI_API_BASE (or default) with `path`
-    - Preserves method, headers (minus hop-by-hop), query params, and body
-    - Returns either a normal Response or a StreamingResponse.
+    This uses the AsyncOpenAI client’s `client._client` (underlying httpx)
+    to make arbitrary requests, but still returns plain Python data.
     """
-    # Base URL for upstream, e.g. https://api.openai.com/v1/
-    base_url = str(settings.OPENAI_API_BASE).rstrip("/") + "/"
-    url = urljoin(base_url, path.lstrip("/"))
-    logger.debug("Forwarding generic request to OpenAI: %s %s", method, url)
+    client = await get_async_openai_client()
+    url = f"{settings.OPENAI_BASE_URL}{path}"
 
-    # Read incoming body once
-    body = await request.body()
-
-    # Copy headers, but strip ones that should not be proxied as-is
-    excluded_headers = {
-        "host",
-        "content-length",
-        "connection",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "te",
-        "trailers",
-        "transfer-encoding",
-        "upgrade",
-    }
-    headers = {
-        k: v
-        for k, v in request.headers.items()
-        if k.lower() not in excluded_headers
-    }
-
-    async with httpx.AsyncClient(timeout=None) as client:
-        if stream:
-            upstream = client.stream(
-                method,
-                url,
-                headers=headers,
-                params=request.query_params,
-                content=body,
-            )
-            return StreamingResponse(
-                _do_stream(upstream),
-                status_code=200,
-                media_type="text/event-stream",
-            )
-
-        resp = await client.request(
-            method,
-            url,
-            headers=headers,
-            params=request.query_params,
-            content=body,
-        )
-
-    return Response(
-        content=resp.content,
-        status_code=resp.status_code,
-        headers=dict(resp.headers),
-        media_type=resp.headers.get("content-type"),
+    logger.debug(
+        "Forwarding generic OpenAI request: %s %s params=%s json=%s",
+        method,
+        url,
+        params,
+        json,
     )
 
+    # Use the underlying httpx client for maximum flexibility.
+    http_client = client._client  # type: ignore[attr-defined]
 
-async def _do_stream(upstream: httpx._client.AsyncClient.stream) -> AsyncIterator[bytes]:
-    """
-    Relay upstream streaming response chunks as-is.
-    """
-    async with upstream as response:
-        async for chunk in response.aiter_bytes():
-            yield chunk
-
-
-def _extract_upstream_path(request: Request) -> str:
-    """
-    Map the inbound path to the corresponding upstream path under /v1.
-
-    For now we assume the relay itself is mounted at '/', so the path already
-    begins with '/v1/...'. If you mount under a sub-path, adjust here.
-    """
-    path = request.url.path
-
-    # Simple case: path already starts with /v1
-    if path.startswith("/v1/"):
-        return path.lstrip("/")
-
-    # If someone hits e.g. /chat/completions, normalize to /v1/chat/completions
-    if path.startswith("/"):
-        return f"v1{path}"
-    return f"v1/{path}"
-
-
-async def forward_openai_request(request: Request, stream: bool = False) -> Response:
-    """
-    Generic proxy entrypoint used by the legacy routes (chat completions, etc.).
-
-    Most new work should prefer the typed helpers and purpose-built routes
-    instead of this catch-all, but it remains useful for backwards compatibility
-    and for endpoints we haven't added typed wrappers for yet.
-    """
-    upstream_path = _extract_upstream_path(request)
-    logger.info(
-        "Generic OpenAI forward: %s %s (stream=%s)",
-        request.method,
-        upstream_path,
-        stream,
+    response = await http_client.request(
+        method=method,
+        url=url,
+        params=params,
+        json=json,
+        headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
     )
-    return await _do_forward(
-        method=request.method,
-        path=upstream_path,
-        request=request,
-        stream=stream,
-    )
+    response.raise_for_status()
+
+    return response.json()
