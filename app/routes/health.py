@@ -14,23 +14,30 @@ router = APIRouter(tags=["health"])
 
 def _base_status() -> Dict[str, Any]:
     """
-    Base health payload used by both /health and /v1/health.
+    Base health payload used by '/', '/health', and '/v1/health'.
 
-    Tests expect:
+    Tests expect, at minimum:
       - top-level "object" == "health"
       - top-level "status" == "ok"
-      - top-level "environment" key
-      - top-level "default_model" key
-      - nested "relay", "upstream", "meta" objects
+      - top-level "environment"
+      - top-level "default_model"
+      - top-level "timestamp"
+      - nested "relay" object
+      - nested "openai" object
+      - nested "meta" object
     """
+    now_iso = datetime.now(timezone.utc).isoformat()
+
     return {
         # Top-level fields required by tests
         "object": "health",
         "status": "ok",
         "environment": settings.ENVIRONMENT,
         "default_model": settings.DEFAULT_MODEL,
+        # Simple, always-present timestamp for quick checks
+        "timestamp": now_iso,
 
-        # Structured detail
+        # Relay information
         "relay": {
             "name": settings.RELAY_NAME,
             "environment": settings.ENVIRONMENT,
@@ -38,30 +45,34 @@ def _base_status() -> Dict[str, Any]:
             "default_model": settings.DEFAULT_MODEL,
             "realtime_model": settings.REALTIME_MODEL,
         },
-        "upstream": {
+
+        # Upstream OpenAI configuration – tests look for this key name
+        "openai": {
             "api_base": str(settings.OPENAI_API_BASE),
             "assistants_beta": settings.OPENAI_ASSISTANTS_BETA,
             "realtime_beta": settings.OPENAI_REALTIME_BETA,
         },
+
+        # Extra diagnostic metadata (can evolve over time)
         "meta": {
             "python_version": settings.PYTHON_VERSION,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": now_iso,
         },
     }
 
-@router.get("/", include_in_schema=False)
-async def root_health() -> Dict[str, Any]:
-    """
-    Public root health endpoint used by local e2e tests.
 
-    Returns the same payload as /health and /v1/health.
+@router.get("/")
+async def health_root() -> Dict[str, Any]:
+    """
+    Root health endpoint – public and used by integration tests as '/'.
     """
     return _base_status()
 
+
 @router.get("/health")
-async def health_root() -> Dict[str, Any]:
+async def health_plain() -> Dict[str, Any]:
     """
-    Simple non-versioned health endpoint.
+    Simple, non-versioned health endpoint.
     """
     return _base_status()
 
