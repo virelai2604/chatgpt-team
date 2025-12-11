@@ -19,7 +19,7 @@ dependencies = [
   "httpx>=0.27,<1.0",
 
   # OpenAI Python SDK (v2.x as per your environment spec)
-  "openai>=2.9.0,<3.0.0",
+  "openai>=2.10.0,<2.11.0",
 
   # Configuration & settings
   "python-dotenv>=1.0,<2.0",
