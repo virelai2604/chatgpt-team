@@ -1,8 +1,11 @@
 # app/middleware/relay_auth.py
-from typing import Callable, Awaitable
+
+from __future__ import annotations
+
+from typing import Awaitable, Callable
 
 from fastapi import HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.utils.authy import check_relay_key
@@ -10,9 +13,9 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Exact paths that should *never* require relay auth
+# Exact paths that should always be public
 SAFE_EXACT_PATHS = {
-    "/",  # root stays public in tests
+    "/",  # root
     "/health",
     "/health/",
     "/v1/health",
@@ -23,7 +26,7 @@ SAFE_EXACT_PATHS = {
     "/v1/actions/relay_info",
 }
 
-# Prefixes that should stay public (docs, OpenAPI, static assets, etc.)
+# Prefixes that should always be public (docs, openapi, assets, etc.)
 SAFE_PREFIXES = (
     "/docs",
     "/redoc",
@@ -37,17 +40,16 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
     """
     Optional shared-secret auth in front of the relay.
 
-    Controlled by:
+    Controlled by env / settings:
 
       - RELAY_KEY (or legacy RELAY_AUTH_TOKEN)
-      - RELAY_AUTH_ENABLED (bool, default: True if RELAY_KEY set)
+      - RELAY_AUTH_ENABLED (bool)
 
-    Behavior (matching tests):
+    Behavior:
 
-      - Health endpoints and actions ping/relay_info are always public.
-      - Docs and OpenAPI are always public.
-      - Non-/v1/ routes remain public.
-      - /v1/* routes are protected when RELAY_AUTH_ENABLED is True.
+      - Health + docs + actions ping/info are always public.
+      - Non-/v1/ paths remain public.
+      - /v1/* paths are protected when RELAY_AUTH_ENABLED is True.
     """
 
     async def dispatch(
@@ -66,16 +68,23 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization")
+        x_relay_key = request.headers.get("X-Relay-Key")
 
         try:
-            # This will no-op if RELAY_AUTH_ENABLED is False, per settings
-            check_relay_key(auth_header)
+            # Will no-op if RELAY_AUTH_ENABLED is False
+            check_relay_key(auth_header=auth_header, x_relay_key=x_relay_key)
         except HTTPException as exc:
-            # Log and re-raise so FastAPI produces {"detail": "<string>"}
+            # DO NOT let this bubble out as an exception to httpx;
+            # convert to a normal JSON error response.
             logger.warning(
                 "Relay auth failed",
                 extra={"path": path, "method": request.method, "detail": exc.detail},
             )
-            raise
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=getattr(exc, "headers", None) or {},
+            )
 
+        # Auth OK (or disabled)
         return await call_next(request)
