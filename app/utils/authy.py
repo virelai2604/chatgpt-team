@@ -3,58 +3,50 @@
 from __future__ import annotations
 
 import hmac
-import logging
 from typing import Optional
 
 from fastapi import HTTPException, status
 
 from app.core.config import settings
+from app.utils.logger import get_logger
 
-logger = logging.getLogger("relay.auth")
+logger = get_logger(__name__)
 
 
 def _get_expected_key() -> str:
     """
-    Return the configured relay key or a safe local-dev default.
+    Return the configured relay key as a plain string.
 
-    In this project, if RELAY_KEY is not set we fall back to
-    "dummy-local-relay-key", which is also what the e2e script uses.
+    Prefer settings.RELAY_KEY, but keep a fallback to RELAY_AUTH_TOKEN
+    for compatibility with older configs.
     """
-    key = settings.RELAY_KEY
-    if not key:
-        # Local dev default – matches relay_e2e_raw.py and docs
-        return "dummy-local-relay-key"
-    return key
+    if getattr(settings, "RELAY_KEY", None):
+        return settings.RELAY_KEY
+
+    # Legacy / fallback name
+    token = getattr(settings, "RELAY_AUTH_TOKEN", None)
+    return token or ""
 
 
-def _extract_bearer_token(auth_header: Optional[str]) -> str:
+def _extract_bearer_token(auth_header: Optional[str]) -> Optional[str]:
     """
-    Parse Authorization header of form 'Bearer <token>'.
+    Parse an Authorization header of the form 'Bearer <token>'.
 
-    Raises HTTPException with string `detail` on error, matching the
-    expectations in test_relay_auth_middleware.
+    Returns the token string, or None if the header is missing.
+
+    Raises HTTPException(401) if the header is present but malformed.
     """
     if not auth_header:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header",
-        )
+        return None
 
-    try:
-        scheme, token = auth_header.split(" ", 1)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Malformed Authorization header",
-        )
-
-    if scheme.lower() != "bearer":
+    parts = auth_header.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Relay requires 'Bearer' Authorization scheme",
         )
 
-    token = token.strip()
+    token = parts[1].strip()
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -64,26 +56,52 @@ def _extract_bearer_token(auth_header: Optional[str]) -> str:
     return token
 
 
-def check_relay_key(auth_header: Optional[str]) -> None:
+def check_relay_key(
+    auth_header: Optional[str],
+    x_relay_key: Optional[str],
+) -> None:
     """
-    Validate Authorization header of form 'Bearer <token>' against settings.RELAY_KEY.
+    Validate incoming relay key.
+
+    Priority:
+      1. X-Relay-Key header (used by relay_e2e_raw.py / tools)
+      2. Authorization: Bearer <token> (used by SDK-style clients)
 
     If RELAY_AUTH_ENABLED is False, this is a no-op.
-    On failure, raises HTTPException(401, detail="<string>") – the tests
-    assert on that exact shape.
+
+    On failure, raises HTTPException(status_code=..., detail="<string>").
     """
     # If auth is disabled, skip entirely
-    if not settings.RELAY_AUTH_ENABLED:
+    if not getattr(settings, "RELAY_AUTH_ENABLED", False):
         return
 
-    token = _extract_bearer_token(auth_header)
+    # Prefer explicit X-Relay-Key when present
+    token: Optional[str] = None
+    if x_relay_key:
+        token = x_relay_key.strip()
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing relay key",
+            )
+    else:
+        # Fall back to Authorization header
+        token = _extract_bearer_token(auth_header)
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing relay key",
+        )
 
     expected = _get_expected_key().encode("utf-8")
     provided = token.encode("utf-8")
 
     if not expected:
-        # Configuration bug; log and fail closed
-        logger.error("Relay auth misconfigured: RELAY_KEY is empty when auth is enabled")
+        # Config bug; log and fail closed
+        logger.error(
+            "Relay auth misconfigured: RELAY_KEY is empty when auth is enabled",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Relay auth misconfigured",

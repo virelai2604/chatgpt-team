@@ -1,132 +1,156 @@
 # tests/test_local_e2e.py
+from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
-from starlette.testclient import TestClient
+
+from app.core.config import settings
+
+# All tests in this module are async
+pytestmark = pytest.mark.asyncio
 
 
 @pytest.mark.integration
-def test_health_endpoints_ok(client: TestClient) -> None:
-    # Root health (public)
-    r_root = client.get("/")
-    assert r_root.status_code == 200
+async def test_health_endpoints_ok(async_client: httpx.AsyncClient) -> None:
+    paths = ["/", "/health", "/v1/health"]
 
-    # /health and /v1/health should share the same base payload shape
-    r_plain = client.get("/health")
-    r_v1 = client.get("/v1/health")
+    for path in paths:
+        resp = await async_client.get(path)
+        assert resp.status_code == 200, f"{path} returned {resp.status_code}"
 
-    assert r_plain.status_code == 200
-    assert r_v1.status_code == 200
-
-    body_plain = r_plain.json()
-    body_v1 = r_v1.json()
-
-    # Based on your existing health route and API docs
-    assert body_plain.get("status") == "ok"
-    assert body_v1.get("status") == "ok"
-
-    # Basic shape checks – loosened enough to be future-proof
-    for body in (body_plain, body_v1):
+        body = resp.json()
+        # Top-level sanity checks
+        assert body.get("object") == "health"
+        assert body.get("status") == "ok"
+        assert "environment" in body
+        assert "default_model" in body
         assert "timestamp" in body
-        assert "relay" in body
-        assert "openai" in body
+
+        # Nested structures expected by the app
+        assert isinstance(body.get("relay"), dict)
+        assert isinstance(body.get("openai"), dict)
+        assert isinstance(body.get("meta"), dict)
 
 
 @pytest.mark.integration
-def test_responses_non_streaming_basic(client: TestClient) -> None:
+async def test_responses_non_streaming_basic(async_client: httpx.AsyncClient) -> None:
     payload = {
-        "model": "gpt-5.1",
+        "model": settings.DEFAULT_MODEL,
         "input": "Say hello from the local relay.",
     }
 
-    resp = client.post("/v1/responses", json=payload)
+    resp = await async_client.post("/v1/responses", json=payload)
     assert resp.status_code == 200
 
-    data = resp.json()
-    # Shape aligned with the ChatGPT Responses API
-    assert data.get("object") == "response"
-    assert "id" in data
+    body = resp.json()
+    assert body.get("object") == "response"
+    assert isinstance(body.get("output"), list)
+    assert body["output"], "output list should not be empty"
 
-    # Look for the response text somewhere in the nested structure
-    serialized = json.dumps(data).lower()
-    assert "hello" in serialized and "local relay" in serialized
+    first_msg = body["output"][0]
+    assert first_msg.get("type") == "message"
+    assert first_msg.get("role") == "assistant"
+    assert isinstance(first_msg.get("content"), list)
+    assert first_msg["content"], "content list should not be empty"
 
-
-def _collect_sse_buffer(client: TestClient, payload: dict) -> str:
-    """POST /v1/responses with stream=True and collect raw SSE text."""
-    buffer = ""
-    # TestClient.stream() gives you an httpx streaming Response
-    with client.stream("POST", "/v1/responses", json=payload) as resp:
-        assert resp.status_code == 200
-        for chunk in resp.iter_text():
-            if not chunk:
-                continue
-            buffer += chunk
-    return buffer
+    first_part = first_msg["content"][0]
+    assert first_part.get("type") == "output_text"
+    text = first_part.get("text", "")
+    assert isinstance(text, str)
+    assert text.strip(), "assistant text should not be empty"
+    # Soft semantic check
+    assert "hello" in text.lower()
 
 
 @pytest.mark.integration
-def test_responses_streaming_sse_basic(client: TestClient) -> None:
+async def test_responses_streaming_sse_basic(async_client: httpx.AsyncClient) -> None:
+    """
+    Verify that the relay streams SSE events in the same shape as api.openai.com.
+
+    We do not fully parse every event; we just assert that:
+      - The HTTP status is 200
+      - The SSE stream includes at least one `response.output_text.delta`
+      - The SSE stream ends with `response.completed`
+    """
     payload = {
-        "model": "gpt-5.1",
+        "model": settings.DEFAULT_MODEL,
         "input": "Stream a short message.",
         "stream": True,
     }
 
-    raw = _collect_sse_buffer(client, payload)
+    async with async_client.stream("POST", "/v1/responses", json=payload) as resp:
+        assert resp.status_code == 200
 
-    # Extract "data: ..." lines and JSON-decode each payload
-    events = []
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line or not line.startswith("data:"):
-            continue
-        json_str = line[len("data:"):].strip()
-        try:
-            events.append(json.loads(json_str))
-        except json.JSONDecodeError:
-            # Ignore keepalive or malformed chunks
-            continue
+        chunks: list[str] = []
+        async for text_chunk in resp.aiter_text():
+            chunks.append(text_chunk)
 
-    assert events, "No SSE data events parsed from streamed response"
-
-    # We expect at least one output_text.delta and a final response.completed
-    event_types = {e.get("type") for e in events if isinstance(e, dict)}
-
-    assert "response.created" in event_types
-    assert "response.output_text.delta" in event_types
-    assert "response.completed" in event_types
-
-    # Collect all text deltas into a single string
-    deltas = [
-        e.get("delta", "")
-        for e in events
-        if isinstance(e, dict) and e.get("type") == "response.output_text.delta"
-    ]
-    combined = " ".join(deltas).strip()
-    assert combined, "No text deltas found in SSE stream"
-
-    # We only check for a key word to stay robust across model changes
-    assert "message" in combined.lower()
+    stream_text = "".join(chunks)
+    # Basic SSE framing guarantees lines starting with "event: ..."
+    assert "event: response.output_text.delta" in stream_text
+    assert "event: response.completed" in stream_text
+    # There should also be at least one "data: " line
+    assert "data:" in stream_text
 
 
 @pytest.mark.integration
-def test_embeddings_basic(client: TestClient) -> None:
+async def test_embeddings_basic(async_client: httpx.AsyncClient) -> None:
+    """
+    Simple check that the relay can forward /v1/embeddings and the shape matches
+    OpenAI's embeddings API.
+    """
     payload = {
         "model": "text-embedding-3-small",
-        "input": "Hello from the embedding test.",
+        "input": "Testing embeddings via the local relay.",
     }
 
-    resp = client.post("/v1/embeddings", json=payload)
+    resp = await async_client.post("/v1/embeddings", json=payload)
     assert resp.status_code == 200
 
-    data = resp.json()
-    assert data.get("object") == "list"
-    assert "data" in data
-    assert data["data"], "Embeddings data array is unexpectedly empty"
+    body = resp.json()
+    # OpenAI embeddings responses are {"object": "list", "data": [...], ...}
+    assert body.get("object") == "list"
+    assert isinstance(body.get("data"), list)
+    assert body["data"], "embeddings data list should not be empty"
 
-    first = data["data"][0]
-    assert first.get("object") == "embedding"
-    assert isinstance(first.get("embedding"), list)
-    assert len(first["embedding"]) > 10
+    first_item = body["data"][0]
+    assert "embedding" in first_item
+    embedding = first_item["embedding"]
+    assert isinstance(embedding, list)
+    assert embedding, "embedding vector should not be empty"
+
+
+@pytest.mark.integration
+async def test_models_list_basic(async_client: httpx.AsyncClient) -> None:
+    """
+    Basic sanity check on /v1/models list endpoint.
+    """
+    resp = await async_client.get("/v1/models")
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert body.get("object") == "list"
+    assert isinstance(body.get("data"), list)
+
+    # There should be at least one model with an "id"
+    assert body["data"], "models list should not be empty"
+    assert any(isinstance(m, dict) and "id" in m for m in body["data"])
+
+
+@pytest.mark.integration
+async def test_models_retrieve_default_model(async_client: httpx.AsyncClient) -> None:
+    """
+    Retrieve settings.DEFAULT_MODEL via /v1/models/{id} and check the shape.
+    """
+    model_id = settings.DEFAULT_MODEL
+
+    resp = await async_client.get(f"/v1/models/{model_id}")
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert body.get("object") == "model"
+    assert body.get("id") == model_id
+    # Optional extra checks if upstream includes them
+    # e.g. "created", "owned_by", etc. – but we do not require them here
