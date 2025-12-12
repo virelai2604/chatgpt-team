@@ -1,8 +1,9 @@
-# app/core/http_client.py
 from __future__ import annotations
 
-import os
-from typing import Optional
+import asyncio
+import weakref
+from dataclasses import dataclass
+from typing import Dict, Optional
 
 import httpx
 from openai import AsyncOpenAI
@@ -10,49 +11,111 @@ from openai import AsyncOpenAI
 from app.core.config import settings
 
 
-def _float_env(name: str, default: float) -> float:
-    raw = os.getenv(name)
-    if raw is None or raw == "":
-        return float(default)
-    return float(raw)
+@dataclass
+class _LoopClients:
+    loop_ref: weakref.ReferenceType[asyncio.AbstractEventLoop]
+    httpx_client: httpx.AsyncClient
+    openai_client: AsyncOpenAI
 
 
-def _build_timeout() -> httpx.Timeout:
-    # Prefer OPENAI_* env vars; fall back to Settings; and finally fall back to RELAY_TIMEOUT.
-    relay_default = float(getattr(settings, "RELAY_TIMEOUT", 60.0))
-    total = _float_env("OPENAI_TIMEOUT", getattr(settings, "OPENAI_TIMEOUT", relay_default))
-    return httpx.Timeout(total)
+# Keyed by id(loop). We keep a weakref to detect stale loops.
+_LOOP_CLIENTS: Dict[int, _LoopClients] = {}
 
 
-_async_httpx_client: Optional[httpx.AsyncClient] = None
-_async_openai_client: Optional[AsyncOpenAI] = None
+def _cleanup_stale_loops() -> None:
+    stale: list[int] = []
+    for key, entry in _LOOP_CLIENTS.items():
+        loop = entry.loop_ref()
+        if loop is None or loop.is_closed():
+            stale.append(key)
+    # Best-effort: we cannot safely await close here (sync function).
+    # The next get() call will create fresh clients.
+    for key in stale:
+        _LOOP_CLIENTS.pop(key, None)
+
+
+def _httpx_timeout() -> httpx.Timeout:
+    # Keep conservative defaults; override in settings if you have fields.
+    # If you already have settings like HTTPX_TIMEOUT_SECONDS, plug them in.
+    return httpx.Timeout(60.0)
 
 
 def get_async_httpx_client() -> httpx.AsyncClient:
     """
-    Shared AsyncClient for upstream proxying.
+    Return an AsyncClient that is safe under pytest's function-scoped event loops.
+
+    Why:
+      - pytest-asyncio (STRICT) often creates a new loop per test.
+      - Reusing a single global AsyncClient across loops can trigger
+        'RuntimeError: Event loop is closed'. 
     """
-    global _async_httpx_client
-    if _async_httpx_client is None:
-        _async_httpx_client = httpx.AsyncClient(
-            timeout=_build_timeout(),
-            limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
-            follow_redirects=True,
-        )
-    return _async_httpx_client
+    _cleanup_stale_loops()
+
+    loop = asyncio.get_running_loop()
+    key = id(loop)
+
+    entry = _LOOP_CLIENTS.get(key)
+    if entry is not None and not entry.httpx_client.is_closed:
+        return entry.httpx_client
+
+    client = httpx.AsyncClient(
+        timeout=_httpx_timeout(),
+        follow_redirects=True,
+    )
+
+    # OpenAI SDK client for this loop (base_url normalization handled in forwarder).
+    openai_client = AsyncOpenAI(
+        api_key=settings.openai_api_key,
+        base_url=_sdk_base_url(str(settings.openai_base_url)),
+    )
+
+    _LOOP_CLIENTS[key] = _LoopClients(loop_ref=weakref.ref(loop), httpx_client=client, openai_client=openai_client)
+    return client
 
 
 def get_async_openai_client() -> AsyncOpenAI:
+    _cleanup_stale_loops()
+
+    loop = asyncio.get_running_loop()
+    key = id(loop)
+
+    entry = _LOOP_CLIENTS.get(key)
+    if entry is not None:
+        return entry.openai_client
+
+    # Ensure both clients exist together.
+    _ = get_async_httpx_client()
+    return _LOOP_CLIENTS[key].openai_client
+
+
+async def aclose_clients_for_current_loop() -> None:
+    loop = asyncio.get_running_loop()
+    key = id(loop)
+    entry = _LOOP_CLIENTS.pop(key, None)
+    if entry is None:
+        return
+    if not entry.httpx_client.is_closed:
+        await entry.httpx_client.aclose()
+    # AsyncOpenAI uses httpx under the hood; nothing extra required.
+
+
+async def aclose_all_clients() -> None:
+    entries = list(_LOOP_CLIENTS.items())
+    _LOOP_CLIENTS.clear()
+    for _, entry in entries:
+        if not entry.httpx_client.is_closed:
+            await entry.httpx_client.aclose()
+
+
+def _sdk_base_url(base_url: str) -> str:
     """
-    Shared OpenAI SDK client (async).
-    Note: OpenAI Python SDK base_url defaults to https://api.openai.com/v1
-    so it's OK if your settings.openai_base_url includes /v1.
+    AsyncOpenAI expects a base_url that typically includes /v1.
+    We accept either:
+      - https://api.openai.com
+      - https://api.openai.com/v1
+    and normalize to .../v1
     """
-    global _async_openai_client
-    if _async_openai_client is None:
-        _async_openai_client = AsyncOpenAI(
-            api_key=settings.openai_api_key,
-            base_url=settings.openai_base_url,
-            timeout=_float_env("OPENAI_TIMEOUT", getattr(settings, "OPENAI_TIMEOUT", 60.0)),
-        )
-    return _async_openai_client
+    b = base_url.rstrip("/")
+    if not b.endswith("/v1"):
+        b = f"{b}/v1"
+    return b

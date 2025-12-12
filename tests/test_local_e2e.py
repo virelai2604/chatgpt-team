@@ -154,3 +154,27 @@ async def test_models_retrieve_default_model(async_client: httpx.AsyncClient) ->
     assert body.get("id") == model_id
     # Optional extra checks if upstream includes them
     # e.g. "created", "owned_by", etc. – but we do not require them here
+
+@pytest.mark.integration
+async def test_responses_compact_basic(async_client: httpx.AsyncClient) -> None:
+    payload = {
+        "model": settings.DEFAULT_MODEL,
+        "input": [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi"},
+        ],
+    }
+
+    resp = await async_client.post("/v1/responses/compact", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["object"] == "response.compaction"
+
+
+@pytest.mark.integration
+async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncClient) -> None:
+    resp = await async_client.get("/manifest")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "/v1/responses" in data["endpoints"]["responses"]
+    assert "/v1/responses/compact" in data["endpoints"]["responses_compact"]
