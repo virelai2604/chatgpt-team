@@ -100,4 +100,5 @@
     📄 client.py
     📄 conftest.py
     📄 test_local_e2e.py
+    📄 test_relay_auth_guard.py
     📁 downloads
