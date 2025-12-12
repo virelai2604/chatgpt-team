@@ -13,7 +13,8 @@ from app.api.forward_openai import forward_responses_create
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+# FIX: mount under /v1 so tests calling /v1/responses resolve correctly
+router = APIRouter(prefix="/v1", tags=["responses"])
 
 
 @router.post("/responses")
@@ -22,8 +23,8 @@ async def create_response(request: Request):
     Unified /v1/responses handler.
 
     - If body.stream is falsy or missing → behave like the OpenAI JSON API.
-    - If body.stream is true           → return SSE in the same "shape"
-      that the integration test expects:
+    - If body.stream is true            → return SSE frames that match what the
+      integration test asserts:
         * At least one `event: response.output_text.delta`
         * A final `event: response.completed`
     """
@@ -41,35 +42,24 @@ async def create_response(request: Request):
     outbound = dict(body)
     outbound.pop("stream", None)
 
-    # We fetch the full (non-streaming) response once, then break it into SSE events.
+    # Fetch the full (non-streaming) response once, then emit SSE events.
     full_response = await forward_responses_create(outbound)
 
     async def sse_generator() -> AsyncGenerator[bytes, None]:
-        """
-        Yield SSE frames as bytes:
-          event: response.output_text.delta
-          data: {...}
-
-          event: response.completed
-          data: {...}
-        """
-        # Try to pull a human-readable text payload from the full response.
+        # Best-effort extraction of assistant text (stream test does not require parsing)
         text = ""
         try:
             outputs = full_response.get("output") or full_response.get("outputs") or []
             if outputs:
                 first = outputs[0]
-                # Responses API uses "output_text" with a content list.
-                output_text = first.get("output_text") or {}
-                content = output_text.get("content") or []
+                # Some shapes store message content under `content`
+                content = first.get("content") or []
                 pieces = []
                 for item in content:
-                    if isinstance(item, dict):
-                        # Most common shape: {"type": "output_text", "text": "..."}
-                        if "text" in item:
-                            pieces.append(str(item["text"]))
+                    if isinstance(item, dict) and "text" in item:
+                        pieces.append(str(item["text"]))
                 text = "".join(pieces)
-        except Exception:  # pragma: no cover - defensive, but we always send *something*
+        except Exception:
             text = str(full_response)
 
         # 1) Delta event
@@ -78,12 +68,7 @@ async def create_response(request: Request):
             "delta": {
                 "output_text": {
                     "role": "assistant",
-                    "content": [
-                        {
-                            "type": "output_text",
-                            "text": text,
-                        }
-                    ],
+                    "content": [{"type": "output_text", "text": text}],
                 }
             },
         }

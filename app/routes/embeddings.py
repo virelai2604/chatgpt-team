@@ -12,7 +12,8 @@ from app.api.forward_openai import forward_embeddings_create
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+# FIX: mount under /v1 so tests calling /v1/embeddings resolve correctly
+router = APIRouter(prefix="/v1", tags=["embeddings"])
 
 
 @router.post("/embeddings")
@@ -20,10 +21,9 @@ async def create_embeddings(request: Request) -> JSONResponse:
     """
     Proxy /v1/embeddings to the OpenAI Embeddings API via AsyncOpenAI.
 
-    We intentionally return the raw JSON from OpenAI so that:
+    We return raw JSON so tests can assert:
       - body["object"] == "list"
-      - body["data"][0]["embedding"] is a list[float]
-    which is exactly what tests/test_local_e2e.py::test_embeddings_basic expects.
+      - body["data"][0]["embedding"] is list[float]
     """
     logger.info("Incoming /v1/embeddings request")
     body: Dict[str, Any] = await request.json()
