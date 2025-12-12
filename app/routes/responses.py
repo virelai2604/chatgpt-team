@@ -1,91 +1,153 @@
 # app/routes/responses.py
-
 from __future__ import annotations
 
 import json
-import logging
+import os
 from typing import Any, AsyncGenerator, Dict
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response as FastAPIResponse, StreamingResponse
+from starlette.requests import ClientDisconnect
 
-from app.api.forward_openai import forward_responses_create
+from app.api.forward_openai import forward_openai_request, forward_responses_create
+from app.core.config import settings
+from app.core.http_client import get_async_httpx_client
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
-
-# FIX: mount under /v1 so tests calling /v1/responses resolve correctly
-router = APIRouter(prefix="/v1", tags=["responses"])
+router = APIRouter()
+logger = get_logger(__name__)
 
 
-@router.post("/responses")
-async def create_response(request: Request):
+_HOP_BY_HOP = {
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
+    "host",
+    "content-length",
+}
+
+
+def _bool_env(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _join_openai_url(base: str, path: str, query: str | None = None) -> str:
     """
-    Unified /v1/responses handler.
-
-    - If body.stream is falsy or missing → behave like the OpenAI JSON API.
-    - If body.stream is true            → return SSE frames that match what the
-      integration test asserts:
-        * At least one `event: response.output_text.delta`
-        * A final `event: response.completed`
+    Same joining logic as forward_openai.py; duplicated here to keep this file standalone.
     """
-    body: Dict[str, Any] = await request.json()
-    stream_flag = bool(body.get("stream"))
+    base = (base or "").rstrip("/")
+    path = "/" + (path or "").lstrip("/")
 
-    if not stream_flag:
+    if base.endswith("/v1") and path.startswith("/v1/"):
+        path = path[3:]  # remove extra '/v1'
+
+    url = f"{base}{path}"
+    if query:
+        url = f"{url}?{query.lstrip('?')}"
+    return url
+
+
+def _proxy_headers(request: Request, *, accept_sse: bool = False) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for k, v in request.headers.items():
+        if k.lower() in _HOP_BY_HOP:
+            continue
+        headers[k] = v
+
+    headers["Authorization"] = f"Bearer {settings.openai_api_key}"
+    headers.setdefault("Content-Type", "application/json")
+    if accept_sse:
+        headers.setdefault("Accept", "text/event-stream")
+    return headers
+
+
+@router.post("/v1/responses")
+async def create_response(request: Request) -> Any:
+    try:
+        body: Dict[str, Any] = await request.json()
+    except ClientDisconnect:
+        return FastAPIResponse(status_code=499)
+
+    stream = bool(body.get("stream"))
+
+    if not stream:
         logger.info("Handling /v1/responses as non-streaming JSON request")
-        result = await forward_responses_create(body)
-        return JSONResponse(content=result)
+        resp = await forward_responses_create(body)
+        # resp is an OpenAI Response model here
+        return JSONResponse(content=resp.model_dump())
 
-    logger.info("Handling /v1/responses as streaming SSE request")
+    # True SSE proxy
+    if not _bool_env("ENABLE_STREAM", default=True):
+        # Optional: if you ever disable streaming, fail loudly instead of returning empty
+        return JSONResponse(
+            status_code=400,
+            content={"error": {"message": "Streaming disabled (ENABLE_STREAM=false)"}},
+        )
 
-    # Make a copy and strip stream before forwarding.
-    outbound = dict(body)
-    outbound.pop("stream", None)
+    logger.info("Handling /v1/responses as streaming SSE request (true upstream pass-through)")
 
-    # Fetch the full (non-streaming) response once, then emit SSE events.
-    full_response = await forward_responses_create(outbound)
+    client = get_async_httpx_client()
+    upstream_url = _join_openai_url(settings.openai_base_url, "/v1/responses")
 
-    async def sse_generator() -> AsyncGenerator[bytes, None]:
-        # Best-effort extraction of assistant text (stream test does not require parsing)
-        text = ""
+    headers = _proxy_headers(request, accept_sse=True)
+
+    upstream_req = client.build_request(
+        "POST",
+        upstream_url,
+        headers=headers,
+        content=json.dumps(body).encode("utf-8"),
+    )
+    upstream_resp = await client.send(upstream_req, stream=True)
+
+    # If upstream errored, return an actual error response (NOT a 200 + empty body)
+    if upstream_resp.status_code >= 400:
+        err_bytes = await upstream_resp.aread()
+        await upstream_resp.aclose()
+
+        # Prefer JSON errors when possible
         try:
-            outputs = full_response.get("output") or full_response.get("outputs") or []
-            if outputs:
-                first = outputs[0]
-                # Some shapes store message content under `content`
-                content = first.get("content") or []
-                pieces = []
-                for item in content:
-                    if isinstance(item, dict) and "text" in item:
-                        pieces.append(str(item["text"]))
-                text = "".join(pieces)
+            return JSONResponse(status_code=upstream_resp.status_code, content=json.loads(err_bytes.decode("utf-8")))
         except Exception:
-            text = str(full_response)
+            return FastAPIResponse(
+                status_code=upstream_resp.status_code,
+                content=err_bytes,
+                media_type=upstream_resp.headers.get("content-type", "text/plain"),
+            )
 
-        # 1) Delta event
-        delta_payload = {
-            "type": "response.output_text.delta",
-            "delta": {
-                "output_text": {
-                    "role": "assistant",
-                    "content": [{"type": "output_text", "text": text}],
-                }
-            },
-        }
+    async def event_stream() -> AsyncGenerator[bytes, None]:
+        try:
+            async for chunk in upstream_resp.aiter_raw():
+                if chunk:
+                    yield chunk
+        finally:
+            await upstream_resp.aclose()
 
-        yield b"event: response.output_text.delta\n"
-        yield f"data: {json.dumps(delta_payload)}\n\n".encode("utf-8")
-
-        # 2) Completed event
-        completed_payload = {
-            "type": "response.completed",
-            "response": full_response,
-        }
-
-        yield b"event: response.completed\n"
-        yield f"data: {json.dumps(completed_payload)}\n\n".encode("utf-8")
+    # SSE-friendly headers (helps nginx/proxies; harmless in tests)
+    out_headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
 
     return StreamingResponse(
-        sse_generator(),
+        event_stream(),
+        status_code=upstream_resp.status_code,
         media_type="text/event-stream",
+        headers=out_headers,
     )
+
+
+@router.post("/v1/responses/compact")
+async def compact_response(request: Request) -> Any:
+    """
+    OpenAI supports POST /v1/responses/compact. 
+    """
+    logger.info("Incoming /v1/responses/compact request")
+    return await forward_openai_request(request)

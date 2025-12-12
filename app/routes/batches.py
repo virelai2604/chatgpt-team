@@ -1,53 +1,34 @@
-# app/routes/batches.py
-
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Request
+from fastapi.responses import Response
 
 from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger  # type: ignore
+from app.utils.logger import get_logger
 
-router = APIRouter(
-    prefix="/v1",
-    tags=["batches"],
-)
+router = APIRouter()
+logger = get_logger(__name__)
 
 
-@router.get("/batches")
-async def list_batches(request: Request) -> Response:
-    """
-    GET /v1/batches
-    List all batch jobs.
-    """
-    logger.info("[batches] %s %s", request.method, request.url.path)
-    return await forward_openai_request(request)
-
-
-@router.post("/batches")
+@router.post("/v1/batches")
 async def create_batch(request: Request) -> Response:
-    """
-    POST /v1/batches
-    Create a new batch job.
-    """
-    logger.info("[batches] %s %s", request.method, request.url.path)
+    logger.info("Incoming /v1/batches create request")
     return await forward_openai_request(request)
 
 
-@router.get("/batches/{batch_id}")
+@router.get("/v1/batches/{batch_id}")
 async def retrieve_batch(batch_id: str, request: Request) -> Response:
-    """
-    GET /v1/batches/{batch_id}
-    Retrieve a specific batch job.
-    """
-    logger.info("[batches] %s %s", request.method, request.url.path)
+    logger.info(f"Incoming /v1/batches retrieve request for batch_id={batch_id}")
     return await forward_openai_request(request)
 
 
-@router.post("/batches/{batch_id}/cancel")
+@router.get("/v1/batches")
+async def list_batches(request: Request) -> Response:
+    logger.info("Incoming /v1/batches list request")
+    return await forward_openai_request(request)
+
+
+@router.post("/v1/batches/{batch_id}/cancel")
 async def cancel_batch(batch_id: str, request: Request) -> Response:
-    """
-    POST /v1/batches/{batch_id}/cancel
-    Cancel a batch job.
-    """
-    logger.info("[batches] %s %s", request.method, request.url.path)
+    logger.info(f"Incoming /v1/batches cancel request for batch_id={batch_id}")
     return await forward_openai_request(request)

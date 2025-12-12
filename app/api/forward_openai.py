@@ -1,201 +1,107 @@
 # app/api/forward_openai.py
-
 from __future__ import annotations
 
 import json
-import logging
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict
 
-import httpx
-from fastapi import HTTPException
-from openai import AsyncOpenAI
+from fastapi import Request
+from fastapi.responses import Response as FastAPIResponse
 
 from app.core.config import settings
+from app.core.http_client import get_async_httpx_client, get_async_openai_client
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
-
-# --------------------------------------------------------------------------------------
-# Shared AsyncOpenAI client
-# --------------------------------------------------------------------------------------
-
-_client: Optional[AsyncOpenAI] = None
+logger = get_logger(__name__)
 
 
-def get_async_openai_client() -> AsyncOpenAI:
+_HOP_BY_HOP = {
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
+    "host",
+    "content-length",
+}
+
+
+def _join_openai_url(base: str, path: str, query: str | None = None) -> str:
     """
-    Lazily construct and cache a single AsyncOpenAI client for the relay.
-
-    We respect OPENAI_API_KEY and (optionally) OPENAI_BASE_URL from settings.
+    Join base + path while avoiding double /v1 when:
+      base == https://api.openai.com/v1
+      path == /v1/responses
     """
-    global _client
-    if _client is None:
-        client_kwargs: Dict[str, Any] = {
-            "api_key": settings.OPENAI_API_KEY,
-        }
-        if getattr(settings, "OPENAI_BASE_URL", None):
-            client_kwargs["base_url"] = settings.OPENAI_BASE_URL
+    base = (base or "").rstrip("/")
+    path = "/" + (path or "").lstrip("/")
 
-        _client = AsyncOpenAI(**client_kwargs)
-        logger.info("Created AsyncOpenAI client for relay")
-    return _client
+    if base.endswith("/v1") and path.startswith("/v1/"):
+        # remove the extra '/v1' from the path
+        path = path[3:]  # keeps the leading '/'
+
+    url = f"{base}{path}"
+    if query:
+        url = f"{url}?{query.lstrip('?')}"
+    return url
 
 
-def _to_plain(value: Any) -> Any:
+def _proxy_headers(in_headers: dict[str, str]) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for k, v in in_headers.items():
+        if k.lower() in _HOP_BY_HOP:
+            continue
+        headers[k] = v
+
+    # Always use server-side OpenAI key upstream
+    headers["Authorization"] = f"Bearer {settings.openai_api_key}"
+    return headers
+
+
+async def forward_openai_request(request: Request) -> FastAPIResponse:
     """
-    Convert SDK types (Pydantic-style models) into plain JSON-serializable data.
+    Generic HTTP pass-through to OpenAI upstream for /v1/* endpoints.
+    (Non-streaming use-cases.)
     """
-    if hasattr(value, "model_dump"):
-        # New-style Pydantic V2 models
-        return value.model_dump(mode="json")
-    if hasattr(value, "to_dict"):
-        # Fallback for any custom types providing to_dict()
-        return value.to_dict()
+    client = get_async_httpx_client()
 
-    if isinstance(value, list):
-        return [_to_plain(v) for v in value]
-    if isinstance(value, dict):
-        return {k: _to_plain(v) for k, v in value.items()}
-
-    return value
-
-
-# --------------------------------------------------------------------------------------
-# Typed helpers for common endpoints
-# --------------------------------------------------------------------------------------
-
-
-async def forward_responses_create(data: Dict[str, Any]) -> Any:
-    """
-    Forward a /v1/responses *non-streaming* request through AsyncOpenAI.
-
-    NOTE:
-    - The streaming case is handled separately in the /v1/responses route
-      (via SSE-style StreamingResponse).
-    - If the caller passes {"stream": true} we strip it and just do a normal
-      non-streaming call; the route decides whether to stream or not.
-    """
-    body = dict(data)  # copy so we don't mutate caller
-    body.pop("stream", None)
-
-    client = get_async_openai_client()
-    logger.debug("Forwarding non-streaming /v1/responses via AsyncOpenAI: %s", body)
-
-    try:
-        resp = await client.responses.create(**body)
-    except Exception as exc:  # pragma: no cover - logged and re-raised for FastAPI
-        logger.exception("Error calling OpenAI Responses API", exc_info=exc)
-        raise HTTPException(status_code=502, detail="Upstream OpenAI error")
-
-    return _to_plain(resp)
-
-
-async def forward_embeddings_create(data: Dict[str, Any]) -> Any:
-    """
-    Forward a /v1/embeddings request through AsyncOpenAI.
-
-    We intentionally *do not* force encoding_format; the default gives a list[float]
-    embedding, which matches api.openai.com and your tests.
-    """
-    client = get_async_openai_client()
-    logger.debug("Forwarding /v1/embeddings via AsyncOpenAI: %s", data)
-
-    try:
-        resp = await client.embeddings.create(**data)
-    except Exception as exc:  # pragma: no cover
-        logger.exception("Error calling OpenAI Embeddings API", exc_info=exc)
-        raise HTTPException(status_code=502, detail="Upstream OpenAI error")
-
-    return _to_plain(resp)
-
-
-async def forward_models_list() -> Any:
-    """
-    Forward GET /v1/models using AsyncOpenAI.models.list().
-    """
-    client = get_async_openai_client()
-    logger.debug("Forwarding /v1/models (list) via AsyncOpenAI")
-
-    try:
-        resp = await client.models.list()
-    except Exception as exc:  # pragma: no cover
-        logger.exception("Error calling OpenAI Models list API", exc_info=exc)
-        raise HTTPException(status_code=502, detail="Upstream OpenAI error")
-
-    return _to_plain(resp)
-
-
-async def forward_models_retrieve(model_id: str) -> Any:
-    """
-    Forward GET /v1/models/{model_id} via AsyncOpenAI.
-    """
-    client = get_async_openai_client()
-    logger.debug("Forwarding /v1/models/%s via AsyncOpenAI", model_id)
-
-    try:
-        resp = await client.models.retrieve(model_id)
-    except Exception as exc:  # pragma: no cover
-        logger.exception("Error calling OpenAI Models retrieve API", exc_info=exc)
-        raise HTTPException(status_code=502, detail="Upstream OpenAI error")
-
-    return _to_plain(resp)
-
-
-# --------------------------------------------------------------------------------------
-# Generic HTTP forwarder for "batches" and other raw endpoints
-# --------------------------------------------------------------------------------------
-
-
-async def forward_openai_request(
-    method: str,
-    path: str,
-    json_body: Optional[Dict[str, Any]] = None,
-    params: Optional[Mapping[str, Any]] = None,
-) -> httpx.Response:
-    """
-    Generic HTTP forwarder that matches the old forward_openai_request signature.
-
-    Used by routes like /v1/batches which expect to forward literally to
-    api.openai.com, preserving status code and headers.
-    """
-    base_url = getattr(settings, "OPENAI_BASE_URL", None) or "https://api.openai.com/v1"
-    base = base_url.rstrip("/")
-
-    # Allow callers to pass "batches", "/batches", "v1/batches", or "/v1/batches".
-    clean_path = path.lstrip("/")
-    if not clean_path.startswith("v1/"):
-        clean_path = f"v1/{clean_path}"
-    url = f"{base}/{clean_path[3:]}" if base.endswith("/v1") else f"{base}/{clean_path}"
-
-    headers = {
-        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    logger.debug(
-        "Raw forwarding to OpenAI: %s %s json=%s params=%s",
-        method,
-        url,
-        json_body,
-        params,
+    upstream_url = _join_openai_url(
+        settings.openai_base_url,
+        request.url.path,
+        request.url.query if request.url.query else None,
     )
 
-    async with httpx.AsyncClient(timeout=None) as client:
-        resp = await client.request(
-            method=method.upper(),
-            url=url,
-            headers=headers,
-            json=json_body,
-            params=params,
-        )
+    body = await request.body()
+    headers = _proxy_headers(dict(request.headers))
 
-    return resp
+    upstream = await client.request(
+        request.method,
+        upstream_url,
+        headers=headers,
+        content=body if body else None,
+    )
+
+    # Copy response headers back (minus hop-by-hop-ish headers)
+    out_headers: dict[str, str] = {}
+    for k, v in upstream.headers.items():
+        lk = k.lower()
+        if lk in {"content-encoding", "transfer-encoding", "connection", "keep-alive"}:
+            continue
+        out_headers[k] = v
+
+    media_type = upstream.headers.get("content-type")
+    return FastAPIResponse(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        media_type=media_type,
+        headers=out_headers,
+    )
 
 
-__all__ = [
-    "get_async_openai_client",
-    "forward_responses_create",
-    "forward_embeddings_create",
-    "forward_models_list",
-    "forward_models_retrieve",
-    "forward_openai_request",
-]
+async def forward_responses_create(body: Dict[str, Any]) -> Any:
+    """
+    SDK-driven /v1/responses create. If body['stream']=True, the SDK returns an AsyncStream.
+    """
+    client = get_async_openai_client()
+    return await client.responses.create(**body)
