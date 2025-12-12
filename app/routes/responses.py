@@ -1,72 +1,19 @@
-# app/routes/responses.py
 from __future__ import annotations
 
 import json
-import os
 from typing import Any, AsyncGenerator, Dict
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response as FastAPIResponse, StreamingResponse
 from starlette.requests import ClientDisconnect
 
-from app.api.forward_openai import forward_openai_request, forward_responses_create
+from app.api.forward_openai import build_upstream_url, forward_openai_request, forward_responses_create
 from app.core.config import settings
 from app.core.http_client import get_async_httpx_client
 from app.utils.logger import get_logger
 
 router = APIRouter()
 logger = get_logger(__name__)
-
-
-_HOP_BY_HOP = {
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailers",
-    "transfer-encoding",
-    "upgrade",
-    "host",
-    "content-length",
-}
-
-
-def _bool_env(name: str, default: bool = False) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
-def _join_openai_url(base: str, path: str, query: str | None = None) -> str:
-    """
-    Same joining logic as forward_openai.py; duplicated here to keep this file standalone.
-    """
-    base = (base or "").rstrip("/")
-    path = "/" + (path or "").lstrip("/")
-
-    if base.endswith("/v1") and path.startswith("/v1/"):
-        path = path[3:]  # remove extra '/v1'
-
-    url = f"{base}{path}"
-    if query:
-        url = f"{url}?{query.lstrip('?')}"
-    return url
-
-
-def _proxy_headers(request: Request, *, accept_sse: bool = False) -> dict[str, str]:
-    headers: dict[str, str] = {}
-    for k, v in request.headers.items():
-        if k.lower() in _HOP_BY_HOP:
-            continue
-        headers[k] = v
-
-    headers["Authorization"] = f"Bearer {settings.openai_api_key}"
-    headers.setdefault("Content-Type", "application/json")
-    if accept_sse:
-        headers.setdefault("Accept", "text/event-stream")
-    return headers
 
 
 @router.post("/v1/responses")
@@ -81,73 +28,64 @@ async def create_response(request: Request) -> Any:
     if not stream:
         logger.info("Handling /v1/responses as non-streaming JSON request")
         resp = await forward_responses_create(body)
-        # resp is an OpenAI Response model here
-        return JSONResponse(content=resp.model_dump())
+        # openai-python returns pydantic models with model_dump()
+        return JSONResponse(content=resp.model_dump() if hasattr(resp, "model_dump") else resp)
 
-    # True SSE proxy
-    if not _bool_env("ENABLE_STREAM", default=True):
-        # Optional: if you ever disable streaming, fail loudly instead of returning empty
-        return JSONResponse(
-            status_code=400,
-            content={"error": {"message": "Streaming disabled (ENABLE_STREAM=false)"}},
-        )
+    logger.info("Handling /v1/responses as streaming SSE request (raw pass-through)")
 
-    logger.info("Handling /v1/responses as streaming SSE request (true upstream pass-through)")
+    upstream_url = build_upstream_url("/v1/responses")
+
+    headers = {
+        "Authorization": f"Bearer {settings.openai_api_key}",
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+    }
 
     client = get_async_httpx_client()
-    upstream_url = _join_openai_url(settings.openai_base_url, "/v1/responses")
 
-    headers = _proxy_headers(request, accept_sse=True)
-
-    upstream_req = client.build_request(
+    # Open upstream stream *now* so we can propagate status_code correctly.
+    upstream_cm = client.stream(
         "POST",
         upstream_url,
         headers=headers,
         content=json.dumps(body).encode("utf-8"),
     )
-    upstream_resp = await client.send(upstream_req, stream=True)
+    upstream = await upstream_cm.__aenter__()
 
-    # If upstream errored, return an actual error response (NOT a 200 + empty body)
-    if upstream_resp.status_code >= 400:
-        err_bytes = await upstream_resp.aread()
-        await upstream_resp.aclose()
+    if upstream.status_code >= 400:
+        err = await upstream.aread()
+        await upstream_cm.__aexit__(None, None, None)
+        return FastAPIResponse(
+            content=err,
+            status_code=upstream.status_code,
+            media_type=upstream.headers.get("content-type", "application/json"),
+        )
 
-        # Prefer JSON errors when possible
+    async def sse_passthrough() -> AsyncGenerator[bytes, None]:
         try:
-            return JSONResponse(status_code=upstream_resp.status_code, content=json.loads(err_bytes.decode("utf-8")))
-        except Exception:
-            return FastAPIResponse(
-                status_code=upstream_resp.status_code,
-                content=err_bytes,
-                media_type=upstream_resp.headers.get("content-type", "text/plain"),
-            )
-
-    async def event_stream() -> AsyncGenerator[bytes, None]:
-        try:
-            async for chunk in upstream_resp.aiter_raw():
-                if chunk:
-                    yield chunk
+            async for chunk in upstream.aiter_raw():
+                yield chunk
         finally:
-            await upstream_resp.aclose()
+            await upstream_cm.__aexit__(None, None, None)
 
-    # SSE-friendly headers (helps nginx/proxies; harmless in tests)
-    out_headers = {
+    resp_headers = {
         "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
         "X-Accel-Buffering": "no",
     }
-
     return StreamingResponse(
-        event_stream(),
-        status_code=upstream_resp.status_code,
+        sse_passthrough(),
+        status_code=upstream.status_code,
         media_type="text/event-stream",
-        headers=out_headers,
+        headers=resp_headers,
     )
 
 
 @router.post("/v1/responses/compact")
 async def compact_response(request: Request) -> Any:
     """
-    OpenAI supports POST /v1/responses/compact. 
+    OpenAI supports POST /v1/responses/compact (model required). 
+    We forward it generically to upstream so your relay stays future-proof.
     """
     logger.info("Incoming /v1/responses/compact request")
     return await forward_openai_request(request)
