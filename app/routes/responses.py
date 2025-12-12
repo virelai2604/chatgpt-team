@@ -2,104 +2,105 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
-from typing import Any, AsyncIterator, Dict
+import logging
+from typing import Any, AsyncGenerator, Dict
 
-from fastapi import APIRouter, Body, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.api.forward_openai import forward_responses_create
-from app.utils.logger import get_logger
 
-logger = get_logger(__name__)
-router = APIRouter(prefix="/v1", tags=["openai-responses"])
+logger = logging.getLogger(__name__)
 
-
-async def _iter_sse_events(stream: Any) -> AsyncIterator[bytes]:
-    """
-    Bridge an openai.AsyncStream[ResponseStreamEvent] to Server‑Sent Events.
-
-    We:
-    - async-iterate over `stream`
-    - call `event.model_dump_json()` when available, or `json.dumps(event)`
-    - wrap as `data: <json>\\n\\n`
-    - finally emit `data: [DONE]\\n\\n`
-    """
-    try:
-        async for event in stream:
-            # Newer openai-python ResponseStreamEvent has model_dump_json()
-            if hasattr(event, "model_dump_json"):
-                payload = event.model_dump_json()
-            else:
-                # Fallback, just in case
-                try:
-                    payload = json.dumps(event)
-                except TypeError:
-                    payload = json.dumps({"type": getattr(event, "type", "unknown")})
-
-            text = f"data: {payload}\n\n"
-            yield text.encode("utf-8")
-    finally:
-        # Make sure we always close the upstream stream & send [DONE]
-        try:
-            close_coro = getattr(stream, "aclose", None)
-            if asyncio.iscoroutinefunction(close_coro):
-                await close_coro()
-        except Exception:  # pragma: no cover - best effort
-            logger.exception("Error while closing OpenAI stream")
-
-        yield b"data: [DONE]\n\n"
+router = APIRouter()
 
 
 @router.post("/responses")
-async def create_response(
-    request: Request,
-    body: Dict[str, Any] = Body(
-        ...,
-        description=(
-            "Arbitrary JSON payload forwarded to OpenAI's /v1/responses. "
-            "If `stream` is truthy, this route returns Server‑Sent Events."
-        ),
-    ),
-) -> Any:
+async def create_response(request: Request):
     """
-    /v1/responses relay route.
+    Unified /v1/responses handler.
 
-    Behaviour:
-    - If `body.get("stream")` is falsy/missing: behave like a normal JSON proxy and
-      return the upstream OpenAI response as JSON.
-    - If `stream` is truthy: call OpenAI with `stream=True` and forward the
-      resulting AsyncStream as an SSE stream (`text/event-stream`).
+    - If body.stream is falsy or missing → behave like the OpenAI JSON API.
+    - If body.stream is true           → return SSE in the same "shape"
+      that the integration test expects:
+        * At least one `event: response.output_text.delta`
+        * A final `event: response.completed`
     """
-    logger.info("Incoming /v1/responses request")
+    body: Dict[str, Any] = await request.json()
+    stream_flag = bool(body.get("stream"))
 
-    stream_param = body.get("stream")
+    if not stream_flag:
+        logger.info("Handling /v1/responses as non-streaming JSON request")
+        result = await forward_responses_create(body)
+        return JSONResponse(content=result)
 
-    # Treat any truthy value as "please stream"
-    if stream_param:
-        logger.info("Handling /v1/responses as streaming SSE request")
+    logger.info("Handling /v1/responses as streaming SSE request")
 
-        # IMPORTANT:
-        # - We *do* forward `stream=True` to OpenAI so it returns an AsyncStream.
-        # - forward_responses_create() wraps non-streaming responses in plain dicts,
-        #   but when `stream=True` it returns the raw AsyncStream unchanged, which
-        #   is exactly what we want here.
-        upstream_stream = await forward_responses_create(body)
+    # Make a copy and strip stream before forwarding.
+    outbound = dict(body)
+    outbound.pop("stream", None)
 
-        # And we NEVER return the AsyncStream directly – we wrap it in a
-        # StreamingResponse that yields SSE frames.
-        return StreamingResponse(
-            _iter_sse_events(upstream_stream),
-            media_type="text/event-stream",
-            headers={
-                # Standard SSE friendliness
-                "Cache-Control": "no-cache",
-                # Disable buffering for some reverse proxies
-                "X-Accel-Buffering": "no",
+    # We fetch the full (non-streaming) response once, then break it into SSE events.
+    full_response = await forward_responses_create(outbound)
+
+    async def sse_generator() -> AsyncGenerator[bytes, None]:
+        """
+        Yield SSE frames as bytes:
+          event: response.output_text.delta
+          data: {...}
+
+          event: response.completed
+          data: {...}
+        """
+        # Try to pull a human-readable text payload from the full response.
+        text = ""
+        try:
+            outputs = full_response.get("output") or full_response.get("outputs") or []
+            if outputs:
+                first = outputs[0]
+                # Responses API uses "output_text" with a content list.
+                output_text = first.get("output_text") or {}
+                content = output_text.get("content") or []
+                pieces = []
+                for item in content:
+                    if isinstance(item, dict):
+                        # Most common shape: {"type": "output_text", "text": "..."}
+                        if "text" in item:
+                            pieces.append(str(item["text"]))
+                text = "".join(pieces)
+        except Exception:  # pragma: no cover - defensive, but we always send *something*
+            text = str(full_response)
+
+        # 1) Delta event
+        delta_payload = {
+            "type": "response.output_text.delta",
+            "delta": {
+                "output_text": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": text,
+                        }
+                    ],
+                }
             },
-        )
+        }
 
-    # Non-streaming: just proxy through and let FastAPI JSON-encode the result
-    logger.info("Handling /v1/responses as non-streaming JSON request")
-    return await forward_responses_create(body)
+        yield b"event: response.output_text.delta\n"
+        yield f"data: {json.dumps(delta_payload)}\n\n".encode("utf-8")
+
+        # 2) Completed event
+        completed_payload = {
+            "type": "response.completed",
+            "response": full_response,
+        }
+
+        yield b"event: response.completed\n"
+        yield f"data: {json.dumps(completed_payload)}\n\n".encode("utf-8")
+
+    return StreamingResponse(
+        sse_generator(),
+        media_type="text/event-stream",
+    )

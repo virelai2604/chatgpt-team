@@ -2,53 +2,31 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
 from app.api.forward_openai import forward_embeddings_create
-from app.utils.logger import get_logger
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1", tags=["openai-relay"])
+router = APIRouter()
 
 
 @router.post("/embeddings")
-async def create_embeddings(
-    body: Dict[str, Any] = Body(
-        ...,
-        description="OpenAI Embeddings.create payload",
-    ),
-) -> Dict[str, Any]:
+async def create_embeddings(request: Request) -> JSONResponse:
     """
-    Relay endpoint for /v1/embeddings.
+    Proxy /v1/embeddings to the OpenAI Embeddings API via AsyncOpenAI.
 
-    This forwards the request body to OpenAI's embeddings.create using the
-    official AsyncOpenAI SDK and returns the plain JSON result.
-
-    The response shape matches the OpenAI API:
-
-      {
-        "object": "list",
-        "data": [
-          {
-            "object": "embedding",
-            "index": 0,
-            "embedding": [float, float, ...]
-          },
-          ...
-        ],
-        ...
-      }
-
-    which is exactly what the integration test asserts against.
+    We intentionally return the raw JSON from OpenAI so that:
+      - body["object"] == "list"
+      - body["data"][0]["embedding"] is a list[float]
+    which is exactly what tests/test_local_e2e.py::test_embeddings_basic expects.
     """
     logger.info("Incoming /v1/embeddings request")
-    logger.debug("Embeddings request body: %s", body)
+    body: Dict[str, Any] = await request.json()
 
     result = await forward_embeddings_create(body)
-
-    # `forward_embeddings_create` already returns plain data (dict/list), so we
-    # can return it directly and let FastAPI/Starlette JSON encode it.
-    return result  # type: ignore[return-value]
+    return JSONResponse(content=result)
