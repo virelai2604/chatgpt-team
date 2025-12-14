@@ -1,85 +1,51 @@
 # app/routes/health.py
-
 from __future__ import annotations
 
+import platform
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter
 
-from app.core.config import settings
+from app.core.config import get_settings
+from app.utils.logger import get_logger
 
-router = APIRouter(tags=["health"])
+logger = get_logger(__name__)
+router = APIRouter()
+
+
+def _safe_get(settings: Any, *names: str, default: Any = None) -> Any:
+    for name in names:
+        if hasattr(settings, name):
+            val = getattr(settings, name)
+            if val is not None:
+                return val
+    return default
 
 
 def _base_status() -> Dict[str, Any]:
-    """
-    Base health payload used by '/', '/health', and '/v1/health'.
-
-    Tests expect, at minimum:
-      - top-level "object" == "health"
-      - top-level "status" == "ok"
-      - top-level "environment"
-      - top-level "default_model"
-      - top-level "timestamp"
-      - nested "relay" object
-      - nested "openai" object
-      - nested "meta" object
-    """
-    now_iso = datetime.now(timezone.utc).isoformat()
-
+    s = get_settings()
     return {
-        # Top-level fields required by tests
-        "object": "health",
         "status": "ok",
-        "environment": settings.ENVIRONMENT,
-        "default_model": settings.DEFAULT_MODEL,
-        # Simple, always-present timestamp for quick checks
-        "timestamp": now_iso,
-
-        # Relay information
-        "relay": {
-            "name": settings.RELAY_NAME,
-            "environment": settings.ENVIRONMENT,
-            "app_mode": settings.APP_MODE,
-            "default_model": settings.DEFAULT_MODEL,
-            "realtime_model": settings.REALTIME_MODEL,
-        },
-
-        # Upstream OpenAI configuration – tests look for this key name
-        "openai": {
-            "api_base": str(settings.OPENAI_API_BASE),
-            "assistants_beta": settings.OPENAI_ASSISTANTS_BETA,
-            "realtime_beta": settings.OPENAI_REALTIME_BETA,
-        },
-
-        # Extra diagnostic metadata (can evolve over time)
-        "meta": {
-            "python_version": settings.PYTHON_VERSION,
-            "timestamp": now_iso,
-        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "service": _safe_get(s, "relay_name", "RELAY_NAME", default="chatgpt-team-relay"),
+        "environment": _safe_get(s, "environment", "ENVIRONMENT", default="unknown"),
+        "version": _safe_get(s, "version", "BIFL_VERSION", default="unknown"),
+        "default_model": _safe_get(s, "default_model", "DEFAULT_MODEL", default=None),
+        "realtime_model": _safe_get(s, "realtime_model", "REALTIME_MODEL", default=None),
+        "openai_base_url": str(
+            _safe_get(s, "openai_base_url", "OPENAI_API_BASE", default="https://api.openai.com/v1")
+        ),
+        # Never hard-crash health on config drift:
+        "python_version": _safe_get(s, "PYTHON_VERSION", default=platform.python_version()),
     }
 
 
-@router.get("/")
-async def health_root() -> Dict[str, Any]:
-    """
-    Root health endpoint – public and used by integration tests as '/'.
-    """
-    return _base_status()
-
-
 @router.get("/health")
-async def health_plain() -> Dict[str, Any]:
-    """
-    Simple, non-versioned health endpoint.
-    """
+async def health_root() -> Dict[str, Any]:
     return _base_status()
 
 
 @router.get("/v1/health")
 async def health_v1() -> Dict[str, Any]:
-    """
-    Versioned health endpoint, matching the /v1 namespace.
-    """
     return _base_status()

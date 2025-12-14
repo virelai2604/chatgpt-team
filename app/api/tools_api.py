@@ -96,6 +96,8 @@ def build_manifest_response(tools: Optional[List[Dict[str, Any]]] = None) -> Dic
     # Keep your current behavior: endpoints.responses lists both paths,
     # but ALSO add endpoints.responses_compact for the test expectation.
     endpoints: Dict[str, List[str]] = {
+        # Option A: single Action-friendly proxy entrypoint.
+        "proxy": ["/v1/proxy"],
         "responses": ["/v1/responses", "/v1/responses/compact"],
         "responses_compact": ["/v1/responses/compact"],
     }
@@ -119,7 +121,7 @@ def build_manifest_response(tools: Optional[List[Dict[str, Any]]] = None) -> Dic
 
 @router.get("/manifest")
 async def get_manifest_root() -> Dict[str, Any]:
-    # Returning a dict is fine—FastAPI will serialize it as JSON. 
+    # Returning a dict is fine—FastAPI will serialize it as JSON.
     logger.info("Serving tools manifest (root alias)")
     return build_manifest_response()
 

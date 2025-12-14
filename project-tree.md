@@ -44,6 +44,7 @@
       📄 health.py
       📄 images.py
       📄 models.py
+      📄 proxy.py
       📄 realtime.py
       📄 register_routes.py
       📄 responses.py

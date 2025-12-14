@@ -1,86 +1,120 @@
-# app/routes/files.py
-
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from fastapi import APIRouter, Body, HTTPException, UploadFile, File, Query
+import httpx
+from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile
+from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 
-from app.core.http_client import get_async_openai_client
-from app.utils.logger import get_logger
-
-logger = get_logger(__name__)
+from app.api.forward_openai import (
+    build_outbound_headers,
+    build_upstream_url,
+    filter_upstream_headers,
+    forward_openai_request,
+)
+from app.core.config import get_settings
+from app.core.http_client import get_async_httpx_client, get_async_openai_client
 
 router = APIRouter(prefix="/v1", tags=["files"])
 
 
 @router.get("/files")
-async def list_files(
-    purpose: Optional[str] = Query(None, description="Optional OpenAI file purpose filter"),
-) -> Any:
-    """
-    List files from the OpenAI Files API.
-
-    Equivalent to:
-        client.files.list(purpose=purpose)
-    """
+async def list_files() -> Dict[str, Any]:
     client = get_async_openai_client()
-    logger.info("Incoming /v1/files list request (purpose=%s)", purpose)
-    result = await client.files.list(purpose=purpose)
-    # SDK v2 returns a pydantic-like object; FastAPI can usually serialize it directly.
-    return result
+    result = await client.files.list()
+    return result.model_dump()
 
 
 @router.post("/files")
-async def upload_file(
+async def create_file(
+    purpose: str,
     file: UploadFile = File(...),
-    purpose: str = Query("assistants", description="File purpose, e.g. 'assistants', 'fine-tune'"),
-) -> Any:
+) -> Dict[str, Any]:
     """
-    Upload a file to the OpenAI Files API.
-
-    Equivalent to:
-        client.files.create(file=..., purpose=purpose)
+    Upload a file to OpenAI. (multipart/form-data)
+    Note: This reads the file into memory. For very large files, prefer OpenAI Uploads API.
     """
     client = get_async_openai_client()
-    logger.info("Incoming /v1/files upload request (filename=%s, purpose=%s)", file.filename, purpose)
-
-    try:
-        contents = await file.read()
-        # Note: the official v2 SDK expects a file-like; using bytes is acceptable with 'file' param.
-        result = await client.files.create(
-            file=(file.filename, contents),
-            purpose=purpose,
-        )
-        return result
-    except Exception as exc:
-        logger.exception("Failed to upload file to OpenAI: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to upload file to OpenAI") from exc
+    content = await file.read()
+    result = await client.files.create(
+        file=(file.filename, content, file.content_type),
+        purpose=purpose,
+    )
+    return result.model_dump()
 
 
 @router.get("/files/{file_id}")
-async def retrieve_file(file_id: str) -> Any:
-    """
-    Retrieve file metadata.
-
-    Equivalent to:
-        client.files.retrieve(file_id)
-    """
+async def retrieve_file(file_id: str) -> Dict[str, Any]:
     client = get_async_openai_client()
-    logger.info("Incoming /v1/files/%s retrieve request", file_id)
     result = await client.files.retrieve(file_id)
-    return result
+    return result.model_dump()
+
+
+@router.get("/files/{file_id}/content")
+async def retrieve_file_content(file_id: str, request: Request) -> StreamingResponse:
+    """
+    Retrieve raw file bytes from OpenAI:
+      GET /v1/files/{file_id}/content
+    """
+    settings = get_settings()
+
+    upstream_url = build_upstream_url(f"/v1/files/{file_id}/content")
+
+    # For binary GETs, do NOT force Content-Type.
+    headers = build_outbound_headers(
+        request.headers,
+        content_type=None,
+        default_json=False,
+        forward_accept=True,
+    )
+
+    # Forward Range if provided (best-effort)
+    range_hdr = request.headers.get("range")
+    if range_hdr:
+        headers["Range"] = range_hdr
+
+    client = get_async_httpx_client()
+    upstream_req = client.build_request(
+        method="GET",
+        url=upstream_url,
+        params=request.query_params,
+        headers=headers,
+    )
+
+    try:
+        upstream_resp = await client.send(
+            upstream_req,
+            stream=True,
+            timeout=settings.proxy_timeout_seconds,
+        )
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Upstream request failed: {e.__class__.__name__}",
+        ) from e
+
+    return StreamingResponse(
+        upstream_resp.aiter_bytes(),
+        status_code=upstream_resp.status_code,
+        headers=filter_upstream_headers(upstream_resp.headers),
+        media_type=upstream_resp.headers.get("content-type"),
+        background=BackgroundTask(upstream_resp.aclose),
+    )
 
 
 @router.delete("/files/{file_id}")
-async def delete_file(file_id: str) -> Any:
-    """
-    Delete a file.
-
-    Equivalent to:
-        client.files.delete(file_id)
-    """
+async def delete_file(file_id: str) -> Dict[str, Any]:
     client = get_async_openai_client()
-    logger.info("Incoming /v1/files/%s delete request", file_id)
     result = await client.files.delete(file_id)
-    return result
+    return result.model_dump()
+
+
+# Catch-all passthrough for any other /v1/files/* routes (future-proofing).
+@router.api_route(
+    "/files/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    include_in_schema=False,
+)
+async def files_passthrough(path: str, request: Request) -> Response:
+    return await forward_openai_request(request)
