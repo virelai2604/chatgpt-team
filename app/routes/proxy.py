@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from app.api.forward_openai import forward_openai_method_path
 
@@ -13,172 +13,194 @@ router = APIRouter(prefix="/v1", tags=["proxy"])
 
 class ProxyRequest(BaseModel):
     """
-    Action-friendly proxy envelope (JSON-only).
+    Action-friendly proxy envelope.
 
-    This endpoint is intentionally NOT a generic open proxy. It only forwards
-    allowlisted (method, path) pairs and assumes a JSON body when applicable.
+    Compatibility notes:
+      - Accepts either `body` or `json` for the outbound JSON payload.
+      - Accepts either `query` or `params` for outbound query parameters.
 
-    Non-JSON routes (multipart uploads, binary downloads, SSE/WebSocket) should be
-    implemented as explicit relay routes/wrappers.
+    Example:
+      {
+        "method": "POST",
+        "path": "/v1/embeddings",
+        "json": {"model": "...", "input": "ping"}
+      }
     """
 
-    method: str = Field(..., description="HTTP method: GET, POST, PUT, PATCH, DELETE")
-    path: str = Field(..., description="Upstream OpenAI path, e.g. /v1/responses or /responses")
-    query: Optional[Dict[str, Any]] = Field(default=None, description="Query parameters (dict/object)")
-    body: Optional[Any] = Field(default=None, description="JSON body for POST/PUT/PATCH")
+    method: str = Field(..., description="HTTP method", examples=["GET", "POST"])
+    path: str = Field(..., description="Upstream path (should start with /v1/...)")
+
+    # Accept both keys: "query" and "params"
+    query: Optional[Dict[str, Any]] = Field(
+        default=None,
+        validation_alias=AliasChoices("query", "params"),
+        description="Optional query parameters.",
+        examples=[{"limit": 10}],
+    )
+
+    # Accept both keys: "body" and "json"
+    body: Optional[Any] = Field(
+        default=None,
+        validation_alias=AliasChoices("body", "json"),
+        description="Optional JSON body for POST/PATCH requests.",
+        examples=[{"model": "gpt-4.1-mini", "input": "hello"}],
+    )
 
 
-_ALLOWED_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
+# -------------------------------------------------------------------
+# Allowlist policy (ONLY allow safe/needed OpenAI endpoints via /v1/proxy)
+# -------------------------------------------------------------------
 
-# Relay-local endpoints (never forward to upstream)
+_ALLOWLIST: list[tuple[str, re.Pattern[str]]] = [
+    # Responses (JSON only). Streaming is blocked separately.
+    ("POST", re.compile(r"^/v1/responses$")),
+    ("GET", re.compile(r"^/v1/responses/[^/]+$")),
+    ("DELETE", re.compile(r"^/v1/responses/[^/]+$")),
+    ("POST", re.compile(r"^/v1/responses/[^/]+/cancel$")),
+    ("GET", re.compile(r"^/v1/responses/[^/]+/input_items$")),
+    ("POST", re.compile(r"^/v1/responses/input_tokens$")),
+    ("POST", re.compile(r"^/v1/responses/input_tokens/estimate$")),
+    # Embeddings
+    ("POST", re.compile(r"^/v1/embeddings$")),
+    # Models
+    ("GET", re.compile(r"^/v1/models$")),
+    ("GET", re.compile(r"^/v1/models/[^/]+$")),
+    # Vector stores (everything under /v1/vector_stores/*)
+    ("GET", re.compile(r"^/v1/vector_stores$")),
+    ("POST", re.compile(r"^/v1/vector_stores$")),
+    ("GET", re.compile(r"^/v1/vector_stores/.*$")),
+    ("POST", re.compile(r"^/v1/vector_stores/.*$")),
+    ("DELETE", re.compile(r"^/v1/vector_stores/.*$")),
+    # Conversations
+    ("GET", re.compile(r"^/v1/conversations$")),
+    ("POST", re.compile(r"^/v1/conversations$")),
+    ("GET", re.compile(r"^/v1/conversations/.*$")),
+    ("POST", re.compile(r"^/v1/conversations/.*$")),
+    ("DELETE", re.compile(r"^/v1/conversations/.*$")),
+    ("PATCH", re.compile(r"^/v1/conversations/.*$")),
+    # Containers
+    ("GET", re.compile(r"^/v1/containers$")),
+    ("POST", re.compile(r"^/v1/containers$")),
+    ("GET", re.compile(r"^/v1/containers/.*$")),
+    ("POST", re.compile(r"^/v1/containers/.*$")),
+    ("DELETE", re.compile(r"^/v1/containers/.*$")),
+    # Batches
+    ("POST", re.compile(r"^/v1/batches$")),
+    ("GET", re.compile(r"^/v1/batches$")),
+    ("GET", re.compile(r"^/v1/batches/[^/]+$")),
+    ("POST", re.compile(r"^/v1/batches/[^/]+/cancel$")),
+    # Images (JSON-only)
+    ("POST", re.compile(r"^/v1/images/generations$")),
+    ("POST", re.compile(r"^/v1/images$")),
+    # Videos (JSON control plane). Content download is binary and should use explicit route.
+    ("POST", re.compile(r"^/v1/videos/generations$")),
+    ("GET", re.compile(r"^/v1/videos$")),
+    ("GET", re.compile(r"^/v1/videos/[^/]+$")),
+    ("DELETE", re.compile(r"^/v1/videos/[^/]+$")),
+    # Uploads (control plane). Multipart parts are blocked separately.
+    ("POST", re.compile(r"^/v1/uploads$")),
+    ("POST", re.compile(r"^/v1/uploads/[^/]+/complete$")),
+    ("POST", re.compile(r"^/v1/uploads/[^/]+/cancel$")),
+]
+
+# Local-only endpoints that should never be proxied upstream via /v1/proxy
 _BLOCKED_LOCAL_PATHS = {
     "/v1/health",
-    "/v1/ready",
-    "/v1/version",
     "/v1/manifest",
-    "/v1/tools",
-    "/v1/tools/manifest",
+    "/v1/actions/ping",
+    "/v1/actions/relay_info",
     "/v1/proxy",
-    "/v1/responses:stream",  # relay/streaming helper; not JSON-friendly via Actions
+    # Relay convenience endpoints (not OpenAI upstream endpoints)
+    "/v1/responses/compact",
 }
 
-# Whole families that are not JSON-friendly for a simple proxy
+# Explicitly blocked prefixes (even if allowlisted elsewhere)
 _BLOCKED_PREFIXES = (
-    "/v1/audio",     # multipart / binary
-    "/v1/realtime",  # websocket/webrtc flows (even if some session endpoints are HTTP)
+    "/v1/admin",
+    "/v1/dashboard",
+    "/v1/webhooks",
+    "/v1/assistants",  # higher-risk surface; keep explicit if ever added
+    "/v1/audio",  # keep explicit if you later decide to proxy it
+    "/v1/realtime",  # websocket/event surfaces are not Actions-friendly
 )
 
-# Any path ending with /content returns bytes (binary download)
-_BLOCKED_SUFFIXES = ("/content",)
-
-# Known multipart-only endpoints or patterns that should not be used via this JSON proxy
-_BLOCKED_MULTIPART_REGEXES = (
-    re.compile(r"^/v1/files$"),                   # POST upload is multipart
-    re.compile(r"^/v1/uploads/[^/]+/parts$"),     # upload parts is multipart
-    re.compile(r"^/v1/images/edits$"),            # typically multipart
-    re.compile(r"^/v1/images/variations$"),       # multipart
-    re.compile(r"^/v1/containers/[^/]+/files$"),  # POST is multipart (GET is OK; handled by allowlist)
-)
-
-# Allowlist of upstream targets for the JSON-only proxy.
-# Keep this conservative: add routes deliberately, with tests.
-_ALLOWLIST: Sequence[Tuple[set[str], re.Pattern[str]]] = (
-    # --- Responses (JSON) ---
-    ({"POST"}, re.compile(r"^/v1/responses$")),
-    ({"POST"}, re.compile(r"^/v1/responses/compact$")),
-    ({"POST"}, re.compile(r"^/v1/responses/input_tokens$")),
-    ({"GET", "DELETE"}, re.compile(r"^/v1/responses/[^/]+$")),
-    ({"POST"}, re.compile(r"^/v1/responses/[^/]+/cancel$")),
-    ({"GET"}, re.compile(r"^/v1/responses/[^/]+/input_items$")),
-
-    # --- Embeddings / Models (JSON) ---
-    ({"POST"}, re.compile(r"^/v1/embeddings$")),
-    ({"GET"}, re.compile(r"^/v1/models$")),
-    ({"GET"}, re.compile(r"^/v1/models/[^/]+$")),
-
-    # --- Batches (JSON) ---
-    ({"GET", "POST"}, re.compile(r"^/v1/batches$")),
-    ({"GET"}, re.compile(r"^/v1/batches/[^/]+$")),
-    ({"POST"}, re.compile(r"^/v1/batches/[^/]+/cancel$")),
-
-    # --- Vector Stores (JSON; broad but still constrained to /v1/vector_stores/*) ---
-    ({"GET", "POST", "DELETE"}, re.compile(r"^/v1/vector_stores(?:/.*)?$")),
-
-    # --- Conversations (JSON; constrained to /v1/conversations/*) ---
-    ({"GET", "POST", "DELETE"}, re.compile(r"^/v1/conversations(?:/.*)?$")),
-
-    # --- Containers (JSON) ---
-    ({"GET", "POST"}, re.compile(r"^/v1/containers$")),
-    ({"GET", "DELETE"}, re.compile(r"^/v1/containers/[^/]+$")),
-
-    # Container files: allow metadata routes only (POST upload is blocked via multipart rule above)
-    ({"GET"}, re.compile(r"^/v1/containers/[^/]+/files$")),
-    ({"GET", "DELETE"}, re.compile(r"^/v1/containers/[^/]+/files/[^/]+$")),
-
-    # --- Uploads (JSON for create/complete/cancel; parts are multipart and blocked) ---
-    ({"POST"}, re.compile(r"^/v1/uploads$")),
-    ({"POST"}, re.compile(r"^/v1/uploads/[^/]+/complete$")),
-    ({"POST"}, re.compile(r"^/v1/uploads/[^/]+/cancel$")),
-
-    # --- Files (JSON metadata only; upload is multipart and blocked; /content is binary blocked) ---
-    ({"GET"}, re.compile(r"^/v1/files$")),
-    ({"GET", "DELETE"}, re.compile(r"^/v1/files/[^/]+$")),
-
-    # --- Images (JSON generation only; edits/variations blocked as multipart) ---
-    ({"POST"}, re.compile(r"^/v1/images/generations$")),
-
-    # --- Videos (JSON create/list/retrieve/delete/remix; /content is binary blocked) ---
-    ({"GET", "POST"}, re.compile(r"^/v1/videos$")),
-    ({"GET", "DELETE"}, re.compile(r"^/v1/videos/[^/]+$")),
-    ({"POST"}, re.compile(r"^/v1/videos/[^/]+/remix$")),
-)
+# Multipart / binary endpoints we intentionally do NOT support through /v1/proxy
+_BLOCKED_PATH_PATTERNS = [
+    re.compile(r"^/v1/files(/|$)"),  # files upload is multipart
+    re.compile(r"^/v1/images/edits$"),  # multipart
+    re.compile(r"^/v1/images/variations$"),  # multipart
+    re.compile(r"^/v1/uploads/[^/]+/parts$"),  # multipart
+    re.compile(r"^/v1/videos/[^/]+/content$"),  # binary stream
+]
 
 
-def _normalize_path(path: str) -> str:
-    p = (path or "").strip()
-    if not p.startswith("/"):
-        p = "/" + p
-
-    # Defensive checks: block absolute URLs and traversal-ish inputs
-    if "://" in p or p.startswith("/http") or ".." in p or "\\" in p:
-        raise HTTPException(status_code=400, detail="invalid path")
-
-    # Force /v1 prefix (so callers can pass /responses or /v1/responses)
-    if not p.startswith("/v1"):
-        p = "/v1" + p
-
-    return p
-
-
-def _blocked_reason(method: str, path: str) -> Optional[str]:
+def _blocked_reason(method: str, path: str, body: Any) -> Optional[str]:
     if path in _BLOCKED_LOCAL_PATHS:
-        return "path is relay-local; not proxyable via /v1/proxy"
+        return "local endpoint is not proxyable"
 
     for prefix in _BLOCKED_PREFIXES:
         if path.startswith(prefix):
-            return f"path family not supported via JSON proxy: {prefix}"
+            return f"blocked prefix: {prefix}"
 
-    for suffix in _BLOCKED_SUFFIXES:
-        if path.endswith(suffix):
-            return "binary /content downloads are not supported via /v1/proxy"
+    for pat in _BLOCKED_PATH_PATTERNS:
+        if pat.match(path):
+            return "multipart/binary endpoint must use explicit route, not /v1/proxy"
 
-    # Multipart blocks:
-    for rx in _BLOCKED_MULTIPART_REGEXES:
-        if rx.match(path):
-            # Special case: allow GET on container files list, block POST upload
-            if rx.pattern == r"^/v1/containers/[^/]+/files$" and method == "GET":
-                return None
-            return "multipart/form-data route not supported via JSON proxy"
+    # Block streaming through /v1/proxy (Actions-unfriendly)
+    if path == "/v1/responses:stream":
+        return "streaming endpoints are not supported via /v1/proxy"
+    if isinstance(body, dict) and body.get("stream") is True:
+        return "stream=true requests are not supported via /v1/proxy"
 
     return None
 
 
 def _is_allowlisted(method: str, path: str) -> bool:
-    for methods, pattern in _ALLOWLIST:
-        if method in methods and pattern.match(path):
+    for m, rx in _ALLOWLIST:
+        if method == m and rx.match(path):
             return True
     return False
 
 
-@router.post("/proxy", response_class=Response)
-async def proxy(call: ProxyRequest, request: Request) -> Response:
-    method = (call.method or "").upper().strip()
-    if method not in _ALLOWED_METHODS:
-        raise HTTPException(status_code=400, detail="unsupported method")
+@router.post("/proxy")
+async def proxy(request: Request, call: ProxyRequest) -> Response:
+    """
+    POST /v1/proxy
+    A constrained proxy to OpenAI endpoints. Only allowlisted paths are forwarded.
 
-    path = _normalize_path(call.path)
+    The incoming request headers (Authorization/Beta/etc.) are forwarded upstream by
+    forward_openai_method_path.
 
-    reason = _blocked_reason(method, path)
+    NOTE: This endpoint enforces allowlisting. Unknown method/path returns 403.
+    """
+    method = call.method.upper().strip()
+    path = call.path.strip()
+
+    # Normalize path: allow clients to pass "vector_stores/..." etc.
+    if not path.startswith("/"):
+        path = "/" + path
+    if not path.startswith("/v1/"):
+        # If they provided "/models" assume they mean "/v1/models"
+        if path.startswith("/v1"):
+            # e.g. "/v1models" -> fix
+            path = "/v1/" + path[len("/v1") :].lstrip("/")
+        else:
+            path = "/v1/" + path.lstrip("/")
+
+    reason = _blocked_reason(method, path, call.body)
     if reason:
-        raise HTTPException(status_code=403, detail=reason)
+        raise HTTPException(status_code=403, detail={"error": reason})
 
     if not _is_allowlisted(method, path):
-        raise HTTPException(status_code=403, detail="method/path not allowlisted for /v1/proxy")
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "method/path not allowlisted for /v1/proxy"},
+        )
 
     return await forward_openai_method_path(
+        request=request,
         method=method,
         path=path,
         query=call.query,
         json_body=call.body,
-        inbound_headers=request.headers,
     )
