@@ -3,12 +3,11 @@ from __future__ import annotations
 from typing import Any, Dict, Mapping, Optional
 
 import httpx
-from fastapi import Request, Response
+from fastapi import HTTPException, Request, Response
 
 from app.core.config import get_settings
 from app.core.http_client import get_async_httpx_client, get_async_openai_client
 
-# RFC 7230 hop-by-hop headers that must not be forwarded.
 _HOP_BY_HOP_HEADERS = {
     "connection",
     "keep-alive",
@@ -22,13 +21,6 @@ _HOP_BY_HOP_HEADERS = {
 
 
 def normalize_base_url(base_url: str) -> str:
-    """
-    Normalize an upstream OpenAI base URL.
-
-    The relay supports OPENAI_API_BASE with or without a trailing `/v1`.
-    Internally, we normalize to the host root (no trailing slash, no `/v1`),
-    and then build_upstream_url() always ensures the request path includes `/v1/...`.
-    """
     normalized = (base_url or "").rstrip("/")
     if normalized.endswith("/v1"):
         normalized = normalized[:-3]
@@ -36,15 +28,6 @@ def normalize_base_url(base_url: str) -> str:
 
 
 def normalize_upstream_path(path: str) -> str:
-    """
-    Ensure the path is an absolute upstream OpenAI path under `/v1`.
-
-    Examples:
-      - "v1/models"         -> "/v1/models"
-      - "/v1/models"        -> "/v1/models"
-      - "/models"           -> "/v1/models"
-      - "/v1"               -> "/v1"
-    """
     if not path:
         return "/v1/"
 
@@ -57,14 +40,10 @@ def normalize_upstream_path(path: str) -> str:
     if path.startswith("/v1/"):
         return path
 
-    # Any other absolute path is treated as relative to /v1
     return "/v1" + path
 
 
 def build_upstream_url(path: str) -> str:
-    """
-    Build the full upstream URL to OpenAI from a path.
-    """
     settings = get_settings()
     base = normalize_base_url(settings.openai_base_url)
     upstream_path = normalize_upstream_path(path)
@@ -72,19 +51,10 @@ def build_upstream_url(path: str) -> str:
 
 
 def filter_upstream_headers(headers: Mapping[str, str]) -> Dict[str, str]:
-    """
-    Filter upstream response headers so we don't forward hop-by-hop headers.
-    """
-    return {
-        k: v for k, v in headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS
-    }
+    return {k: v for k, v in headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS}
 
 
 def _header_get(headers: Mapping[str, str], name: str) -> Optional[str]:
-    """
-    Best-effort case-insensitive header lookup that works for both dict-like objects
-    and Starlette Headers (which are already case-insensitive).
-    """
     if not headers:
         return None
     return (
@@ -94,21 +64,37 @@ def _header_get(headers: Mapping[str, str], name: str) -> Optional[str]:
     )
 
 
+def _select_beta(path_hint: str | None) -> Optional[str]:
+    s = get_settings()
+    p = (path_hint or "").strip()
+
+    # Honor explicit OPENAI_BETA if you set it.
+    if s.openai_beta:
+        return s.openai_beta
+
+    # Apply targeted beta headers by surface.
+    if p.startswith("/v1/realtime") and s.openai_realtime_beta:
+        return s.openai_realtime_beta
+
+    # Assistants-adjacent surfaces (vector stores, etc.) may require assistants=v2.
+    if (
+        (p.startswith("/v1/assistants") or p.startswith("/v1/threads") or p.startswith("/v1/vector_stores"))
+        and s.openai_assistants_beta
+    ):
+        return s.openai_assistants_beta
+
+    return None
+
+
 def build_outbound_headers(
     in_headers: Mapping[str, str],
     *,
     content_type: Optional[str] = None,
     default_json: bool = True,
     forward_accept: bool = True,
+    path_hint: Optional[str] = None,
     extra_headers: Optional[Mapping[str, str]] = None,
 ) -> Dict[str, str]:
-    """
-    Build outbound headers for upstream OpenAI calls.
-
-    - Always inject Authorization from server-side settings (do not forward user auth).
-    - Optionally forward OpenAI-Beta and Idempotency-Key if present.
-    - Optionally set Content-Type; if not set and default_json=True, defaults to application/json.
-    """
     settings = get_settings()
 
     headers: Dict[str, str] = {"Authorization": f"Bearer {settings.openai_api_key}"}
@@ -118,7 +104,7 @@ def build_outbound_headers(
     if settings.openai_project:
         headers["OpenAI-Project"] = settings.openai_project
 
-    beta = _header_get(in_headers, "OpenAI-Beta") or settings.openai_beta
+    beta = _header_get(in_headers, "OpenAI-Beta") or _select_beta(path_hint)
     if beta:
         headers["OpenAI-Beta"] = beta
 
@@ -142,21 +128,13 @@ def build_outbound_headers(
 
     if extra_headers:
         for k, v in extra_headers.items():
-            if v is None:
-                continue
-            headers[k] = v
+            if v is not None:
+                headers[k] = v
 
     return headers
 
 
-def _normalize_query_params(
-    query: Optional[Mapping[str, Any]],
-) -> Optional[Dict[str, Any]]:
-    """
-    Normalize query params for httpx:
-    - Drop None values
-    - Convert booleans to 'true'/'false' (OpenAI conventions)
-    """
+def _normalize_query_params(query: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
     if not query:
         return None
     out: Dict[str, Any] = {}
@@ -171,22 +149,19 @@ def _normalize_query_params(
 
 
 async def forward_openai_request(request: Request) -> Response:
-    """
-    Generic pass-through for endpoints already mounted in this relay.
-
-    It forwards the incoming request method/path/query/body to upstream OpenAI,
-    injecting server-side auth headers.
-    """
     settings = get_settings()
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=500, detail="Server misconfigured: OPENAI_API_KEY is not set")
 
-    incoming_path = request.url.path.lstrip("/")  # e.g. "v1/batches" or "vector_stores"
-    url = build_upstream_url("/" + incoming_path)
+    upstream_url = build_upstream_url(request.url.path)
 
+    default_json = request.method not in {"GET", "HEAD"}  # don't force CT for GETs
     headers = build_outbound_headers(
         request.headers,
         content_type=None,
-        default_json=True,
+        default_json=default_json,
         forward_accept=True,
+        path_hint=request.url.path,
     )
 
     body = await request.body()
@@ -194,7 +169,7 @@ async def forward_openai_request(request: Request) -> Response:
 
     resp = await client.request(
         method=request.method,
-        url=url,
+        url=upstream_url,
         params=request.query_params,
         headers=headers,
         content=body if body else None,
@@ -217,13 +192,9 @@ async def forward_openai_method_path(
     json_body: Any = None,
     inbound_headers: Optional[Mapping[str, str]] = None,
 ) -> Response:
-    """
-    Forward an arbitrary upstream OpenAI request specified by method + path.
-
-    This exists primarily for the Option A `/v1/proxy` envelope, where the inbound
-    request path is always `/v1/proxy`, but the user intends to call another upstream route.
-    """
     settings = get_settings()
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=500, detail="Server misconfigured: OPENAI_API_KEY is not set")
 
     upstream_url = build_upstream_url(path)
     headers = build_outbound_headers(
@@ -231,6 +202,7 @@ async def forward_openai_method_path(
         content_type="application/json" if json_body is not None else None,
         default_json=json_body is not None,
         forward_accept=True,
+        path_hint=path,
     )
 
     client = get_async_httpx_client()
@@ -251,6 +223,7 @@ async def forward_openai_method_path(
     )
 
 
+# Typed helpers (used by some explicit routes)
 async def forward_responses_create(body: Dict[str, Any]) -> Dict[str, Any]:
     client = get_async_openai_client()
     result = await client.responses.create(**body)

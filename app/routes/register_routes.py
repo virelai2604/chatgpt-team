@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from fastapi import FastAPI
+
 from . import (
     actions,
     batches,
@@ -11,30 +13,38 @@ from . import (
     images,
     models,
     proxy,
-    realtime,
     responses,
+    realtime,
     vector_stores,
     videos,
 )
 
 
-def register_routes(app) -> None:
-    # Core
+def register_routes(app: FastAPI) -> None:
+    # Health first
     app.include_router(health.router)
-    app.include_router(actions.router)
 
-    # Option A (single Action-friendly entrypoint)
+    # Option A proxy (Actions-friendly)
     app.include_router(proxy.router)
 
-    # OpenAI-compatible endpoints
+    # Actions/meta
+    app.include_router(actions.router)
+
+    # Core OpenAI surfaces
     app.include_router(models.router)
-    app.include_router(embeddings.router)
     app.include_router(responses.router)
-    app.include_router(files.router)
-    app.include_router(batches.router)
+    app.include_router(embeddings.router)
+
+    # Media / files
     app.include_router(images.router)
+    app.include_router(videos.router)
+    app.include_router(files.router)
+
+    # Bulk + retrieval
+    app.include_router(batches.router)
     app.include_router(vector_stores.router)
+
+    # Realtime + newer surfaces
     app.include_router(realtime.router)
     app.include_router(conversations.router)
     app.include_router(containers.router)
-    app.include_router(videos.router)
