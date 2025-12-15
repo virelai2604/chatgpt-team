@@ -4,7 +4,7 @@ import re
 from typing import Any, Dict, Optional, Sequence, Tuple
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from app.api.forward_openai import forward_openai_method_path
 
@@ -20,12 +20,45 @@ class ProxyRequest(BaseModel):
 
     Non-JSON routes (multipart uploads, binary downloads, SSE/WebSocket) should be
     implemented as explicit relay routes/wrappers.
+
+    Compatibility:
+      - `body` may also be provided as `json` or `json_body`
+      - `query` may also be provided as `params`
     """
+
+    # Prevent silent typos (e.g., sending "jon" instead of "json") that can cause
+    # confusing upstream errors.
+    model_config = ConfigDict(extra="forbid")
 
     method: str = Field(..., description="HTTP method: GET, POST, PUT, PATCH, DELETE")
     path: str = Field(..., description="Upstream OpenAI path, e.g. /v1/responses or /responses")
-    query: Optional[Dict[str, Any]] = Field(default=None, description="Query parameters (dict/object)")
-    body: Optional[Any] = Field(default=None, description="JSON body for POST/PUT/PATCH")
+
+    query: Optional[Dict[str, Any]] = Field(
+        default=None,
+        validation_alias=AliasChoices("query", "params"),
+        description="Query parameters (dict/object). Accepts 'query' or 'params'.",
+    )
+
+    body: Optional[Any] = Field(
+        default=None,
+        validation_alias=AliasChoices("body", "json", "json_body"),
+        description="JSON body for POST/PUT/PATCH. Accepts 'body', 'json', or 'json_body'.",
+    )
+
+    @model_validator(mode="after")
+    def _avoid_empty_json_body_parse_errors(self) -> "ProxyRequest":
+        """
+        If a caller sends Content-Type: application/json but omits the body (or uses
+        a wrong field name), OpenAI commonly replies with a JSON parse error.
+
+        Defaulting to {} for JSON methods yields a clearer upstream validation error
+        instead (e.g., missing required fields), and prevents accidental empty-body
+        parse errors.
+        """
+        m = (self.method or "").strip().upper()
+        if self.body is None and m in {"POST", "PUT", "PATCH"}:
+            self.body = {}
+        return self
 
 
 _ALLOWED_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
