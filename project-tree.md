@@ -48,6 +48,7 @@
       📄 realtime.py
       📄 register_routes.py
       📄 responses.py
+      📄 uploads.py
       📄 vector_stores.py
       📄 videos.py
     📁 utils
