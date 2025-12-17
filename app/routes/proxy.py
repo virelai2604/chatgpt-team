@@ -111,6 +111,7 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     ({"GET"}, re.compile(r"^/v1/videos$")),
     ({"GET"}, re.compile(r"^/v1/videos/[^/]+$")),
     ({"DELETE"}, re.compile(r"^/v1/videos/[^/]+$")),
+    ({"POST"}, re.compile(r"^/v1/videos/[^/]+/remix$")),
 
     # ---- Vector Stores (JSON) ----
     ({"GET"}, re.compile(r"^/v1/vector_stores$")),
@@ -158,66 +159,43 @@ def _normalize_path(path: str) -> str:
     if not p:
         raise HTTPException(status_code=400, detail="path is required")
 
-    # Disallow full URLs; only allow API paths.
-    if "://" in p or p.lower().startswith("http"):
-        raise HTTPException(status_code=400, detail="path must be an OpenAI API path, not a URL")
-
-    # Disallow embedded query strings (use `query` field).
-    if "?" in p:
-        raise HTTPException(status_code=400, detail="path must not include '?'; use `query` field")
-
+    # Normalize to /v1/...
     if not p.startswith("/"):
         p = "/" + p
+    if not p.startswith("/v1/"):
+        if p == "/v1":
+            p = "/v1/"
+        elif p.startswith("/v1"):
+            # e.g. "/v1responses" is invalid; treat as user error
+            raise HTTPException(status_code=400, detail=f"invalid path: {p}")
+        else:
+            p = "/v1" + p
 
-    # Ensure /v1 prefix
-    if p.startswith("/v1"):
-        normalized = p
-    elif p.startswith("v1/"):
-        normalized = "/" + p
-    else:
-        normalized = "/v1" + p
-
-    # Collapse accidental double slashes
-    while "//" in normalized:
-        normalized = normalized.replace("//", "/")
-
-    return normalized
+    return p
 
 
-def _blocked_reason(method: str, path: str, body: Any) -> Optional[str]:
-    # No streaming via proxy envelope
-    if isinstance(body, dict) and body.get("stream") is True:
-        return "stream=true is not allowed via /v1/proxy (use explicit streaming route)"
+def _is_blocked(path: str, method: str) -> bool:
+    # Prefix blocks
+    if any(path.startswith(prefix) for prefix in _BLOCKED_PREFIXES):
+        return True
 
-    # Block weird colon paths like /v1/responses:stream
-    if ":" in path:
-        return "':' paths are not allowed via /v1/proxy"
-
-    # Basic traversal guards
-    if ".." in path or "#" in path:
-        return "path contains illegal sequences"
-    if any(ch.isspace() for ch in path):
-        return "path must not contain whitespace"
-
+    # Exact blocks
     if path in _BLOCKED_PATHS:
-        return "path is blocked"
+        return True
 
-    for prefix in _BLOCKED_PREFIXES:
-        if path.startswith(prefix):
-            return f"blocked prefix: {prefix}"
+    # Suffix blocks
+    if any(path.endswith(sfx) for sfx in _BLOCKED_SUFFIXES):
+        return True
 
-    for suffix in _BLOCKED_SUFFIXES:
-        if path.endswith(suffix):
-            return f"blocked suffix: {suffix}"
-
-    for (m, rx) in _BLOCKED_METHOD_PATH_REGEX:
+    # Multipart blocks (method + regex)
+    for m, rx in _BLOCKED_METHOD_PATH_REGEX:
         if method == m and rx.match(path):
-            return "multipart endpoint blocked via /v1/proxy"
+            return True
 
-    return None
+    return False
 
 
-def _is_allowlisted(method: str, path: str) -> bool:
+def _is_allowed(path: str, method: str) -> bool:
     for methods, rx in _ALLOWLIST:
         if method in methods and rx.match(path):
             return True
@@ -225,24 +203,25 @@ def _is_allowlisted(method: str, path: str) -> bool:
 
 
 @router.post("/proxy")
-async def proxy(call: ProxyRequest, request: Request) -> Response:
-    method = (call.method or "").strip().upper()
+async def proxy(req: ProxyRequest, request: Request):
+    method = (req.method or "").strip().upper()
     if method not in _ALLOWED_METHODS:
-        raise HTTPException(status_code=400, detail=f"Unsupported method: {call.method}")
+        raise HTTPException(status_code=400, detail=f"Unsupported method: {method}")
 
-    path = _normalize_path(call.path)
+    path = _normalize_path(req.path)
 
-    reason = _blocked_reason(method, path, call.body)
-    if reason:
-        raise HTTPException(status_code=403, detail={"error": reason})
+    if _is_blocked(path, method):
+        raise HTTPException(status_code=403, detail="Path blocked by policy")
 
-    if not _is_allowlisted(method, path):
-        raise HTTPException(status_code=403, detail="method/path not allowlisted for /v1/proxy")
+    if not _is_allowed(path, method):
+        raise HTTPException(status_code=403, detail="Path not allowlisted")
 
-    return await forward_openai_method_path(
+    # Forward to OpenAI with explicit method/path override.
+    upstream_resp: Response = await forward_openai_method_path(
         method=method,
         path=path,
-        query=call.query,
-        json_body=call.body,
-        inbound_headers=request.headers,
+        request=request,
+        json_body=req.body,
+        query=req.query,
     )
+    return upstream_resp
