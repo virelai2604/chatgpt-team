@@ -43,7 +43,10 @@ services:
       - key: OPENAI_REALTIME_BETA
         value: realtime=v1
       - key: RELAY_AUTH_ENABLED
-        value: "true"
+        value: "false"
+      - key: RELAY_AUTH_TOKEN
+        value: "dummy"
+      
 
       # -------- Default models --------
       - key: DEFAULT_MODEL
