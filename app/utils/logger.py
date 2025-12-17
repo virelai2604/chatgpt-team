@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 _LOGGER_ROOT_NAME = "chatgpt_team_relay"
 
@@ -51,3 +51,28 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
 
 # Shared relay logger used by routes: `from app.utils.logger import relay_log as logger`
 relay_log = get_logger("relay")
+
+
+# ---------------------------------------------------------------------------
+# Compatibility helpers
+# ---------------------------------------------------------------------------
+# Some route modules may do: `from app.utils.logger import info` and call info(...)
+# These helpers forward to the shared relay logger so imports don't fail.
+def debug(msg: Any, *args: Any, **kwargs: Any) -> None:
+    relay_log.debug(msg, *args, **kwargs)
+
+
+def info(msg: Any, *args: Any, **kwargs: Any) -> None:
+    relay_log.info(msg, *args, **kwargs)
+
+
+def warning(msg: Any, *args: Any, **kwargs: Any) -> None:
+    relay_log.warning(msg, *args, **kwargs)
+
+
+def error(msg: Any, *args: Any, **kwargs: Any) -> None:
+    relay_log.error(msg, *args, **kwargs)
+
+
+def exception(msg: Any, *args: Any, **kwargs: Any) -> None:
+    relay_log.exception(msg, *args, **kwargs)
