@@ -1,54 +1,74 @@
 from __future__ import annotations
 
-"""app/utils/http_client.py
-
-Compatibility shim.
-
-Some older modules in this repo historically imported:
-
-    from app.utils.http_client import get_client
-
-The canonical implementation now lives in:
-
-    app.core.http_client
-
-This module preserves the old import path while keeping the actual
-client lifecycle/behavior centralized in app.core.http_client.
-"""
-
-from typing import Any
+import asyncio
+from typing import Any, Dict, Tuple
 
 import httpx
+from openai import AsyncOpenAI
 
-try:
-    # OpenAI Python SDK (async)
-    from openai import AsyncOpenAI  # type: ignore
-except Exception:  # pragma: no cover
-    AsyncOpenAI = Any  # type: ignore
+from app.core.config import get_settings
+from app.utils.logger import get_logger
 
-from app.core.http_client import (
-    aclose_all_clients,
-    close_async_clients,
-    get_async_httpx_client,
-    get_async_openai_client,
-)
+log = get_logger(__name__)
+
+# Cache per-event-loop to avoid "attached to a different loop" issues with reload.
+_LOOP_CLIENTS: Dict[int, Tuple[httpx.AsyncClient, AsyncOpenAI]] = {}
 
 
-def get_client() -> httpx.AsyncClient:
-    """Backward-compatible alias for get_async_httpx_client()."""
-    return get_async_httpx_client()
+def _loop_id() -> int:
+    try:
+        return id(asyncio.get_running_loop())
+    except RuntimeError:
+        # No running loop (import-time / sync context). Use a stable sentinel.
+        return -1
 
 
-def get_openai_client() -> AsyncOpenAI:
-    """Backward-compatible alias for get_async_openai_client()."""
-    return get_async_openai_client()
+def get_async_httpx_client() -> httpx.AsyncClient:
+    loop_key = _loop_id()
+    if loop_key in _LOOP_CLIENTS:
+        return _LOOP_CLIENTS[loop_key][0]
+
+    settings = get_settings()
+    timeout = httpx.Timeout(getattr(settings, "relay_timeout_seconds", 120.0))
+    client = httpx.AsyncClient(timeout=timeout)
+    openai_client = AsyncOpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        http_client=client,
+    )
+    _LOOP_CLIENTS[loop_key] = (client, openai_client)
+    return client
 
 
-__all__ = [
-    "get_client",
-    "get_openai_client",
-    "get_async_httpx_client",
-    "get_async_openai_client",
-    "aclose_all_clients",
-    "close_async_clients",
-]
+def get_async_openai_client() -> AsyncOpenAI:
+    loop_key = _loop_id()
+    if loop_key in _LOOP_CLIENTS:
+        return _LOOP_CLIENTS[loop_key][1]
+
+    # Ensure both are created together (shared httpx client)
+    get_async_httpx_client()
+    return _LOOP_CLIENTS[loop_key][1]
+
+
+async def close_async_clients() -> None:
+    """Close the cached clients for the current event loop."""
+    loop_key = _loop_id()
+    if loop_key not in _LOOP_CLIENTS:
+        return
+
+    client, _ = _LOOP_CLIENTS.pop(loop_key)
+    try:
+        await client.aclose()
+    except Exception:
+        log.exception("Failed closing httpx client")
+
+
+async def aclose_all_clients() -> None:
+    """Close all cached clients across loops (best-effort)."""
+    items = list(_LOOP_CLIENTS.items())
+    _LOOP_CLIENTS.clear()
+    for _, (client, _) in items:
+        try:
+            await client.aclose()
+        except Exception:
+            log.exception("Failed closing httpx client")

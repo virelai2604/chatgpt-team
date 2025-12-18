@@ -1,78 +1,78 @@
-# app/utils/logger.py
-
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Optional
+from typing import Optional
 
 _LOGGER_ROOT_NAME = "chatgpt_team_relay"
 
 
 def configure_logging(level: Optional[str] = None) -> None:
-    """
-    Configure the root relay logger.
+    """Idempotent logging setup for local dev and production.
 
-    Idempotent: calling it multiple times will not duplicate handlers.
+    - Uses a single StreamHandler to stdout
+    - Avoids duplicate handlers on reload
+    - Sets a clean, grep-friendly format
     """
-    logger = logging.getLogger(_LOGGER_ROOT_NAME)
-    if logger.handlers:
-        # Already configured
+    resolved_level = (level or os.getenv("LOG_LEVEL") or "INFO").upper()
+    root_logger = logging.getLogger(_LOGGER_ROOT_NAME)
+
+    # Idempotency: don't stack handlers on reload.
+    if getattr(root_logger, "_relay_configured", False):
+        root_logger.setLevel(resolved_level)
         return
 
-    level_name = level or os.getenv("LOG_LEVEL", "INFO")
-    log_level = getattr(logging, level_name.upper(), logging.INFO)
+    root_logger.setLevel(resolved_level)
+    root_logger.propagate = False
 
     handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+    handler.setLevel(resolved_level)
+    handler.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
     )
-    handler.setFormatter(formatter)
 
-    logger.setLevel(log_level)
-    logger.addHandler(handler)
+    root_logger.addHandler(handler)
+    setattr(root_logger, "_relay_configured", True)
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
-    """
-    Get a child logger under the relay root.
-
-    Example:
-        logger = get_logger(__name__)
-    """
-    configure_logging()
-
+def get_logger(name: str) -> logging.Logger:
+    """Return a namespaced logger under the relay root."""
     if not name:
         return logging.getLogger(_LOGGER_ROOT_NAME)
-
     return logging.getLogger(f"{_LOGGER_ROOT_NAME}.{name}")
 
 
-# Shared relay logger used by routes: `from app.utils.logger import relay_log as logger`
+# Default logger used across the codebase.
 relay_log = get_logger("relay")
 
 
 # ---------------------------------------------------------------------------
-# Compatibility helpers
+# Backward-compatible convenience functions.
+# Some older route modules imported these directly (e.g., `from app.utils.logger import info`).
 # ---------------------------------------------------------------------------
-# Some route modules may do: `from app.utils.logger import info` and call info(...)
-# These helpers forward to the shared relay logger so imports don't fail.
-def debug(msg: Any, *args: Any, **kwargs: Any) -> None:
+
+def debug(msg: str, *args, **kwargs) -> None:
     relay_log.debug(msg, *args, **kwargs)
 
 
-def info(msg: Any, *args: Any, **kwargs: Any) -> None:
+def info(msg: str, *args, **kwargs) -> None:
     relay_log.info(msg, *args, **kwargs)
 
 
-def warning(msg: Any, *args: Any, **kwargs: Any) -> None:
+def warning(msg: str, *args, **kwargs) -> None:
     relay_log.warning(msg, *args, **kwargs)
 
 
-def error(msg: Any, *args: Any, **kwargs: Any) -> None:
+# Common alias
+warn = warning
+
+
+def error(msg: str, *args, **kwargs) -> None:
     relay_log.error(msg, *args, **kwargs)
 
 
-def exception(msg: Any, *args: Any, **kwargs: Any) -> None:
+def exception(msg: str, *args, **kwargs) -> None:
     relay_log.exception(msg, *args, **kwargs)

@@ -55,6 +55,7 @@
       📄 __init__.py
       📄 authy.py
       📄 error_handler.py
+      📄 http_client.py
       📄 logger.py
   📁 chatgpt_team_relay.egg-info
     📄 PKG-INFO
