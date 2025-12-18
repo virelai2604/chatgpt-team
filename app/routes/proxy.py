@@ -44,38 +44,35 @@ class ProxyRequest(BaseModel):
     @model_validator(mode="after")
     def _avoid_empty_json_body_parse_errors(self) -> "ProxyRequest":
         """
-        Guardrail: Some clients send body=null or body="" inconsistently.
-        Keep it as None unless it's a real JSON object/array/etc.
+        Some clients omit the body entirely for POST-like methods.
+        Defaulting to {} gives a consistent upstream behavior (400 w/ details)
+        instead of 'empty body' edge cases.
         """
-        if self.body == "":
-            self.body = None
+        m = (self.method or "").strip().upper()
+        if m in {"POST", "PUT", "PATCH"} and self.body is None:
+            self.body = {}
         return self
 
 
 _ALLOWED_METHODS: Set[str] = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 
-# Hard block sensitive local paths from ever being proxied upstream.
-_BLOCKED_PATHS: Set[str] = {
-    "/",
-    "/health",
-    "/openapi.json",
-    "/docs",
-    "/redoc",
-    "/manifest",
-    "/v1/manifest",
-    "/actions/ping",
-    "/v1/actions/ping",
-    "/actions/relay_info",
-    "/v1/actions/relay_info",
-    "/v1/proxy",  # prevent recursion
+# Block higher-risk or non-Action-friendly families by prefix.
+_BLOCKED_PREFIXES: Tuple[str, ...] = (
     "/v1/admin",
+    "/v1/webhooks",
+    "/v1/moderations",
+    "/v1/realtime",   # websocket family (not Actions-friendly)
+    "/v1/uploads",    # multipart/resumable
+    "/v1/audio",      # often multipart/binary
+)
+
+# Block direct recursion and local-only helpers
+_BLOCKED_PATHS: Set[str] = {
+    "/v1/proxy",
+    "/v1/responses:stream",
 }
 
-# Block prefixes/suffixes that are either local-only or unsafe via proxy envelope.
-_BLOCKED_PREFIXES: Tuple[str, ...] = (
-    "/v1/audio",  # often multipart/binary; prefer explicit routes
-    "/v1/realtime",  # special protocol
-)
+# Block binary-ish suffixes (Actions are JSON-first)
 _BLOCKED_SUFFIXES: Tuple[str, ...] = (
     "/content",
     "/results",
@@ -92,39 +89,67 @@ _BLOCKED_METHOD_PATH_REGEX: Set[Tuple[str, re.Pattern[str]]] = {
 _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     # ---- Responses (JSON) ----
     ({"POST"}, re.compile(r"^/v1/responses$")),
-    ({"GET", "DELETE"}, re.compile(r"^/v1/responses/[^/]+$")),
-    ({"POST"}, re.compile(r"^/v1/responses/[^/]+/cancel$")),
-    ({"GET"}, re.compile(r"^/v1/responses/[^/]+/input_items$")),
+    ({"POST"}, re.compile(r"^/v1/responses/compact$")),
+    ({"GET"}, re.compile(r"^/v1/responses/[A-Za-z0-9_-]+$")),
+    ({"DELETE"}, re.compile(r"^/v1/responses/[A-Za-z0-9_-]+$")),
+    ({"POST"}, re.compile(r"^/v1/responses/[A-Za-z0-9_-]+/cancel$")),
+    ({"GET"}, re.compile(r"^/v1/responses/[A-Za-z0-9_-]+/input_items$")),
     ({"POST"}, re.compile(r"^/v1/responses/input_tokens$")),
-    # ---- Embeddings ----
+
+    # ---- Embeddings (JSON) ----
     ({"POST"}, re.compile(r"^/v1/embeddings$")),
-    # ---- Images (generations only; edits are multipart and blocked) ----
-    ({"POST"}, re.compile(r"^/v1/images$")),
-    ({"POST"}, re.compile(r"^/v1/images/generations$")),
-    # ---- Models ----
+
+    # ---- Models (JSON) ----
     ({"GET"}, re.compile(r"^/v1/models$")),
     ({"GET"}, re.compile(r"^/v1/models/[^/]+$")),
-    # ---- Vector stores (catch-all under /v1/vector_stores/*) ----
-    ({"GET", "POST", "PUT", "PATCH", "DELETE"}, re.compile(r"^/v1/vector_stores$")),
-    ({"GET", "POST", "PUT", "PATCH", "DELETE"}, re.compile(r"^/v1/vector_stores/.*$")),
-    # ---- Uploads (JSON endpoints; parts upload is multipart and handled explicitly elsewhere) ----
-    ({"POST"}, re.compile(r"^/v1/uploads$")),
-    ({"POST"}, re.compile(r"^/v1/uploads/[^/]+/(complete|cancel)$")),
-    # ---- Batches ----
-    ({"GET", "POST"}, re.compile(r"^/v1/batches$")),
-    ({"GET"}, re.compile(r"^/v1/batches/[^/]+$")),
-    ({"POST"}, re.compile(r"^/v1/batches/[^/]+/cancel$")),
-    # ---- Containers (JSON metadata endpoints) ----
-    ({"GET", "POST"}, re.compile(r"^/v1/containers$")),
-    ({"GET", "POST", "PUT", "PATCH", "DELETE"}, re.compile(r"^/v1/containers/.*$")),
-    # ---- Conversations (JSON) ----
-    ({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}, re.compile(r"^/v1/conversations$")),
-    ({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}, re.compile(r"^/v1/conversations/.*$")),
-    # ---- Videos (JSON endpoints; POST /v1/videos is multipart and blocked above) ----
+
+    # ---- Images (JSON only: generations) ----
+    ({"POST"}, re.compile(r"^/v1/images/generations$")),
+    ({"POST"}, re.compile(r"^/v1/images$")),
+
+    # ---- Videos (metadata + remix via proxy; content is binary; create is multipart) ----
     ({"GET"}, re.compile(r"^/v1/videos$")),
     ({"GET"}, re.compile(r"^/v1/videos/[^/]+$")),
     ({"DELETE"}, re.compile(r"^/v1/videos/[^/]+$")),
     ({"POST"}, re.compile(r"^/v1/videos/[^/]+/remix$")),
+
+    # ---- Vector Stores (JSON) ----
+    ({"GET"}, re.compile(r"^/v1/vector_stores$")),
+    ({"POST"}, re.compile(r"^/v1/vector_stores$")),
+    ({"GET"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
+    ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
+    ({"DELETE"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
+    ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+/search$")),
+
+    # vector store files
+    ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+/files$")),
+    ({"GET"}, re.compile(r"^/v1/vector_stores/[^/]+/files$")),
+    ({"GET"}, re.compile(r"^/v1/vector_stores/[^/]+/files/[^/]+$")),
+    ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+/files/[^/]+$")),
+    ({"DELETE"}, re.compile(r"^/v1/vector_stores/[^/]+/files/[^/]+$")),
+
+    # vector store file batches
+    ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+/file_batches$")),
+    ({"GET"}, re.compile(r"^/v1/vector_stores/[^/]+/file_batches/[^/]+$")),
+    ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+/file_batches/[^/]+/cancel$")),
+    ({"GET"}, re.compile(r"^/v1/vector_stores/[^/]+/file_batches/[^/]+/files$")),
+
+    # ---- Containers (JSON control plane only) ----
+    ({"GET"}, re.compile(r"^/v1/containers$")),
+    ({"POST"}, re.compile(r"^/v1/containers$")),
+    ({"GET"}, re.compile(r"^/v1/containers/[^/]+$")),
+    ({"DELETE"}, re.compile(r"^/v1/containers/[^/]+$")),
+
+    # ---- Conversations (JSON) ----
+    ({"POST"}, re.compile(r"^/v1/conversations$")),
+    ({"GET"}, re.compile(r"^/v1/conversations/[^/]+$")),
+    ({"POST"}, re.compile(r"^/v1/conversations/[^/]+$")),
+    ({"DELETE"}, re.compile(r"^/v1/conversations/[^/]+$")),
+
+    # ---- Files (JSON metadata only; content is binary; create is multipart) ----
+    ({"GET"}, re.compile(r"^/v1/files$")),
+    ({"GET"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
+    ({"DELETE"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
 )
 
 
@@ -145,6 +170,7 @@ def _normalize_path(path: str) -> str:
     if not p.startswith("/"):
         p = "/" + p
 
+    # Ensure /v1 prefix
     if p.startswith("/v1"):
         normalized = p
     elif p.startswith("v1/"):
@@ -175,7 +201,7 @@ def _blocked_reason(method: str, path: str, body: Any) -> Optional[str]:
         return "path must not contain whitespace"
 
     if path in _BLOCKED_PATHS:
-        return "Path blocked by policy"
+        return "path is blocked"
 
     for prefix in _BLOCKED_PREFIXES:
         if path.startswith(prefix):
@@ -209,15 +235,11 @@ async def proxy(call: ProxyRequest, request: Request) -> Response:
 
     reason = _blocked_reason(method, path, call.body)
     if reason:
-        # IMPORTANT: our global HTTPException handler does `str(exc.detail)`,
-        # so keep this as a string (not a dict) for clean error messages.
-        raise HTTPException(status_code=403, detail=reason)
+        raise HTTPException(status_code=403, detail={"error": reason})
 
     if not _is_allowlisted(method, path):
         raise HTTPException(status_code=403, detail="method/path not allowlisted for /v1/proxy")
 
-    # IMPORTANT FIX:
-    # forward_openai_method_path() expects inbound_headers (not request=request).
     return await forward_openai_method_path(
         method=method,
         path=path,

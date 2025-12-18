@@ -44,8 +44,6 @@ services:
         value: realtime=v1
       - key: RELAY_AUTH_ENABLED
         value: "false"
-      - key: RELAY_AUTH_TOKEN
-        value: "dummy"
       
 
       # -------- Default models --------
