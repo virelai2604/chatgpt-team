@@ -1,41 +1,59 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# chatgpt_sync.sh (v2)
+# chatgpt_sync.sh (v4.1 - explicit allowlist + UTF-16/UTF-32 text conversion)
 #
-# Goal (for ChatGPT context):
-#   - ALWAYS include selected repo-root files:
-#       project-tree.md, pytest.ini, render.yaml, requirements.txt
-#     (these are repo-root, same level as ./app)
-#   - Include ALL files under a target directory (default: app/)
-#   - Optionally include ALL tracked repo-root files (not directories), excluding secrets
+# Purpose:
+#   Generate a Markdown artifact that ChatGPT can ingest to get FULL current code/config text
+#   for your repo, while avoiding secrets and noisy/generated artifacts.
+#
+# Default INCLUDE scope (customizable via flags):
+#   - Root files (text): pyproject.toml, project-tree.md, openai_models_2025-11.csv,
+#                        requirements.txt, render.yaml, pytest.ini, chatgpt_sync.sh
+#   - Directories (recursive): app/, tests/, static/, schemas/
+#
+# Always EXCLUDED:
+#   - Secrets: .env, .env.*, *.env, keys/certs
+#   - Caches/artifacts: __pycache__/, *.pyc, venvs, logs
+#   - Runtime state: data/ (and *.db / *.sqlite*)
+#   - Generated outputs: chatgpt_sync.md, chatgpt_baseline.md, chatgpt_changes.md
+#
+# Modes:
+#   baseline  -> embeds baseline content from a base commit (merge-base of HEAD and --base ref)
+#   changes   -> shows diff vs base commit AND embeds CURRENT (worktree) content of changed files
+#                (includes uncommitted edits)
+#
+# NOTE ABOUT "Not embedded (binary/large)":
+#   This script treats any file containing NUL bytes as "binary".
+#   Some Windows editors may save text files as UTF-16/UTF-32, which contains NUL bytes.
+#   v4.1 attempts to detect UTF-16/UTF-32 BOM and convert to UTF-8 before embedding.
 #
 # Usage:
-#   ./chatgpt_sync.sh baseline [--base origin/main] [--dir app] [--out chatgpt_baseline.md] [--max-bytes 2000000] [--include-root-all]
-#   ./chatgpt_sync.sh changes  [--base origin/main] [--dir app] [--out chatgpt_changes.md]  [--max-bytes 2000000] [--include-root-all]
+#   ./chatgpt_sync.sh baseline --base origin/main --out chatgpt_baseline.md --max-bytes 2000000
+#   ./chatgpt_sync.sh changes  --base origin/main --out chatgpt_changes.md  --max-bytes 2000000
 #
-# Flags:
-#   --base <rev>           Base revision to compare against (default: origin/main)
-#   --dir <path>           Target directory to sync (default: app)
-#   --out <file>           Output markdown file (default: chatgpt_sync.md)
-#   --max-bytes <n>        Max bytes per file to embed (default: 200000)
-#   --include-bashrc       Append ~/.bashrc content to the artifact
-#   --include-root-all     Also include ALL tracked repo-root files (non-directories), excluding secrets
-#   --no-tree              Disable emitting TREE sections
+# Optional:
+#   --dir <path>   repeatable; if specified, replaces default dirs
+#   --root <file>  repeatable; if specified, replaces default root files
+#   --no-tree      omit file trees
+#
+# Notes:
+#   - Binary-ish files (pdf/db/images/pyc/etc.) are not embedded; we record size + sha256 instead.
 
 MODE="${1:-}"
 shift || true
 
 BASE_REV="origin/main"
-TARGET_DIR="app"
 OUT_FILE="chatgpt_sync.md"
-INCLUDE_BASHRC="false"
-INCLUDE_ROOT_ALL="false"
-MAX_BYTES="200000"
+MAX_BYTES="2000000"
 EMIT_TREE="true"
 
-# Always-include repo-root files (same level as ./app)
-ROOT_PINNED_FILES=( "project-tree.md" "pytest.ini" "render.yaml" "requirements.txt" )
+# Defaults (override by passing --dir/--root)
+DIRS_DEFAULT=( "app" "tests" "static" "schemas" )
+ROOT_FILES_DEFAULT=( "pyproject.toml" "project-tree.md" "openai_models_2025-11.csv" "requirements.txt" "render.yaml" "pytest.ini" "chatgpt_sync.sh" )
+
+DIRS=()
+ROOT_FILES=()
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -45,25 +63,30 @@ Usage:
   ./chatgpt_sync.sh baseline|changes [flags]
 
 Flags:
-  --base <rev>             Base revision (default: origin/main)
-  --base-ref <rev>         Alias for --base
-  --dir <path>             Target directory to sync (default: app)
-  --out <file>             Output markdown file (default: chatgpt_sync.md)
-  --include-bashrc         Include $HOME/.bashrc content
-  --include-root-all       Include ALL tracked repo-root files (non-directories), excluding secrets
-  --max-bytes <n>          Max bytes per file to embed (default: 200000)
-  --no-tree                Do not emit TREE sections
+  --base <rev>        Base revision (default: origin/main)
+  --out <file>        Output markdown file (default: chatgpt_sync.md)
+  --max-bytes <n>     Max bytes per embedded text file (default: 2000000)
+  --dir <path>        Include a directory (repeatable). If any --dir is provided, it replaces defaults.
+  --root <file>       Include a root file (repeatable). If any --root is provided, it replaces defaults.
+  --no-tree           Do not emit TREE sections
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base|--base-ref) BASE_REV="${2:-}"; shift 2 ;;
-    --dir) TARGET_DIR="${2:-}"; shift 2 ;;
     --out) OUT_FILE="${2:-}"; shift 2 ;;
-    --include-bashrc) INCLUDE_BASHRC="true"; shift 1 ;;
-    --include-root-all) INCLUDE_ROOT_ALL="true"; shift 1 ;;
     --max-bytes) MAX_BYTES="${2:-}"; shift 2 ;;
+    --dir)
+      [[ -n "${2:-}" ]] || die "--dir requires a path"
+      DIRS+=( "${2%/}" )
+      shift 2
+      ;;
+    --root)
+      [[ -n "${2:-}" ]] || die "--root requires a filename"
+      ROOT_FILES+=( "$2" )
+      shift 2
+      ;;
     --no-tree) EMIT_TREE="false"; shift 1 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
@@ -72,85 +95,98 @@ done
 
 [[ "$MODE" == "baseline" || "$MODE" == "changes" ]] || { usage; die "First arg must be baseline or changes"; }
 command -v git >/dev/null 2>&1 || die "git is required"
+command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required"
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "Not in a git repo"
 cd "$REPO_ROOT"
 
-# Best-effort fetch (ignore if offline)
 git fetch -q origin >/dev/null 2>&1 || true
 
 BASE_COMMIT="$(git merge-base HEAD "$BASE_REV" 2>/dev/null || true)"
 [[ -n "$BASE_COMMIT" ]] || die "Could not compute merge-base with base '$BASE_REV' (invalid ref?)"
 
 NOW_ISO="$(date -Iseconds)"
-REL_TARGET_DIR="${TARGET_DIR%/}"
 
-# ---- Secret / noise denylist ----
-# If a file matches these patterns, it will never be embedded even if tracked.
+# If user didn't pass --dir, use defaults
+if [[ "${#DIRS[@]}" -eq 0 ]]; then
+  DIRS=( "${DIRS_DEFAULT[@]}" )
+fi
+
+# If user didn't pass --root, use defaults
+if [[ "${#ROOT_FILES[@]}" -eq 0 ]]; then
+  ROOT_FILES=( "${ROOT_FILES_DEFAULT[@]}" )
+fi
+
+# ---- denylist: never embed these paths ----
 is_denied_path() {
   local p="$1"
   case "$p" in
-    # secrets / env
-    .env|.env.*|*.env|*.key|*.pem|*.p12|*.pfx|*.crt|*.cer|*.der|*.jks|*.kdbx|*.sqlite|*.db|*.db-wal|*.db-shm
-      ) return 0 ;;
-    # big binary-ish / artifacts
-    *.pdf|*.png|*.jpg|*.jpeg|*.gif|*.zip|*.tar|*.gz|*.7z|*.whl|*.so|*.dylib|*.exe
-      ) return 0 ;;
-    # local caches / venv / node
-    .venv/*|venv/*|node_modules/*|__pycache__/*|.pytest_cache/*|.mypy_cache/*|.ruff_cache/*
-      ) return 0 ;;
-    # data directories (adjust if you actually want them)
-    data/*|uploads/*|*.egg-info/*
-      ) return 0 ;;
+    # secrets/env/keys
+    .env|.env.*|*.env|*.key|*.pem|*.p12|*.pfx|*.crt|*.cer|*.der|*.jks|*.kdbx) return 0 ;;
+    # venv/caches/logs
+    .venv/*|venv/*|__pycache__/*|*.pyc|*.pyo|*.log|.pytest_cache/*|.mypy_cache/*|.ruff_cache/*) return 0 ;;
+    # runtime state
+    data/*|data) return 0 ;;
+    # generated artifacts (avoid recursion)
+    chatgpt_sync.md|chatgpt_baseline.md|chatgpt_changes.md) return 0 ;;
+  esac
+  return 1
+}
+
+# ---- binary-ish extensions: record hash + size, but do not embed content ----
+is_binary_ext() {
+  local p="$1"
+  case "$p" in
+    *.pdf|*.png|*.jpg|*.jpeg|*.gif|*.zip|*.tar|*.gz|*.7z|*.whl|*.so|*.dylib|*.exe|*.db|*.sqlite|*.sqlite3|*.db-wal|*.db-shm|*.pyc) return 0 ;;
   esac
   return 1
 }
 
 is_binary_stream() { LC_ALL=C grep -q $'\x00' && return 0 || return 1; }
 
-safe_embed_text() {
-  # Args: <label> <bytes> <command...>
-  local label="$1"
-  local bytes="$2"
-  shift 2
+# Try to convert UTF-16/UTF-32-with-BOM to UTF-8 so the content can be embedded.
+# Returns 0 if file is now safe-to-embed as text (no NUL bytes), else returns 1.
+maybe_convert_to_utf8_inplace() {
+  local f="$1"
 
-  if [[ "$bytes" -gt "$MAX_BYTES" ]]; then
-    cat <<EOF
-## FILE: ${label}
-> Skipped: file size ${bytes} bytes exceeds max ${MAX_BYTES} bytes. Upload separately or raise --max-bytes.
-EOF
+  # If already looks like normal text, keep it.
+  if ! is_binary_stream <"$f"; then
     return 0
   fi
+
+  # No iconv? can't convert.
+  command -v iconv >/dev/null 2>&1 || return 1
+
+  # Read BOM (first 4 bytes) to decide encoding.
+  local bom
+  bom="$(LC_ALL=C head -c 4 "$f" | od -An -tx1 | tr -d ' \n')"
+
+  local enc=""
+  case "$bom" in
+    fffe*) enc="UTF-16LE" ;;
+    feff*) enc="UTF-16BE" ;;
+    0000feff) enc="UTF-32BE" ;;
+    fffe0000) enc="UTF-32LE" ;;
+    *)
+      # Unknown encoding with NULs: do not guess.
+      return 1
+      ;;
+  esac
 
   local tmp
   tmp="$(mktemp)"
-  if ! "$@" >"$tmp" 2>/dev/null; then
+  if iconv -f "$enc" -t "UTF-8" "$f" >"$tmp" 2>/dev/null; then
+    mv "$tmp" "$f"
+  else
     rm -f "$tmp"
-    cat <<EOF
-## FILE: ${label}
-> Skipped: could not read file content.
-EOF
-    return 0
+    return 1
   fi
 
-  if is_binary_stream <"$tmp"; then
-    rm -f "$tmp"
-    cat <<EOF
-## FILE: ${label}
-> Skipped: binary file detected (often UTF-16 or contains NUL bytes).
-EOF
-    return 0
+  # After conversion, ensure no NULs remain.
+  if is_binary_stream <"$f"; then
+    return 1
   fi
-
-  cat <<EOF
-## FILE: ${label}
-\`\`\`
-EOF
-  cat "$tmp"
-  cat <<'EOF'
-```
-EOF
-  rm -f "$tmp"
+  return 0
 }
 
 write_header() {
@@ -159,25 +195,12 @@ write_header() {
 Repo: $(basename "$REPO_ROOT")
 Base: ${BASE_REV}
 Base commit (merge-base): ${BASE_COMMIT}
-Target dir: ${REL_TARGET_DIR}/
-Pinned root files: ${ROOT_PINNED_FILES[*]}
-Include all root files: ${INCLUDE_ROOT_ALL}
+Dirs: ${DIRS[*]}
+Root files: ${ROOT_FILES[*]}
 Mode: ${MODE}
 Generated: ${NOW_ISO}
 
 EOF
-}
-
-# Root-only tracked files (non-recursive)
-list_root_files_at_commit() {
-  local commit="$1"
-  git ls-tree --name-only "$commit" | sed '/^$/d' || true
-}
-
-# Recursive tracked files under target dir
-list_dir_files_at_commit() {
-  local commit="$1"
-  git ls-tree -r --name-only "$commit" -- "$REL_TARGET_DIR" || true
 }
 
 emit_tree() {
@@ -185,35 +208,128 @@ emit_tree() {
 
   echo "## TREE (repo root at ${commit})"
   echo '```'
-  list_root_files_at_commit "$commit" | sed 's/^/ - /'
+  git ls-tree --name-only "$commit" | sed 's/^/ - /' || true
   echo '```'
   echo
 
-  echo "## TREE (${REL_TARGET_DIR}/ at ${commit})"
-  echo '```'
-  list_dir_files_at_commit "$commit" | sed 's/^/ - /'
-  echo '```'
-  echo
+  for d in "${DIRS[@]}"; do
+    echo "## TREE (${d}/ at ${commit})"
+    echo '```'
+    git ls-tree -r --name-only "$commit" -- "$d" | sed 's/^/ - /' || true
+    echo '```'
+    echo
+  done
 }
 
-embed_root_files_baseline() {
+record_blob_meta_at_commit() {
   local commit="$1"
+  local path="$2"
 
-  echo "## BASELINE CONTENT (PINNED ROOT FILES at ${commit})"
+  local size sha
+  size="$(git cat-file -s "${commit}:${path}" 2>/dev/null || echo 0)"
+  sha="$(git show "${commit}:${path}" 2>/dev/null | sha256sum | awk '{print $1}')"
+
+  echo "## FILE: ${path} @ ${commit}"
+  echo "> Not embedded (binary/large)."
+  echo "> size_bytes: ${size}"
+  echo "> sha256: ${sha}"
+}
+
+embed_text_blob_at_commit() {
+  local commit="$1"
+  local path="$2"
+
+  local size
+  size="$(git cat-file -s "${commit}:${path}" 2>/dev/null || echo 0)"
+
+  if [[ "$size" -gt "$MAX_BYTES" ]]; then
+    record_blob_meta_at_commit "$commit" "$path"
+    return 0
+  fi
+
+  local tmp
+  tmp="$(mktemp)"
+  git show "${commit}:${path}" >"$tmp" 2>/dev/null || {
+    rm -f "$tmp"
+    echo "## FILE: ${path} @ ${commit}"
+    echo "> Skipped: could not read."
+    return 0
+  }
+
+  # If it's UTF-16/32 text, convert so we can embed it.
+  if ! maybe_convert_to_utf8_inplace "$tmp"; then
+    rm -f "$tmp"
+    record_blob_meta_at_commit "$commit" "$path"
+    return 0
+  fi
+
+  echo "## FILE: ${path} @ ${commit}"
+  echo '```'
+  cat "$tmp"
+  echo '```'
+  rm -f "$tmp"
+}
+
+embed_worktree_file() {
+  local path="$1"
+
+  if is_denied_path "$path"; then
+    echo "## FILE: ${path} @ WORKTREE"
+    echo "> Skipped: denied by policy."
+    return 0
+  fi
+
+  [[ -e "$path" ]] || { echo "## FILE: ${path} @ WORKTREE"; echo "> Skipped: missing."; return 0; }
+
+  local size
+  size="$(wc -c <"$path" | tr -d ' ')"
+
+  if [[ "$size" -gt "$MAX_BYTES" ]] || is_binary_ext "$path"; then
+    local sha
+    sha="$(sha256sum "$path" | awk '{print $1}')"
+    echo "## FILE: ${path} @ WORKTREE"
+    echo "> Not embedded (binary/large)."
+    echo "> size_bytes: ${size}"
+    echo "> sha256: ${sha}"
+    return 0
+  fi
+
+  local tmp
+  tmp="$(mktemp)"
+  cat "$path" >"$tmp" 2>/dev/null || { rm -f "$tmp"; echo "## FILE: ${path} @ WORKTREE"; echo "> Skipped: could not read."; return 0; }
+
+  if ! maybe_convert_to_utf8_inplace "$tmp"; then
+    rm -f "$tmp"
+    local sha
+    sha="$(sha256sum "$path" | awk '{print $1}')"
+    echo "## FILE: ${path} @ WORKTREE"
+    echo "> Not embedded (binary/large)."
+    echo "> size_bytes: ${size}"
+    echo "> sha256: ${sha}"
+    return 0
+  fi
+
+  echo "## FILE: ${path} @ WORKTREE"
+  echo '```'
+  cat "$tmp"
+  echo '```'
+  rm -f "$tmp"
+}
+
+baseline_root() {
+  local commit="$1"
+  echo "## BASELINE (ROOT FILES)"
   echo
 
-  local f size
-  for f in "${ROOT_PINNED_FILES[@]}"; do
-    if is_denied_path "$f"; then
-      echo "## FILE: ${f} @ ${commit}"
-      echo "> Skipped: denied by pattern."
-      echo
-      continue
-    fi
+  for f in "${ROOT_FILES[@]}"; do
+    is_denied_path "$f" && continue
 
     if git cat-file -e "${commit}:${f}" 2>/dev/null; then
-      size="$(git cat-file -s "${commit}:${f}" 2>/dev/null || echo 0)"
-      safe_embed_text "${f} @ ${commit}" "$size" git show "${commit}:${f}"
+      if is_binary_ext "$f"; then
+        record_blob_meta_at_commit "$commit" "$f"
+      else
+        embed_text_blob_at_commit "$commit" "$f"
+      fi
       echo
     else
       echo "## FILE: ${f} @ ${commit}"
@@ -221,103 +337,52 @@ embed_root_files_baseline() {
       echo
     fi
   done
-
-  if [[ "$INCLUDE_ROOT_ALL" != "true" ]]; then
-    return 0
-  fi
-
-  echo "## BASELINE CONTENT (ALL TRACKED ROOT FILES at ${commit})"
-  echo
-
-  local root_files=()
-  mapfile -t root_files < <(list_root_files_at_commit "$commit")
-
-  for f in "${root_files[@]}"; do
-    # Skip directories (root listing includes trees and blobs)
-    local t
-    t="$(git cat-file -t "${commit}:${f}" 2>/dev/null || true)"
-    [[ "$t" == "blob" ]] || continue
-
-    # Skip pinned duplicates (already included above)
-    for pinned in "${ROOT_PINNED_FILES[@]}"; do
-      [[ "$f" == "$pinned" ]] && continue 2
-    done
-
-    if is_denied_path "$f"; then
-      echo "## FILE: ${f} @ ${commit}"
-      echo "> Skipped: denied by pattern."
-      echo
-      continue
-    fi
-
-    local size
-    size="$(git cat-file -s "${commit}:${f}" 2>/dev/null || echo 0)"
-    safe_embed_text "${f} @ ${commit}" "$size" git show "${commit}:${f}"
-    echo
-  done
 }
 
-embed_dir_baseline() {
+baseline_dirs() {
   local commit="$1"
-  echo "## BASELINE CONTENT (${REL_TARGET_DIR}/ at ${commit})"
-  echo
 
-  local files=()
-  mapfile -t files < <(list_dir_files_at_commit "$commit")
-
-  if [[ "${#files[@]}" -eq 0 ]]; then
-    echo "> No files found under ${REL_TARGET_DIR}/ at ${commit}"
+  for d in "${DIRS[@]}"; do
+    echo "## BASELINE (${d}/)"
     echo
-    return 0
-  fi
 
-  local f size
-  for f in "${files[@]}"; do
-    if is_denied_path "$f"; then
-      echo "## FILE: ${f} @ ${commit}"
-      echo "> Skipped: denied by pattern."
+    mapfile -t files < <(git ls-tree -r --name-only "$commit" -- "$d" || true)
+    for f in "${files[@]}"; do
+      is_denied_path "$f" && continue
+
+      if is_binary_ext "$f"; then
+        record_blob_meta_at_commit "$commit" "$f"
+      else
+        embed_text_blob_at_commit "$commit" "$f"
+      fi
       echo
-      continue
-    fi
-    size="$(git cat-file -s "${commit}:${f}" 2>/dev/null || echo 0)"
-    safe_embed_text "${f} @ ${commit}" "$size" git show "${commit}:${f}"
-    echo
+    done
   done
 }
 
 write_baseline() {
   write_header
-  if [[ "$EMIT_TREE" == "true" ]]; then
-    emit_tree "$BASE_COMMIT"
-  fi
-
-  embed_root_files_baseline "$BASE_COMMIT"
-  embed_dir_baseline "$BASE_COMMIT"
+  [[ "$EMIT_TREE" == "true" ]] && emit_tree "$BASE_COMMIT"
+  baseline_root "$BASE_COMMIT"
+  baseline_dirs "$BASE_COMMIT"
 }
 
 write_changes() {
   write_header
 
-  # Build pathspec: target dir + pinned root files + (optionally) all root files
-  local pathspec=( "$REL_TARGET_DIR" )
-  pathspec+=( "${ROOT_PINNED_FILES[@]}" )
+  local pathspec=()
+  for d in "${DIRS[@]}"; do pathspec+=( "$d" ); done
+  pathspec+=( "${ROOT_FILES[@]}" )
 
-  if [[ "$INCLUDE_ROOT_ALL" == "true" ]]; then
-    # Current tracked root files (non-recursive)
-    mapfile -t _root_now < <(git ls-files --max-depth 1 || true)
-    for f in "${_root_now[@]}"; do
-      pathspec+=( "$f" )
-    done
-  fi
-
+  # Worktree-inclusive diff (includes uncommitted edits)
   local status patch
-  status="$(git diff --name-status "${BASE_COMMIT}..HEAD" -- "${pathspec[@]}" || true)"
-  patch="$(git diff "${BASE_COMMIT}..HEAD" -- "${pathspec[@]}" || true)"
+  status="$(git diff --name-status "${BASE_COMMIT}" -- "${pathspec[@]}" 2>/dev/null || true)"
+  patch="$(git diff "${BASE_COMMIT}" -- "${pathspec[@]}" 2>/dev/null || true)"
 
-  echo "## CHANGE SUMMARY (since ${BASE_COMMIT})"
+  echo "## CHANGE SUMMARY (since ${BASE_COMMIT}, includes worktree)"
   echo
   if [[ -z "$status" ]]; then
-    echo "> No changes detected in scope since ${BASE_COMMIT}"
+    echo "> No changes detected in scope."
     echo
   else
     echo '```'
@@ -326,7 +391,7 @@ write_changes() {
     echo
   fi
 
-  echo "## PATCH (since ${BASE_COMMIT})"
+  echo "## PATCH (since ${BASE_COMMIT}, includes worktree)"
   echo
   if [[ -z "$patch" ]]; then
     echo "> (empty)"
@@ -338,7 +403,7 @@ write_changes() {
     echo
   fi
 
-  echo "## CURRENT CONTENT OF CHANGED FILES"
+  echo "## CURRENT CONTENT OF CHANGED FILES (WORKTREE)"
   echo
 
   local changed_files=()
@@ -347,18 +412,18 @@ write_changes() {
       [[ -n "${st:-}" ]] || continue
 
       if [[ "$st" =~ ^R ]]; then
-        [[ -n "${p2:-}" ]] && changed_files+=("$p2")
+        [[ -n "${p2:-}" ]] && changed_files+=( "$p2" )
         continue
       fi
 
       if [[ "$st" == "D" ]]; then
         echo "## FILE: ${p1} @ WORKTREE"
-        echo "> Deleted in working tree."
+        echo "> Deleted in worktree."
         echo
         continue
       fi
 
-      [[ -n "${p1:-}" ]] && changed_files+=("$p1")
+      [[ -n "${p1:-}" ]] && changed_files+=( "$p1" )
     done <<<"$status"
   fi
 
@@ -368,41 +433,10 @@ write_changes() {
     return 0
   fi
 
-  local f bytes
   for f in "${changed_files[@]}"; do
-    if is_denied_path "$f"; then
-      echo "## FILE: ${f} @ WORKTREE"
-      echo "> Skipped: denied by pattern."
-      echo
-      continue
-    fi
-
-    if [[ ! -f "$f" ]]; then
-      echo "## FILE: ${f} @ WORKTREE"
-      echo "> Skipped: file not present in working tree."
-      echo
-      continue
-    fi
-
-    bytes="$(wc -c <"$f" | tr -d ' ')"
-    safe_embed_text "${f} @ WORKTREE" "$bytes" cat "$f"
+    embed_worktree_file "$f"
     echo
   done
-}
-
-write_bashrc() {
-  local bashrc="${HOME}/.bashrc"
-  echo "## ~/.bashrc"
-  echo
-  if [[ ! -f "$bashrc" ]]; then
-    echo "> Skipped: ${bashrc} not found."
-    echo
-    return 0
-  fi
-  local bytes
-  bytes="$(wc -c <"$bashrc" | tr -d ' ')"
-  safe_embed_text "~/.bashrc @ WORKTREE" "$bytes" cat "$bashrc"
-  echo
 }
 
 tmp_out="$(mktemp)"
@@ -411,10 +445,6 @@ tmp_out="$(mktemp)"
     write_baseline
   else
     write_changes
-  fi
-
-  if [[ "$INCLUDE_BASHRC" == "true" ]]; then
-    write_bashrc
   fi
 } >"$tmp_out"
 
