@@ -8,6 +8,9 @@
 *.pem
 *.p12
 *.pfx
+pytest
+*.ini
+
 
 # ---------------------------
 # Python bytecode / caches

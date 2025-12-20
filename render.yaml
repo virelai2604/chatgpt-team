@@ -43,7 +43,7 @@ services:
       - key: OPENAI_REALTIME_BETA
         value: realtime=v1
       - key: RELAY_AUTH_ENABLED
-        value: "false"
+        value: false
       
 
       # -------- Default models --------
@@ -66,7 +66,7 @@ services:
 
       # -------- Streaming / orchestration --------
       - key: ENABLE_STREAM
-        value: "true"
+        value: true
       - key: CHAIN_WAIT_MODE
         value: sequential
 
@@ -90,7 +90,7 @@ services:
       - key: LOG_FORMAT
         value: json
       - key: LOG_COLOR
-        value: "false"
+        value: false
 
       # -------- Auth / secrets for relay usage --------
       - key: RELAY_KEY
