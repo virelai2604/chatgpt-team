@@ -88,3 +88,6 @@ Downloads
 logs/
 .venv/
 venv/
+chatgpt_sync.md
+chatgpt_baseline.md
+chatgpt_changes.md
