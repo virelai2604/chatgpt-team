@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# chatgpt_sync.sh (v4.1 - explicit allowlist + UTF-16/UTF-32 text conversion)
+# chatgpt_sync.sh (v4.2 - explicit allowlist + correct NUL detection + UTF-16/UTF-32 BOM conversion)
+#
+# Fix in v4.2:
+# - Bash cannot represent a literal NUL byte in strings, so patterns like $'\x00' can behave unexpectedly.
+# - We now detect NUL bytes using python3 byte scanning, which is reliable.
 #
 # Purpose:
 #   Generate a Markdown artifact that ChatGPT can ingest to get FULL current code/config text
@@ -23,22 +27,9 @@ set -euo pipefail
 #   changes   -> shows diff vs base commit AND embeds CURRENT (worktree) content of changed files
 #                (includes uncommitted edits)
 #
-# NOTE ABOUT "Not embedded (binary/large)":
-#   This script treats any file containing NUL bytes as "binary".
-#   Some Windows editors may save text files as UTF-16/UTF-32, which contains NUL bytes.
-#   v4.1 attempts to detect UTF-16/UTF-32 BOM and convert to UTF-8 before embedding.
-#
 # Usage:
 #   ./chatgpt_sync.sh baseline --base origin/main --out chatgpt_baseline.md --max-bytes 2000000
 #   ./chatgpt_sync.sh changes  --base origin/main --out chatgpt_changes.md  --max-bytes 2000000
-#
-# Optional:
-#   --dir <path>   repeatable; if specified, replaces default dirs
-#   --root <file>  repeatable; if specified, replaces default root files
-#   --no-tree      omit file trees
-#
-# Notes:
-#   - Binary-ish files (pdf/db/images/pyc/etc.) are not embedded; we record size + sha256 instead.
 
 MODE="${1:-}"
 shift || true
@@ -48,7 +39,6 @@ OUT_FILE="chatgpt_sync.md"
 MAX_BYTES="2000000"
 EMIT_TREE="true"
 
-# Defaults (override by passing --dir/--root)
 DIRS_DEFAULT=( "app" "tests" "static" "schemas" )
 ROOT_FILES_DEFAULT=( "pyproject.toml" "project-tree.md" "openai_models_2025-11.csv" "requirements.txt" "render.yaml" "pytest.ini" "chatgpt_sync.sh" )
 
@@ -96,6 +86,7 @@ done
 [[ "$MODE" == "baseline" || "$MODE" == "changes" ]] || { usage; die "First arg must be baseline or changes"; }
 command -v git >/dev/null 2>&1 || die "git is required"
 command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required"
+command -v python3 >/dev/null 2>&1 || die "python3 is required (for safe NUL detection)"
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "Not in a git repo"
 cd "$REPO_ROOT"
@@ -107,33 +98,24 @@ BASE_COMMIT="$(git merge-base HEAD "$BASE_REV" 2>/dev/null || true)"
 
 NOW_ISO="$(date -Iseconds)"
 
-# If user didn't pass --dir, use defaults
 if [[ "${#DIRS[@]}" -eq 0 ]]; then
   DIRS=( "${DIRS_DEFAULT[@]}" )
 fi
-
-# If user didn't pass --root, use defaults
 if [[ "${#ROOT_FILES[@]}" -eq 0 ]]; then
   ROOT_FILES=( "${ROOT_FILES_DEFAULT[@]}" )
 fi
 
-# ---- denylist: never embed these paths ----
 is_denied_path() {
   local p="$1"
   case "$p" in
-    # secrets/env/keys
     .env|.env.*|*.env|*.key|*.pem|*.p12|*.pfx|*.crt|*.cer|*.der|*.jks|*.kdbx) return 0 ;;
-    # venv/caches/logs
     .venv/*|venv/*|__pycache__/*|*.pyc|*.pyo|*.log|.pytest_cache/*|.mypy_cache/*|.ruff_cache/*) return 0 ;;
-    # runtime state
     data/*|data) return 0 ;;
-    # generated artifacts (avoid recursion)
     chatgpt_sync.md|chatgpt_baseline.md|chatgpt_changes.md) return 0 ;;
   esac
   return 1
 }
 
-# ---- binary-ish extensions: record hash + size, but do not embed content ----
 is_binary_ext() {
   local p="$1"
   case "$p" in
@@ -142,19 +124,28 @@ is_binary_ext() {
   return 1
 }
 
-is_binary_stream() { LC_ALL=C grep -q $'\x00' && return 0 || return 1; }
+# Returns 0 if file contains any NUL bytes, else 1.
+has_nul_bytes() {
+  local f="$1"
+  python3 - "$f" <<'PY'
+import sys
+p = sys.argv[1]
+with open(p, "rb") as fp:
+    for chunk in iter(lambda: fp.read(1024 * 1024), b""):
+        if b"\x00" in chunk:
+            sys.exit(0)
+sys.exit(1)
+PY
+}
 
-# Try to convert UTF-16/UTF-32-with-BOM to UTF-8 so the content can be embedded.
-# Returns 0 if file is now safe-to-embed as text (no NUL bytes), else returns 1.
 maybe_convert_to_utf8_inplace() {
   local f="$1"
 
-  # If already looks like normal text, keep it.
-  if ! is_binary_stream <"$f"; then
+  # If no NUL bytes, treat as normal text.
+  if ! has_nul_bytes "$f"; then
     return 0
   fi
 
-  # No iconv? can't convert.
   command -v iconv >/dev/null 2>&1 || return 1
 
   # Read BOM (first 4 bytes) to decide encoding.
@@ -167,10 +158,7 @@ maybe_convert_to_utf8_inplace() {
     feff*) enc="UTF-16BE" ;;
     0000feff) enc="UTF-32BE" ;;
     fffe0000) enc="UTF-32LE" ;;
-    *)
-      # Unknown encoding with NULs: do not guess.
-      return 1
-      ;;
+    *) return 1 ;;
   esac
 
   local tmp
@@ -183,7 +171,7 @@ maybe_convert_to_utf8_inplace() {
   fi
 
   # After conversion, ensure no NULs remain.
-  if is_binary_stream <"$f"; then
+  if has_nul_bytes "$f"; then
     return 1
   fi
   return 0
@@ -256,7 +244,6 @@ embed_text_blob_at_commit() {
     return 0
   }
 
-  # If it's UTF-16/32 text, convert so we can embed it.
   if ! maybe_convert_to_utf8_inplace "$tmp"; then
     rm -f "$tmp"
     record_blob_meta_at_commit "$commit" "$path"
@@ -374,7 +361,6 @@ write_changes() {
   for d in "${DIRS[@]}"; do pathspec+=( "$d" ); done
   pathspec+=( "${ROOT_FILES[@]}" )
 
-  # Worktree-inclusive diff (includes uncommitted edits)
   local status patch
   status="$(git diff --name-status "${BASE_COMMIT}" -- "${pathspec[@]}" 2>/dev/null || true)"
   patch="$(git diff "${BASE_COMMIT}" -- "${pathspec[@]}" 2>/dev/null || true)"
