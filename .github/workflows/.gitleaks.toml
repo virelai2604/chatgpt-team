@@ -1,0 +1,23 @@
+# Gitleaks configuration
+# - Uses the default ruleset
+# - Adds an allowlist for known placeholder strings in docs/examples
+#
+# Config precedence notes (CLI + action):
+# - You can set --config, or GITLEAKS_CONFIG, or place a .gitleaks.toml at repo root.
+# - This file is explicitly referenced in the workflow via GITLEAKS_CONFIG.
+#
+# Keep allowlists narrow: exclude only intentional placeholders, not real secrets.
+
+[allowlist]
+description = "Allowlist documented placeholders (do NOT allow real keys)"
+paths = [
+  # Example docs often contain OPENAI_API_KEY=sk-... placeholders
+  "docs/README.md",
+  ".env.example.env"
+]
+
+# Allowlist placeholder patterns ONLY (e.g., sk-... literally with dots)
+# This does not match real keys like sk-proj-... or long base64-ish tokens.
+regexes = [
+  "sk-\\.\\.\\."
+]

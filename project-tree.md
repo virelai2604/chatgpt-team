@@ -5,7 +5,8 @@
   📄 AGENTS.md
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
   📄 __init__.py
-  📄 chatgpt_sync.md
+  📄 chatgpt_baseline.md
+  📄 chatgpt_changes.md
   📄 chatgpt_sync.sh
   📄 generate_tree.py
   📄 openai_models_2025-11.csv

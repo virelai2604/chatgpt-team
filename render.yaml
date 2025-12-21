@@ -2,7 +2,7 @@
 # Render Service Manifest
 # ChatGPT Team Relay — Ground Truth API v1.8
 # SDK Targets:
-#   - openai-python 2.9.x
+#   - openai-python 2.11.x
 #   - openai-node 6.9.x
 # ==============================================================
 
@@ -14,6 +14,8 @@ services:
     branch: main
     region: singapore
     plan: starter
+
+    # If you deploy via GitHub Actions deploy hook, keep this false.
     autoDeploy: false
 
     buildCommand: |
@@ -23,7 +25,6 @@ services:
     startCommand: |
       uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
-    # Use the relay health endpoint for Render's health checks
     healthCheckPath: /v1/health
 
     envVars:
@@ -34,17 +35,24 @@ services:
         value: production
 
       # -------- OpenAI upstream config --------
+      # Either of these is fine for your codebase; it normalizes /v1 away.
       - key: OPENAI_API_BASE
-        value: https://api.openai.com
+        value: https://api.openai.com/v1
+
       - key: OPENAI_API_KEY
-        sync: false          # set real key in Render UI
+        sync: false
+
       - key: OPENAI_ASSISTANTS_BETA
         value: assistants=v2
       - key: OPENAI_REALTIME_BETA
         value: realtime=v1
+
+      # -------- Auth (recommended ON for production) --------
       - key: RELAY_AUTH_ENABLED
-        value: false
-      
+        value: true
+
+      - key: RELAY_KEY
+        sync: false
 
       # -------- Default models --------
       - key: DEFAULT_MODEL
@@ -92,19 +100,8 @@ services:
       - key: LOG_COLOR
         value: false
 
-      # -------- Auth / secrets for relay usage --------
-      - key: RELAY_KEY
-        sync: false          # set in Render UI
+      # -------- Optional (Actions) --------
       - key: CHATGPT_ACTIONS_SECRET
-        sync: false          # set in Render UI if you use Actions
+        sync: false
 
 version: "1"
-
-# ==============================================================
-# Notes:
-# - OPENAI_API_KEY / RELAY_KEY / CHATGPT_ACTIONS_SECRET values live only
-#   in the Render dashboard (sync:false). The Blueprint will not overwrite them.
-# - Health checks hit /v1/health on the relay.
-# - The relay exposes OpenAI-compatible endpoints (responses, files,
-#   embeddings, vector stores, realtime, images, videos, tools).
-# ==============================================================

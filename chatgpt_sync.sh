@@ -1,33 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# chatgpt_sync.sh (v4.2 - explicit allowlist + correct NUL detection + UTF-16/UTF-32 BOM conversion)
-#
-# Fix in v4.2:
-# - Bash cannot represent a literal NUL byte in strings, so patterns like $'\x00' can behave unexpectedly.
-# - We now detect NUL bytes using python3 byte scanning, which is reliable.
+# chatgpt_sync.sh (v4.3 - explicit allowlist + reliable NUL detection + UTF-16/UTF-32 BOM conversion)
 #
 # Purpose:
-#   Generate a Markdown artifact that ChatGPT can ingest to get FULL current code/config text
+#   Generate Markdown artifacts that ChatGPT can ingest to get FULL current code/config text
 #   for your repo, while avoiding secrets and noisy/generated artifacts.
 #
-# Default INCLUDE scope (customizable via flags):
-#   - Root files (text): pyproject.toml, project-tree.md, openai_models_2025-11.csv,
-#                        requirements.txt, render.yaml, pytest.ini, chatgpt_sync.sh
+# DEFAULT INCLUDED SCOPE (matches your requirement):
+#   - Root files: pyproject.toml, project-tree.md
 #   - Directories (recursive): app/, tests/, static/, schemas/
 #
 # Always EXCLUDED:
 #   - Secrets: .env, .env.*, *.env, keys/certs
-#   - Caches/artifacts: __pycache__/, *.pyc, venvs, logs
+#   - Caches/artifacts: __pycache__/, *.pyc, venvs, logs, pytest caches, etc.
 #   - Runtime state: data/ (and *.db / *.sqlite*)
 #   - Generated outputs: chatgpt_sync.md, chatgpt_baseline.md, chatgpt_changes.md
 #
 # Modes:
-#   baseline  -> embeds baseline content from a base commit (merge-base of HEAD and --base ref)
+#   baseline  -> embeds BASELINE content from a base commit (merge-base of HEAD and --base ref)
 #   changes   -> shows diff vs base commit AND embeds CURRENT (worktree) content of changed files
 #                (includes uncommitted edits)
 #
-# Usage:
+# Examples:
 #   ./chatgpt_sync.sh baseline --base origin/main --out chatgpt_baseline.md --max-bytes 2000000
 #   ./chatgpt_sync.sh changes  --base origin/main --out chatgpt_changes.md  --max-bytes 2000000
 
@@ -39,8 +34,9 @@ OUT_FILE="chatgpt_sync.md"
 MAX_BYTES="2000000"
 EMIT_TREE="true"
 
+# Defaults: ONLY what you said matters
 DIRS_DEFAULT=( "app" "tests" "static" "schemas" )
-ROOT_FILES_DEFAULT=( "pyproject.toml" "project-tree.md" "openai_models_2025-11.csv" "requirements.txt" "render.yaml" "pytest.ini" "chatgpt_sync.sh" )
+ROOT_FILES_DEFAULT=( "pyproject.toml" "project-tree.md" "chatgpt_sync.sh" "AGENTS.md" )
 
 DIRS=()
 ROOT_FILES=()
@@ -91,6 +87,7 @@ command -v python3 >/dev/null 2>&1 || die "python3 is required (for safe NUL det
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "Not in a git repo"
 cd "$REPO_ROOT"
 
+# Best-effort fetch so origin/main resolves
 git fetch -q origin >/dev/null 2>&1 || true
 
 BASE_COMMIT="$(git merge-base HEAD "$BASE_REV" 2>/dev/null || true)"
