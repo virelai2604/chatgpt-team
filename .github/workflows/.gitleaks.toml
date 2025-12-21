@@ -3,18 +3,14 @@ title = "chatgpt-team-relay gitleaks config"
 [extend]
 useDefault = true
 
+# Allowlist ONLY documented placeholders (never real secrets).
+# This prevents false positives in docs like "sk-..." while still catching real keys.
 [allowlist]
-description = "Allowlist known non-secrets (docs/examples) and common false positives"
-paths = [
-  '''^docs/README\.md$''',
-  '''^\.env\.example\.env$''',
-  '''^chatgpt_baseline\.md$''',
-  '''^chatgpt_changes\.md$'''
-]
-
-# Allow placeholders like "sk-..." or "sk-proj-..." shown in documentation
-regexTarget = "line"
+description = "Allow placeholder tokens like sk-... only"
+regexTarget = "match"
 regexes = [
+  '''\bsk-\.\.\.\b''',
   '''\bsk-[A-Za-z0-9_-]*\.\.\.\b''',
-  '''\bOPENAI_API_KEY\s*=\s*sk-[A-Za-z0-9_-]*\.\.\.\b'''
+  '''\bOPENAI_API_KEY\s*=\s*sk-\.\.\.\b''',
+  '''\bOPENAI_API_KEY\s*=\s*sk-[A-Za-z0-9_-]*\.\.\.\b''',
 ]
