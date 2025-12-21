@@ -2,6 +2,7 @@
   📄 .env.example.env
   📄 .gitattributes
   📄 .gitignore
+  📄 .gitleaks.toml
   📄 AGENTS.md
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
   📄 __init__.py
