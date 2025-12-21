@@ -1,0 +1,710 @@
+[
+  {
+    "Values": [
+      "Audio / Speech"
+    ],
+    "Count": 9,
+    "Group": [
+      {
+        "id": "tts-1-hd",
+        "owned_by": "system",
+        "created": "2023-11-03T21:13:35",
+        "category": "Audio / Speech"
+      },
+      {
+        "id": "tts-1-1106",
+        "owned_by": "system",
+        "created": "2023-11-03T23:14:01",
+        "category": "Audio / Speech"
+      },
+      {
+        "id": "tts-1-hd-1106",
+        "owned_by": "system",
+        "created": "2023-11-03T23:18:53",
+        "category": "Audio / Speech"
+      },
+      {
+        "id": "gpt-audio-2025-08-28",
+        "owned_by": "system",
+        "created": "2025-08-27T00:55:46",
+        "category": "Audio / Speech"
+      },
+      {
+        "id": "gpt-audio",
+        "owned_by": "system",
+        "created": "2025-08-28T00:00:49",
+        "category": "Audio / Speech"
+      },
+      {
+        "id": "gpt-audio-mini",
+        "owned_by": "system",
+        "created": "2025-10-03T17:20:27",
+        "category": "Audio / Speech"
+      },
+      {
+        "id": "gpt-audio-mini-2025-10-06",
+        "owned_by": "system",
+        "created": "2025-10-03T17:22:17",
+        "category": "Audio / Speech"
+      },
+      {
+        "id": "tts-1",
+        "owned_by": "openai-internal",
+        "created": "2023-04-19T21:49:11",
+        "category": "Audio / Speech"
+      },
+      {
+        "id": "whisper-1",
+        "owned_by": "openai-internal",
+        "created": "2023-02-27T21:13:04",
+        "category": "Audio / Speech"
+      }
+    ],
+    "Name": "Audio / Speech"
+  },
+  {
+    "Values": [
+      "Embeddings"
+    ],
+    "Count": 3,
+    "Group": [
+      {
+        "id": "text-embedding-3-small",
+        "owned_by": "system",
+        "created": "2024-01-22T18:43:17",
+        "category": "Embeddings"
+      },
+      {
+        "id": "text-embedding-3-large",
+        "owned_by": "system",
+        "created": "2024-01-22T19:53:00",
+        "category": "Embeddings"
+      },
+      {
+        "id": "text-embedding-ada-002",
+        "owned_by": "openai-internal",
+        "created": "2022-12-16T19:01:39",
+        "category": "Embeddings"
+      }
+    ],
+    "Name": "Embeddings"
+  },
+  {
+    "Values": [
+      "GPT-4 / 4o Family"
+    ],
+    "Count": 40,
+    "Group": [
+      {
+        "id": "gpt-4-0613",
+        "owned_by": "openai",
+        "created": "2023-06-12T16:54:56",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4",
+        "owned_by": "openai",
+        "created": "2023-06-27T16:13:31",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4-1106-preview",
+        "owned_by": "system",
+        "created": "2023-11-02T20:33:26",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4-0125-preview",
+        "owned_by": "system",
+        "created": "2024-01-23T19:20:12",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4-turbo-preview",
+        "owned_by": "system",
+        "created": "2024-01-23T19:22:57",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4-turbo",
+        "owned_by": "system",
+        "created": "2024-04-05T23:57:21",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4-turbo-2024-04-09",
+        "owned_by": "system",
+        "created": "2024-04-08T18:41:17",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o",
+        "owned_by": "system",
+        "created": "2024-05-10T18:50:49",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-2024-05-13",
+        "owned_by": "system",
+        "created": "2024-05-10T19:08:52",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-mini-2024-07-18",
+        "owned_by": "system",
+        "created": "2024-07-16T23:31:57",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-mini",
+        "owned_by": "system",
+        "created": "2024-07-16T23:32:21",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-2024-08-06",
+        "owned_by": "system",
+        "created": "2024-08-04T23:38:39",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "chatgpt-4o-latest",
+        "owned_by": "system",
+        "created": "2024-08-13T02:12:11",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-realtime-preview-2024-10-01",
+        "owned_by": "system",
+        "created": "2024-09-23T22:49:26",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-audio-preview-2024-10-01",
+        "owned_by": "system",
+        "created": "2024-09-26T22:17:22",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-audio-preview",
+        "owned_by": "system",
+        "created": "2024-09-27T18:07:23",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-realtime-preview",
+        "owned_by": "system",
+        "created": "2024-09-30T01:33:18",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-realtime-preview-2024-12-17",
+        "owned_by": "system",
+        "created": "2024-12-11T19:30:30",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-audio-preview-2024-12-17",
+        "owned_by": "system",
+        "created": "2024-12-12T20:10:39",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-mini-realtime-preview-2024-12-17",
+        "owned_by": "system",
+        "created": "2024-12-13T17:56:41",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-mini-audio-preview-2024-12-17",
+        "owned_by": "system",
+        "created": "2024-12-13T18:52:00",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-mini-realtime-preview",
+        "owned_by": "system",
+        "created": "2024-12-16T22:16:20",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-mini-audio-preview",
+        "owned_by": "system",
+        "created": "2024-12-16T22:17:04",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-2024-11-20",
+        "owned_by": "system",
+        "created": "2025-02-12T03:39:03",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-search-preview-2025-03-11",
+        "owned_by": "system",
+        "created": "2025-03-07T22:56:10",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-search-preview",
+        "owned_by": "system",
+        "created": "2025-03-07T23:05:20",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-mini-search-preview-2025-03-11",
+        "owned_by": "system",
+        "created": "2025-03-07T23:40:58",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-mini-search-preview",
+        "owned_by": "system",
+        "created": "2025-03-07T23:46:01",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-transcribe",
+        "owned_by": "system",
+        "created": "2025-03-15T19:54:23",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-mini-transcribe",
+        "owned_by": "system",
+        "created": "2025-03-15T19:56:36",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-mini-tts",
+        "owned_by": "system",
+        "created": "2025-03-19T17:05:59",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4.1-2025-04-14",
+        "owned_by": "system",
+        "created": "2025-04-10T20:09:06",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4.1",
+        "owned_by": "system",
+        "created": "2025-04-10T20:22:22",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4.1-mini-2025-04-14",
+        "owned_by": "system",
+        "created": "2025-04-10T20:39:07",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4.1-mini",
+        "owned_by": "system",
+        "created": "2025-04-10T20:49:33",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4.1-nano-2025-04-14",
+        "owned_by": "system",
+        "created": "2025-04-10T21:37:05",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4.1-nano",
+        "owned_by": "system",
+        "created": "2025-04-10T21:48:27",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-realtime-preview-2025-06-03",
+        "owned_by": "system",
+        "created": "2025-06-02T23:43:58",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-audio-preview-2025-06-03",
+        "owned_by": "system",
+        "created": "2025-06-02T23:54:58",
+        "category": "GPT-4 / 4o Family"
+      },
+      {
+        "id": "gpt-4o-transcribe-diarize",
+        "owned_by": "system",
+        "created": "2025-06-24T21:01:27",
+        "category": "GPT-4 / 4o Family"
+      }
+    ],
+    "Name": "GPT-4 / 4o Family"
+  },
+  {
+    "Values": [
+      "GPT-5 Family"
+    ],
+    "Count": 12,
+    "Group": [
+      {
+        "id": "gpt-5-search-api-2025-10-14",
+        "owned_by": "system",
+        "created": "2025-10-09T21:06:00",
+        "category": "GPT-5 Family"
+      },
+      {
+        "id": "gpt-5-chat-latest",
+        "owned_by": "system",
+        "created": "2025-08-01T18:35:06",
+        "category": "GPT-5 Family"
+      },
+      {
+        "id": "gpt-5-2025-08-07",
+        "owned_by": "system",
+        "created": "2025-08-01T19:09:20",
+        "category": "GPT-5 Family"
+      },
+      {
+        "id": "gpt-5",
+        "owned_by": "system",
+        "created": "2025-08-05T20:29:37",
+        "category": "GPT-5 Family"
+      },
+      {
+        "id": "gpt-5-mini-2025-08-07",
+        "owned_by": "system",
+        "created": "2025-08-05T20:31:07",
+        "category": "GPT-5 Family"
+      },
+      {
+        "id": "gpt-5-mini",
+        "owned_by": "system",
+        "created": "2025-08-05T20:32:08",
+        "category": "GPT-5 Family"
+      },
+      {
+        "id": "gpt-5-nano-2025-08-07",
+        "owned_by": "system",
+        "created": "2025-08-05T20:38:23",
+        "category": "GPT-5 Family"
+      },
+      {
+        "id": "gpt-5-nano",
+        "owned_by": "system",
+        "created": "2025-08-05T20:39:44",
+        "category": "GPT-5 Family"
+      },
+      {
+        "id": "gpt-5-codex",
+        "owned_by": "system",
+        "created": "2025-09-10T18:10:18",
+        "category": "GPT-5 Family"
+      },
+      {
+        "id": "gpt-5-pro-2025-10-06",
+        "owned_by": "system",
+        "created": "2025-10-03T05:35:07",
+        "category": "GPT-5 Family"
+      },
+      {
+        "id": "gpt-5-pro",
+        "owned_by": "system",
+        "created": "2025-10-03T05:37:02",
+        "category": "GPT-5 Family"
+      },
+      {
+        "id": "gpt-5-search-api",
+        "owned_by": "system",
+        "created": "2025-10-03T18:03:49",
+        "category": "GPT-5 Family"
+      }
+    ],
+    "Name": "GPT-5 Family"
+  },
+  {
+    "Values": [
+      "Image Models"
+    ],
+    "Count": 4,
+    "Group": [
+      {
+        "id": "dall-e-3",
+        "owned_by": "system",
+        "created": "2023-10-31T20:46:29",
+        "category": "Image Models"
+      },
+      {
+        "id": "dall-e-2",
+        "owned_by": "system",
+        "created": "2023-11-01T00:22:57",
+        "category": "Image Models"
+      },
+      {
+        "id": "gpt-image-1",
+        "owned_by": "system",
+        "created": "2025-04-24T17:50:30",
+        "category": "Image Models"
+      },
+      {
+        "id": "gpt-image-1-mini",
+        "owned_by": "system",
+        "created": "2025-09-26T00:17:01",
+        "category": "Image Models"
+      }
+    ],
+    "Name": "Image Models"
+  },
+  {
+    "Values": [
+      "Legacy"
+    ],
+    "Count": 2,
+    "Group": [
+      {
+        "id": "davinci-002",
+        "owned_by": "system",
+        "created": "2023-08-21T16:11:41",
+        "category": "Legacy"
+      },
+      {
+        "id": "babbage-002",
+        "owned_by": "system",
+        "created": "2023-08-21T16:16:55",
+        "category": "Legacy"
+      }
+    ],
+    "Name": "Legacy"
+  },
+  {
+    "Values": [
+      "Moderation / Safety"
+    ],
+    "Count": 2,
+    "Group": [
+      {
+        "id": "omni-moderation-latest",
+        "owned_by": "system",
+        "created": "2024-11-15T16:47:45",
+        "category": "Moderation / Safety"
+      },
+      {
+        "id": "omni-moderation-2024-09-26",
+        "owned_by": "system",
+        "created": "2024-11-27T19:07:46",
+        "category": "Moderation / Safety"
+      }
+    ],
+    "Name": "Moderation / Safety"
+  },
+  {
+    "Values": [
+      "O-Series"
+    ],
+    "Count": 18,
+    "Group": [
+      {
+        "id": "o1-mini-2024-09-12",
+        "owned_by": "system",
+        "created": "2024-09-06T18:56:19",
+        "category": "O-Series"
+      },
+      {
+        "id": "o1-mini",
+        "owned_by": "system",
+        "created": "2024-09-06T18:56:48",
+        "category": "O-Series"
+      },
+      {
+        "id": "o1-2024-12-17",
+        "owned_by": "system",
+        "created": "2024-12-16T05:29:36",
+        "category": "O-Series"
+      },
+      {
+        "id": "o1",
+        "owned_by": "system",
+        "created": "2024-12-16T19:03:36",
+        "category": "O-Series"
+      },
+      {
+        "id": "o3-mini",
+        "owned_by": "system",
+        "created": "2025-01-17T20:39:43",
+        "category": "O-Series"
+      },
+      {
+        "id": "o3-mini-2025-01-31",
+        "owned_by": "system",
+        "created": "2025-01-27T20:36:40",
+        "category": "O-Series"
+      },
+      {
+        "id": "o1-pro-2025-03-19",
+        "owned_by": "system",
+        "created": "2025-03-17T22:45:04",
+        "category": "O-Series"
+      },
+      {
+        "id": "o1-pro",
+        "owned_by": "system",
+        "created": "2025-03-17T22:49:51",
+        "category": "O-Series"
+      },
+      {
+        "id": "o3-2025-04-16",
+        "owned_by": "system",
+        "created": "2025-04-08T17:28:21",
+        "category": "O-Series"
+      },
+      {
+        "id": "o4-mini-2025-04-16",
+        "owned_by": "system",
+        "created": "2025-04-08T17:31:46",
+        "category": "O-Series"
+      },
+      {
+        "id": "o3",
+        "owned_by": "system",
+        "created": "2025-04-09T19:01:48",
+        "category": "O-Series"
+      },
+      {
+        "id": "o4-mini",
+        "owned_by": "system",
+        "created": "2025-04-09T19:02:31",
+        "category": "O-Series"
+      },
+      {
+        "id": "o3-pro",
+        "owned_by": "system",
+        "created": "2025-05-28T23:35:49",
+        "category": "O-Series"
+      },
+      {
+        "id": "o3-pro-2025-06-10",
+        "owned_by": "system",
+        "created": "2025-06-05T23:39:21",
+        "category": "O-Series"
+      },
+      {
+        "id": "o4-mini-deep-research",
+        "owned_by": "system",
+        "created": "2025-06-11T23:44:45",
+        "category": "O-Series"
+      },
+      {
+        "id": "o3-deep-research",
+        "owned_by": "system",
+        "created": "2025-06-13T18:42:01",
+        "category": "O-Series"
+      },
+      {
+        "id": "o3-deep-research-2025-06-26",
+        "owned_by": "system",
+        "created": "2025-06-25T15:26:59",
+        "category": "O-Series"
+      },
+      {
+        "id": "o4-mini-deep-research-2025-06-26",
+        "owned_by": "system",
+        "created": "2025-06-25T15:42:01",
+        "category": "O-Series"
+      }
+    ],
+    "Name": "O-Series"
+  },
+  {
+    "Values": [
+      "Other"
+    ],
+    "Count": 11,
+    "Group": [
+      {
+        "id": "gpt-3.5-turbo",
+        "owned_by": "openai",
+        "created": "2023-02-28T18:56:42",
+        "category": "Other"
+      },
+      {
+        "id": "gpt-realtime-mini",
+        "owned_by": "system",
+        "created": "2025-10-03T18:45:33",
+        "category": "Other"
+      },
+      {
+        "id": "gpt-realtime-mini-2025-10-06",
+        "owned_by": "system",
+        "created": "2025-10-03T18:46:15",
+        "category": "Other"
+      },
+      {
+        "id": "gpt-3.5-turbo-instruct",
+        "owned_by": "system",
+        "created": "2023-08-24T18:23:47",
+        "category": "Other"
+      },
+      {
+        "id": "gpt-3.5-turbo-instruct-0914",
+        "owned_by": "system",
+        "created": "2023-09-07T21:34:32",
+        "category": "Other"
+      },
+      {
+        "id": "gpt-3.5-turbo-1106",
+        "owned_by": "system",
+        "created": "2023-11-02T21:15:48",
+        "category": "Other"
+      },
+      {
+        "id": "gpt-3.5-turbo-0125",
+        "owned_by": "system",
+        "created": "2024-01-23T22:19:18",
+        "category": "Other"
+      },
+      {
+        "id": "codex-mini-latest",
+        "owned_by": "system",
+        "created": "2025-05-08T03:00:57",
+        "category": "Other"
+      },
+      {
+        "id": "gpt-realtime",
+        "owned_by": "system",
+        "created": "2025-08-27T05:15:01",
+        "category": "Other"
+      },
+      {
+        "id": "gpt-realtime-2025-08-28",
+        "owned_by": "system",
+        "created": "2025-08-27T05:16:13",
+        "category": "Other"
+      },
+      {
+        "id": "gpt-3.5-turbo-16k",
+        "owned_by": "openai-internal",
+        "created": "2023-05-10T22:35:02",
+        "category": "Other"
+      }
+    ],
+    "Name": "Other"
+  },
+  {
+    "Values": [
+      "Video / Sora"
+    ],
+    "Count": 2,
+    "Group": [
+      {
+        "id": "sora-2",
+        "owned_by": "system",
+        "created": "2025-10-05T23:56:55",
+        "category": "Video / Sora"
+      },
+      {
+        "id": "sora-2-pro",
+        "owned_by": "system",
+        "created": "2025-10-05T23:57:43",
+        "category": "Video / Sora"
+      }
+    ],
+    "Name": "Video / Sora"
+  }
+]
