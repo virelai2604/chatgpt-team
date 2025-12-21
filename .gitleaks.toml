@@ -1,0 +1,23 @@
+title = "chatgpt-team-relay gitleaks"
+
+[extend]
+useDefault = true
+
+# Global allowlist: keep it tight.
+[allowlist]
+description = "Allow only documented placeholders, not real secrets."
+paths = [
+  '''^docs/README\.md$''',
+  '''^\.env\.example(\.env)?$''',
+  '''^\.env\.example\.env$'''
+]
+
+# Allow placeholder patterns like sk-... in docs only (not real keys).
+regexTarget = "line"
+regexes = [
+  '''\bsk-\.\.\.\b''',
+  '''\bOPENAI_API_KEY\s*=\s*sk-\.\.\.\b''',
+  '''\bRELAY_KEY\s*=\s*dummy\b''',
+  '''\bdummy-tests-api-key\b''',
+  '''\bdummy-tests-relay-key\b'''
+]
