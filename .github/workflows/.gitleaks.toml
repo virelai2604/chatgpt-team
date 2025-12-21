@@ -1,14 +1,20 @@
-# Keep this strict. Only allow intentional placeholders and only in specific files.
+title = "chatgpt-team-relay gitleaks config"
+
+[extend]
+useDefault = true
 
 [allowlist]
-description = "Allowlist documented placeholders (do NOT allow real secrets)"
+description = "Allowlist known non-secrets (docs/examples) and common false positives"
 paths = [
-  "docs/README.md",
-  ".env.example.env"
+  '''^docs/README\.md$''',
+  '''^\.env\.example\.env$''',
+  '''^chatgpt_baseline\.md$''',
+  '''^chatgpt_changes\.md$'''
 ]
 
-# Allow only the literal placeholder "sk-..." as seen in docs.
-# This does NOT allow real keys like sk-proj-... or long tokens.
+# Allow placeholders like "sk-..." or "sk-proj-..." shown in documentation
+regexTarget = "line"
 regexes = [
-  "sk-\\.\\.\\."
+  '''\bsk-[A-Za-z0-9_-]*\.\.\.\b''',
+  '''\bOPENAI_API_KEY\s*=\s*sk-[A-Za-z0-9_-]*\.\.\.\b'''
 ]
