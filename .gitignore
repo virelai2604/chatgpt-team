@@ -46,3 +46,6 @@ data/
 *.db
 *.sqlite
 *.sqlite3
+
+# Security scanners
+results.sarif
