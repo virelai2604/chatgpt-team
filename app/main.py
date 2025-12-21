@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Callable, Dict
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
@@ -16,25 +18,30 @@ from .utils.error_handler import register_exception_handlers
 from .utils.logger import configure_logging
 
 
-def _generate_unique_operation_id(route: APIRoute) -> str:
+def _unique_id_factory() -> Callable[[APIRoute], str]:
     """
-    Stable, unique OpenAPI operationIds.
+    Collision-resistant OpenAPI operationId generator.
 
-    FastAPI can warn about duplicate operationId values when multiple endpoints
-    resolve to the same auto-generated ID (common with catch-alls, alias routes,
-    and multi-method handlers). We incorporate methods + path for uniqueness.
+    If two routes would otherwise generate the same operationId, we append _2, _3, ...
+    This removes FastAPI duplicate operationId warnings even when duplicate routes exist.
     """
-    methods = "_".join(sorted(route.methods or []))
-    path = (route.path_format or route.path).strip("/")
-    path = path.replace("/", "_").replace("{", "").replace("}", "")
-    name = route.name or getattr(route.endpoint, "__name__", "endpoint")
-    return f"{name}_{methods}_{path}".strip("_")
+    seen: Dict[str, int] = {}
+
+    def _gen(route: APIRoute) -> str:
+        methods = "_".join(sorted(route.methods or []))
+        path = (route.path_format or route.path).strip("/")
+        path = path.replace("/", "_").replace("{", "").replace("}", "")
+        name = route.name or getattr(route.endpoint, "__name__", "endpoint")
+
+        base = f"{name}_{methods}_{path}".strip("_")
+        n = seen.get(base, 0) + 1
+        seen[base] = n
+        return base if n == 1 else f"{base}_{n}"
+
+    return _gen
 
 
 def _get_bool_setting(settings: object, snake: str, upper: str, default: bool) -> bool:
-    """
-    BIFL compatibility helper: supports both snake_case and UPPERCASE config styles.
-    """
     if hasattr(settings, snake):
         return bool(getattr(settings, snake))
     if hasattr(settings, upper):
@@ -48,10 +55,9 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title=settings.project_name,
-        generate_unique_id_function=_generate_unique_operation_id,
+        generate_unique_id_function=_unique_id_factory(),
     )
 
-    # CORS
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allow_origins,
@@ -60,28 +66,19 @@ def create_app() -> FastAPI:
         allow_credentials=settings.cors_allow_credentials,
     )
 
-    # Relay auth (config is UPPERCASE in app/core/config.py)
     relay_auth_enabled = _get_bool_setting(settings, "relay_auth_enabled", "RELAY_AUTH_ENABLED", True)
     if relay_auth_enabled:
         app.add_middleware(RelayAuthMiddleware)
 
-    # Lightweight content-type validation (JSON/multipart enforcement)
     app.add_middleware(ValidationMiddleware)
-
-    # Orchestrator middleware
     app.add_middleware(P4OrchestratorMiddleware)
 
-    # Routes
     register_routes(app)
     app.include_router(tools_router)
     app.include_router(sse_router)
 
-    # Error handlers
     register_exception_handlers(app)
-
-    # Cleanup
     app.add_event_handler("shutdown", close_async_clients)
-
     return app
 
 
