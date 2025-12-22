@@ -1,4 +1,4 @@
-name: CI (Secrets) + Deploy Render
+name: CI (Secrets + Tests) + Deploy Render
 
 on:
   push:
@@ -28,18 +28,47 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # IMPORTANT: this must exist in the repo checkout (commit it at repo root).
           GITLEAKS_CONFIG: .gitleaks.toml
+
+  tests:
+    name: Python Tests (pytest)
+    runs-on: ubuntu-latest
+    needs: [secret-scan]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          elif [ -f pyproject.toml ]; then
+            pip install .
+          else
+            echo "No requirements.txt or pyproject.toml found; cannot install deps."
+            exit 1
+          fi
+
+      - name: Run tests
+        env:
+          RELAY_AUTH_ENABLED: "false"
+        run: |
+          pytest -q
 
   deploy-render:
     name: Deploy Render (Deploy Hook)
     runs-on: ubuntu-latest
-    needs: [secret-scan]
+    needs: [tests]
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch')
     steps:
-      - name: Trigger Render deploy hook
+      - name: Trigger Render deploy hook (deploy this commit)
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
@@ -47,4 +76,25 @@ jobs:
             echo "Missing secret: RENDER_DEPLOY_HOOK_URL"
             exit 1
           fi
-          curl -fsSL -X POST "${RENDER_DEPLOY_HOOK_URL}"
+          curl -fsSL -X POST "${RENDER_DEPLOY_HOOK_URL}?ref=${GITHUB_SHA}"
+
+  smoke-prod:
+    name: Smoke Test (Production)
+    runs-on: ubuntu-latest
+    needs: [deploy-render]
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Smoke: manifest + openapi
+        run: |
+          set -euo pipefail
+          BASE="https://chatgpt-team-relay.onrender.com"
+
+          echo "Checking /manifest ..."
+          curl -fsSL "${BASE}/manifest" | jq -e '.endpoints.proxy and .endpoints.responses and .endpoints.responses_compact' >/dev/null
+
+          echo "Checking /openapi.json ..."
+          curl -fsSL "${BASE}/openapi.json" >/dev/null
+
+          echo "Smoke tests OK."
