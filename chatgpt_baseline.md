@@ -1,13 +1,13 @@
 # ChatGPT Sync
 Repo: chatgpt-team
 Base: origin/main
-Base commit (merge-base): 8d044f7142d0865d49703a01b2f15d490192b852
+Base commit (merge-base): 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 Dirs: app tests static schemas
 Root files: project-tree.md pyproject.toml
 Mode: baseline
-Generated: 2025-12-21T18:54:56+07:00
+Generated: 2025-12-22T11:55:45+07:00
 
-## TREE (repo root at 8d044f7142d0865d49703a01b2f15d490192b852)
+## TREE (repo root at 18103db6e2ea3cc7184ef495a046bb2d6d31cea8)
 ```
  - .env.example.env
  - .gitattributes
@@ -35,7 +35,7 @@ Generated: 2025-12-21T18:54:56+07:00
  - tests
 ```
 
-## TREE (app/ at 8d044f7142d0865d49703a01b2f15d490192b852)
+## TREE (app/ at 18103db6e2ea3cc7184ef495a046bb2d6d31cea8)
 ```
  - app/__init__.py
  - app/api/__init__.py
@@ -78,7 +78,7 @@ Generated: 2025-12-21T18:54:56+07:00
  - app/utils/logger.py
 ```
 
-## TREE (tests/ at 8d044f7142d0865d49703a01b2f15d490192b852)
+## TREE (tests/ at 18103db6e2ea3cc7184ef495a046bb2d6d31cea8)
 ```
  - tests/__init__.py
  - tests/client.py
@@ -87,13 +87,13 @@ Generated: 2025-12-21T18:54:56+07:00
  - tests/test_relay_auth_guard.py
 ```
 
-## TREE (static/ at 8d044f7142d0865d49703a01b2f15d490192b852)
+## TREE (static/ at 18103db6e2ea3cc7184ef495a046bb2d6d31cea8)
 ```
  - static/.well-known/__init__.py
  - static/.well-known/ai-plugin.json
 ```
 
-## TREE (schemas/ at 8d044f7142d0865d49703a01b2f15d490192b852)
+## TREE (schemas/ at 18103db6e2ea3cc7184ef495a046bb2d6d31cea8)
 ```
  - schemas/__init__.py
  - schemas/openapi.yaml
@@ -101,12 +101,13 @@ Generated: 2025-12-21T18:54:56+07:00
 
 ## BASELINE (ROOT FILES)
 
-## FILE: project-tree.md @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: project-tree.md @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
   📄 .env
   📄 .env.example.env
   📄 .gitattributes
   📄 .gitignore
+  📄 .gitleaks.toml
   📄 AGENTS.md
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
   📄 __init__.py
@@ -214,7 +215,7 @@ Generated: 2025-12-21T18:54:56+07:00
     📄 test_relay_auth_guard.py
     📁 downloads```
 
-## FILE: pyproject.toml @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: pyproject.toml @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -279,15 +280,15 @@ app = ["manifests/*.json"]
 
 ## BASELINE (app/)
 
-## FILE: app/__init__.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/__init__.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 ```
 
-## FILE: app/api/__init__.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/api/__init__.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 ```
 
-## FILE: app/api/forward_openai.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/api/forward_openai.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -651,7 +652,7 @@ async def forward_files_delete(*, file_id: str) -> dict[str, Any]:
     return _maybe_model_dump(result)
 ```
 
-## FILE: app/api/routes.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/api/routes.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/api/routes.py
 
@@ -673,7 +674,7 @@ register_routes(router)
 logger.info("API router initialized with shared route families")
 ```
 
-## FILE: app/api/sse.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/api/sse.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/api/sse.py
 from __future__ import annotations
@@ -775,7 +776,7 @@ async def responses_stream(
     return StreamingSSE(_responses_event_stream(body))
 ```
 
-## FILE: app/api/tools_api.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/api/tools_api.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # ==========================================================
 # app/api/tools_api.py — Tools Manifest Endpoints
@@ -911,11 +912,11 @@ async def get_manifest_v1() -> Dict[str, Any]:
     return build_manifest_response()
 ```
 
-## FILE: app/core/__init__.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/core/__init__.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 ```
 
-## FILE: app/core/config.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/core/config.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -1211,7 +1212,7 @@ def get_settings() -> Settings:
 settings: Settings = get_settings()
 ```
 
-## FILE: app/core/http_client.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/core/http_client.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -1289,7 +1290,7 @@ async def aclose_all_clients() -> None:
             log.exception("Failed closing httpx client")
 ```
 
-## FILE: app/core/logging.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/core/logging.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 """
 Logging configuration module for the ChatGPT Team Relay.
@@ -1339,12 +1340,15 @@ def configure_logging(settings: Any) -> None:
     get_logger("relay")
 ```
 
-## FILE: app/main.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/main.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
+from typing import Callable, Dict
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRoute
 
 from .api.sse import router as sse_router
 from .api.tools_api import router as tools_router
@@ -1358,11 +1362,45 @@ from .utils.error_handler import register_exception_handlers
 from .utils.logger import configure_logging
 
 
+def _unique_id_factory() -> Callable[[APIRoute], str]:
+    """
+    Collision-resistant OpenAPI operationId generator.
+
+    If two routes would otherwise generate the same operationId, we append _2, _3, ...
+    This removes FastAPI duplicate operationId warnings even when duplicate routes exist.
+    """
+    seen: Dict[str, int] = {}
+
+    def _gen(route: APIRoute) -> str:
+        methods = "_".join(sorted(route.methods or []))
+        path = (route.path_format or route.path).strip("/")
+        path = path.replace("/", "_").replace("{", "").replace("}", "")
+        name = route.name or getattr(route.endpoint, "__name__", "endpoint")
+
+        base = f"{name}_{methods}_{path}".strip("_")
+        n = seen.get(base, 0) + 1
+        seen[base] = n
+        return base if n == 1 else f"{base}_{n}"
+
+    return _gen
+
+
+def _get_bool_setting(settings: object, snake: str, upper: str, default: bool) -> bool:
+    if hasattr(settings, snake):
+        return bool(getattr(settings, snake))
+    if hasattr(settings, upper):
+        return bool(getattr(settings, upper))
+    return default
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
 
-    app = FastAPI(title=settings.project_name)
+    app = FastAPI(
+        title=settings.project_name,
+        generate_unique_id_function=_unique_id_factory(),
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -1372,20 +1410,18 @@ def create_app() -> FastAPI:
         allow_credentials=settings.cors_allow_credentials,
     )
 
-    # Auth guard (server-side relay key)
-    app.add_middleware(RelayAuthMiddleware)
+    relay_auth_enabled = _get_bool_setting(settings, "relay_auth_enabled", "RELAY_AUTH_ENABLED", True)
+    if relay_auth_enabled:
+        app.add_middleware(RelayAuthMiddleware)
 
-    # Validation middleware (optional)
     app.add_middleware(ValidationMiddleware)
-
-    # Orchestrator middleware (optional)
     app.add_middleware(P4OrchestratorMiddleware)
 
     register_routes(app)
     app.include_router(tools_router)
     app.include_router(sse_router)
-    register_exception_handlers(app)
 
+    register_exception_handlers(app)
     app.add_event_handler("shutdown", close_async_clients)
     return app
 
@@ -1393,7 +1429,7 @@ def create_app() -> FastAPI:
 app = create_app()
 ```
 
-## FILE: app/manifests/__init__.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/manifests/__init__.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # ==========================================================
 # app/manifests/__init__.py — Ground Truth Manifest Loader
@@ -1440,7 +1476,7 @@ except Exception as e:
     raise RuntimeError(f"Failed to load tools manifest: {_manifest_path} — {e}")
 ```
 
-## FILE: app/manifests/tools_manifest.json @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/manifests/tools_manifest.json @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 {
   "object": "list",
@@ -1731,11 +1767,11 @@ except Exception as e:
 }
 ```
 
-## FILE: app/middleware/__init__.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/middleware/__init__.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 ```
 
-## FILE: app/middleware/p4_orchestrator.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/middleware/p4_orchestrator.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/middleware/p4_orchestrator.py
 import uuid
@@ -1769,7 +1805,7 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         return response
 ```
 
-## FILE: app/middleware/relay_auth.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/middleware/relay_auth.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/middleware/relay_auth.py
 
@@ -1863,7 +1899,7 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/middleware/validation.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/middleware/validation.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/middleware/validation.py
 from typing import Callable, Awaitable
@@ -1895,7 +1931,7 @@ class ValidationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/routes/__init__.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/__init__.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/routes/__init__.py
 
@@ -1904,7 +1940,7 @@ from .register_routes import register_routes
 __all__ = ["register_routes"]
 ```
 
-## FILE: app/routes/actions.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/actions.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/routes/actions.py
 
@@ -2055,7 +2091,7 @@ async def actions_relay_info_v1() -> dict:
     return nested
 ```
 
-## FILE: app/routes/batches.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/batches.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -2093,7 +2129,7 @@ async def cancel_batch(batch_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/containers.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/containers.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -2114,38 +2150,81 @@ from app.api.forward_openai import (
 from app.core.http_client import get_async_httpx_client
 from app.utils.logger import relay_log as logger
 
-router = APIRouter(
-    prefix="/v1",
-    tags=["containers"],
-)
+router = APIRouter(prefix="/v1", tags=["containers"])
 
 
-@router.api_route("/containers", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def containers_root(request: Request) -> Response:
-    """
-    - POST /v1/containers → create container
-    - GET  /v1/containers → list containers
-    """
+async def _forward(request: Request) -> Response:
     logger.info("→ [containers] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
-@router.api_route(
-    "/containers/{container_id}/files/{file_id}/content",
-    methods=["GET", "HEAD"],
-)
-async def container_file_content(container_id: str, file_id: str, request: Request) -> Response:
-    """
-    Retrieve binary bytes for a file stored inside a container.
+# ---- /v1/containers ----
+@router.get("/containers")
+async def containers_root_get(request: Request) -> Response:
+    return await _forward(request)
 
-    Upstream canonical:
-      GET /v1/containers/{container_id}/files/{file_id}/content
 
-    Behaviour:
-      - GET streams bytes (no buffering)
-      - HEAD returns headers using a minimal GET (Range: bytes=0-0) because upstream
-        may not implement HEAD for binary endpoints.
-    """
+@router.post("/containers")
+async def containers_root_post(request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.head("/containers", include_in_schema=False)
+async def containers_root_head(request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.options("/containers", include_in_schema=False)
+async def containers_root_options(request: Request) -> Response:
+    return await _forward(request)
+
+
+async def _container_file_content_head(container_id: str, file_id: str, request: Request) -> Response:
+    upstream_path = f"/v1/containers/{container_id}/files/{file_id}/content"
+    upstream_url = build_upstream_url(upstream_path)
+
+    headers = build_outbound_headers(
+        inbound_headers=request.headers,
+        content_type=None,
+        forward_accept=True,
+        path_hint=upstream_path,
+    )
+
+    # Forward Range if provided; otherwise minimal range for headers
+    range_hdr: Optional[str] = request.headers.get("range")
+    if range_hdr:
+        headers["Range"] = range_hdr
+    else:
+        headers["Range"] = "bytes=0-0"
+
+    client = get_async_httpx_client()
+    timeout = _get_timeout_seconds()
+
+    upstream_req = client.build_request(
+        method="GET",
+        url=upstream_url,
+        params=request.query_params,
+        headers=headers,
+    )
+
+    try:
+        upstream_resp = await client.send(upstream_req, stream=True, timeout=timeout, follow_redirects=True)
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail=f"Upstream timeout: {type(exc).__name__}") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream request failed: {type(exc).__name__}") from exc
+
+    await upstream_resp.aclose()
+
+    return Response(
+        content=b"",
+        status_code=upstream_resp.status_code,
+        headers=filter_upstream_headers(upstream_resp.headers),
+        media_type=upstream_resp.headers.get("content-type"),
+    )
+
+
+async def _container_file_content_get(container_id: str, file_id: str, request: Request) -> Response:
     upstream_path = f"/v1/containers/{container_id}/files/{file_id}/content"
     upstream_url = build_upstream_url(upstream_path)
 
@@ -2164,44 +2243,6 @@ async def container_file_content(container_id: str, file_id: str, request: Reque
     client = get_async_httpx_client()
     timeout = _get_timeout_seconds()
 
-    if request.method.upper() == "HEAD":
-        if "Range" not in headers:
-            headers["Range"] = "bytes=0-0"
-
-        upstream_req = client.build_request(
-            method="GET",
-            url=upstream_url,
-            params=request.query_params,
-            headers=headers,
-        )
-
-        try:
-            upstream_resp = await client.send(
-                upstream_req,
-                stream=True,
-                timeout=timeout,
-                follow_redirects=True,
-            )
-        except httpx.TimeoutException as exc:
-            raise HTTPException(
-                status_code=504,
-                detail=f"Upstream timeout: {type(exc).__name__}",
-            ) from exc
-        except httpx.RequestError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Upstream request failed: {type(exc).__name__}",
-            ) from exc
-
-        await upstream_resp.aclose()
-
-        return Response(
-            content=b"",
-            status_code=upstream_resp.status_code,
-            headers=filter_upstream_headers(upstream_resp.headers),
-            media_type=upstream_resp.headers.get("content-type"),
-        )
-
     upstream_req = client.build_request(
         method="GET",
         url=upstream_url,
@@ -2210,22 +2251,11 @@ async def container_file_content(container_id: str, file_id: str, request: Reque
     )
 
     try:
-        upstream_resp = await client.send(
-            upstream_req,
-            stream=True,
-            timeout=timeout,
-            follow_redirects=True,
-        )
+        upstream_resp = await client.send(upstream_req, stream=True, timeout=timeout, follow_redirects=True)
     except httpx.TimeoutException as exc:
-        raise HTTPException(
-            status_code=504,
-            detail=f"Upstream timeout: {type(exc).__name__}",
-        ) from exc
+        raise HTTPException(status_code=504, detail=f"Upstream timeout: {type(exc).__name__}") from exc
     except httpx.RequestError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Upstream request failed: {type(exc).__name__}",
-        ) from exc
+        raise HTTPException(status_code=502, detail=f"Upstream request failed: {type(exc).__name__}") from exc
 
     if upstream_resp.status_code >= 400:
         error_body = await upstream_resp.aread()
@@ -2246,30 +2276,28 @@ async def container_file_content(container_id: str, file_id: str, request: Reque
     )
 
 
+@router.get("/containers/{container_id}/files/{file_id}/content")
+async def container_file_content_get(container_id: str, file_id: str, request: Request) -> Response:
+    return await _container_file_content_get(container_id=container_id, file_id=file_id, request=request)
+
+
+@router.head("/containers/{container_id}/files/{file_id}/content")
+async def container_file_content_head(container_id: str, file_id: str, request: Request) -> Response:
+    return await _container_file_content_head(container_id=container_id, file_id=file_id, request=request)
+
+
 @router.api_route(
     "/containers/{path:path}",
     methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"],
     include_in_schema=False,
 )
 async def containers_subpaths(path: str, request: Request) -> Response:
-    """
-    Catch-all for /v1/containers/*, including:
-
-      - /v1/containers/{container_id}
-      - /v1/containers/{container_id}/files
-      - /v1/containers/{container_id}/files/{file_id}/content
-
-    NOTE: the explicit /content route above will match first for GET/HEAD and
-    stream the bytes; everything else falls through here.
-    """
     logger.info("→ [containers/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/conversations.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/conversations.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
-# app/routes/conversations.py
-
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
@@ -2277,48 +2305,67 @@ from fastapi import APIRouter, Request, Response
 from app.api.forward_openai import forward_openai_request
 from app.utils.logger import relay_log as logger
 
-router = APIRouter(
-    prefix="/v1",
-    tags=["conversations"],
-)
+router = APIRouter(prefix="/v1", tags=["conversations"])
 
 
-@router.api_route("/conversations", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def proxy_conversations_root(request: Request) -> Response:
-    """
-    Conversations root.
-
-    Covers:
-      - GET  /v1/conversations  (list)
-      - POST /v1/conversations  (create)
-    """
+async def _forward(request: Request) -> Response:
     logger.info("→ [conversations] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
-@router.api_route(
-    "/conversations/{path:path}",
-    methods=["GET", "POST", "DELETE", "PATCH", "HEAD", "OPTIONS"],
-)
-async def proxy_conversations_subpaths(path: str, request: Request) -> Response:
-    """
-    Catch-all for Conversations subresources.
+# ---- /v1/conversations ----
+@router.get("/conversations")
+async def conversations_root_get(request: Request) -> Response:
+    return await _forward(request)
 
-    Examples:
-      - GET    /v1/conversations/{conversation_id}
-      - POST   /v1/conversations/{conversation_id}            (update)
-      - DELETE /v1/conversations/{conversation_id}            (delete)
-      - GET    /v1/conversations/{conversation_id}/items      (list items)
-      - POST   /v1/conversations/{conversation_id}/items      (create item)
-      - GET    /v1/conversations/{conversation_id}/items/{id} (retrieve item)
-      - DELETE /v1/conversations/{conversation_id}/items/{id} (delete item)
-      - future /v1/conversations/* additions
-    """
-    logger.info("→ [conversations/*] %s %s", request.method, request.url.path)
-    return await forward_openai_request(request)
+
+@router.post("/conversations")
+async def conversations_root_post(request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.head("/conversations", include_in_schema=False)
+async def conversations_root_head(request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.options("/conversations", include_in_schema=False)
+async def conversations_root_options(request: Request) -> Response:
+    return await _forward(request)
+
+
+# ---- /v1/conversations/{path:path} ----
+@router.get("/conversations/{path:path}")
+async def conversations_subpaths_get(path: str, request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.post("/conversations/{path:path}")
+async def conversations_subpaths_post(path: str, request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.patch("/conversations/{path:path}")
+async def conversations_subpaths_patch(path: str, request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.delete("/conversations/{path:path}")
+async def conversations_subpaths_delete(path: str, request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.head("/conversations/{path:path}", include_in_schema=False)
+async def conversations_subpaths_head(path: str, request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.options("/conversations/{path:path}", include_in_schema=False)
+async def conversations_subpaths_options(path: str, request: Request) -> Response:
+    return await _forward(request)
 ```
 
-## FILE: app/routes/embeddings.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/embeddings.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -2340,185 +2387,98 @@ async def create_embedding(request: Request) -> JSONResponse:
     return JSONResponse(content=payload)
 ```
 
-## FILE: app/routes/files.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/files.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
-from typing import Optional
+from fastapi import APIRouter, Request, Response
 
-import httpx
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
-from starlette.background import BackgroundTask
-
-from app.api.forward_openai import (
-    build_outbound_headers,
-    build_upstream_url,
-    filter_upstream_headers,
-    forward_openai_request,
-    forward_files_create,
-    forward_files_delete,
-    forward_files_list,
-    forward_files_retrieve,
-)
-from app.core.http_client import get_async_httpx_client
-from app.utils.logger import relay_log
-
-# Compatibility: support either `get_settings()` or a module-level `settings`
-try:
-    from app.core.config import get_settings  # type: ignore
-except ImportError:  # pragma: no cover
-    from app.core.config import settings as _settings  # type: ignore
-
-    def get_settings():  # type: ignore
-        return _settings
+from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger
 
 router = APIRouter(prefix="/v1", tags=["files"])
 
 
-def _timeout_seconds() -> float:
-    settings = get_settings()
-    for attr in ("proxy_timeout_seconds", "PROXY_TIMEOUT", "HTTP_TIMEOUT_SECONDS", "RELAY_TIMEOUT", "timeout_seconds"):
-        if hasattr(settings, attr):
-            try:
-                val = float(getattr(settings, attr))
-                if val > 0:
-                    return val
-            except Exception:
-                continue
-    return 90.0
-
-
 @router.get("/files")
-async def list_files(purpose: Optional[str] = None) -> JSONResponse:
-    resp = await forward_files_list(purpose=purpose)
-    payload = resp.model_dump() if hasattr(resp, "model_dump") else resp
-    return JSONResponse(content=payload)
+async def list_files(request: Request) -> Response:
+    """
+    GET /v1/files
+    Upstream: list files
+    """
+    logger.info("→ [files] %s %s", request.method, request.url.path)
+    return await forward_openai_request(request)
 
 
 @router.post("/files")
-async def create_file(request: Request) -> JSONResponse:
-    form = await request.form()
-    up = form.get("file")
-    purpose = form.get("purpose")
-    if up is None:
-        raise HTTPException(status_code=400, detail="Missing multipart field: file")
-    if not purpose:
-        raise HTTPException(status_code=400, detail="Missing multipart field: purpose")
-
-    resp = await forward_files_create(file=up, purpose=str(purpose))
-    payload = resp.model_dump() if hasattr(resp, "model_dump") else resp
-    return JSONResponse(content=payload)
+async def create_file(request: Request) -> Response:
+    """
+    POST /v1/files
+    Upstream expects multipart/form-data (file + purpose).
+    We forward as-is.
+    """
+    logger.info("→ [files] %s %s", request.method, request.url.path)
+    return await forward_openai_request(request)
 
 
 @router.get("/files/{file_id}")
-async def retrieve_file(file_id: str) -> JSONResponse:
-    resp = await forward_files_retrieve(file_id)
-    payload = resp.model_dump() if hasattr(resp, "model_dump") else resp
-    return JSONResponse(content=payload)
+async def retrieve_file(file_id: str, request: Request) -> Response:
+    """
+    GET /v1/files/{file_id}
+    Upstream: retrieve file metadata
+    """
+    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
+    return await forward_openai_request(request)
 
 
 @router.delete("/files/{file_id}")
-async def delete_file(file_id: str) -> JSONResponse:
-    resp = await forward_files_delete(file_id)
-    payload = resp.model_dump() if hasattr(resp, "model_dump") else resp
-    return JSONResponse(content=payload)
-
-
-@router.api_route("/files/{file_id}/content", methods=["GET", "HEAD"])
-async def retrieve_file_content(file_id: str, request: Request) -> Response:
+async def delete_file(file_id: str, request: Request) -> Response:
     """
-    Stream file bytes from upstream (GET) and support curl -I (HEAD).
-
-    For HEAD we perform a minimal ranged GET (bytes=0-0) to surface headers without
-    downloading the full file.
+    DELETE /v1/files/{file_id}
+    Upstream: delete file
     """
-    upstream_path = f"/v1/files/{file_id}/content"
-    upstream_url = build_upstream_url(upstream_path)
-
-    headers = build_outbound_headers(
-        inbound_headers=request.headers,
-        content_type=None,
-        forward_accept=False,
-        path_hint=upstream_path,
-    )
-
-    if request.headers.get("range"):
-        headers["Range"] = request.headers["range"]
-
-    client = get_async_httpx_client()
-    timeout = _timeout_seconds()
-
-    if request.method == "HEAD":
-        if "Range" not in headers:
-            headers["Range"] = "bytes=0-0"
-
-        upstream_req = client.build_request(
-            "GET",
-            upstream_url,
-            params=request.query_params,
-            headers=headers,
-        )
-        try:
-            upstream_resp = await client.send(upstream_req, stream=True, timeout=timeout)
-        except httpx.TimeoutException as exc:
-            raise HTTPException(status_code=504, detail=f"Upstream timeout fetching headers: {type(exc).__name__}: {exc}") from exc
-        except httpx.RequestError as exc:
-            raise HTTPException(status_code=502, detail=f"Upstream request failed fetching headers: {type(exc).__name__}: {exc}") from exc
-
-        await upstream_resp.aclose()
-        return Response(
-            content=b"",
-            status_code=upstream_resp.status_code,
-            headers=filter_upstream_headers(upstream_resp.headers),
-            media_type=upstream_resp.headers.get("content-type"),
-        )
-
-    upstream_req = client.build_request(
-        "GET",
-        upstream_url,
-        params=request.query_params,
-        headers=headers,
-    )
-
-    try:
-        upstream_resp = await client.send(upstream_req, stream=True, timeout=timeout)
-    except httpx.TimeoutException as exc:
-        raise HTTPException(status_code=504, detail=f"Upstream timeout downloading file: {type(exc).__name__}: {exc}") from exc
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"Upstream request failed downloading file: {type(exc).__name__}: {exc}") from exc
-
-    if upstream_resp.status_code >= 400:
-        body = await upstream_resp.aread()
-        headers_out = filter_upstream_headers(upstream_resp.headers)
-        await upstream_resp.aclose()
-        return Response(
-            content=body,
-            status_code=upstream_resp.status_code,
-            headers=headers_out,
-            media_type=upstream_resp.headers.get("content-type"),
-        )
-
-    async def iter_bytes():
-        async for chunk in upstream_resp.aiter_bytes():
-            yield chunk
-
-    return StreamingResponse(
-        iter_bytes(),
-        status_code=upstream_resp.status_code,
-        headers=filter_upstream_headers(upstream_resp.headers),
-        media_type=upstream_resp.headers.get("content-type"),
-        background=BackgroundTask(upstream_resp.aclose),
-    )
+    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
+    return await forward_openai_request(request)
 
 
-@router.api_route("/files/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"], include_in_schema=False)
-async def files_passthrough(request: Request, path: str) -> Response:
-    relay_log.debug("files passthrough -> %s", path)
+@router.get("/files/{file_id}/content")
+async def retrieve_file_content_get(file_id: str, request: Request) -> Response:
+    """
+    GET /v1/files/{file_id}/content
+    Upstream: retrieve file content (binary)
+    """
+    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
+    return await forward_openai_request(request)
+
+
+@router.head("/files/{file_id}/content", include_in_schema=False)
+async def retrieve_file_content_head(file_id: str, request: Request) -> Response:
+    """
+    HEAD /v1/files/{file_id}/content
+
+    HEAD is useful for clients, but it is not required for Actions/docs.
+    We exclude it from OpenAPI to avoid duplicate operationId warnings.
+    """
+    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
+    return await forward_openai_request(request)
+
+
+@router.api_route(
+    "/files/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    include_in_schema=False,
+)
+async def files_passthrough(path: str, request: Request) -> Response:
+    """
+    Catch-all passthrough for future /v1/files/* endpoints.
+
+    Kept out of OpenAPI to avoid operationId collisions and to keep
+    the schema Actions-friendly.
+    """
+    logger.info("→ [files/*] %s %s (subpath=%s)", request.method, request.url.path, path)
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/health.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/health.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/routes/health.py
 from __future__ import annotations
@@ -2573,7 +2533,7 @@ async def health_v1() -> Dict[str, Any]:
     return _base_status()
 ```
 
-## FILE: app/routes/images.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/images.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/routes/images.py
 
@@ -2630,7 +2590,7 @@ async def edit_image(request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/models.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/models.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/routes/models.py
 
@@ -2689,7 +2649,7 @@ async def retrieve_model(model_id: str) -> dict:
     }
 ```
 
-## FILE: app/routes/proxy.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/proxy.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -2941,7 +2901,7 @@ async def proxy(call: ProxyRequest, request: Request) -> Response:
     )
 ```
 
-## FILE: app/routes/realtime.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/realtime.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/routes/realtime.py
 
@@ -3137,7 +3097,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
         await websocket.close()
 ```
 
-## FILE: app/routes/register_routes.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/register_routes.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/routes/register_routes.py
 
@@ -3213,7 +3173,7 @@ def register_all_routes(app: _RouterLike) -> None:
     register_routes(app)
 ```
 
-## FILE: app/routes/responses.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/responses.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -3368,7 +3328,7 @@ async def responses_stream() -> Response:
     return StreamingResponse(gen(), media_type="text/event-stream")
 ```
 
-## FILE: app/routes/uploads.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/uploads.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/routes/uploads.py
 
@@ -3440,7 +3400,7 @@ async def uploads_passthrough(path: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/vector_stores.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/vector_stores.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -3450,30 +3410,78 @@ from app.api.forward_openai import forward_openai_request
 
 router = APIRouter(tags=["vector_stores"])
 
+
+async def _forward(request: Request) -> Response:
+    return await forward_openai_request(request)
+
+
+# ---- /v1/vector_stores (split methods to avoid duplicate operationId) ----
+@router.get("/v1/vector_stores")
+async def vector_stores_root_get(request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.post("/v1/vector_stores")
+async def vector_stores_root_post(request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.put("/v1/vector_stores")
+async def vector_stores_root_put(request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.patch("/v1/vector_stores")
+async def vector_stores_root_patch(request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.delete("/v1/vector_stores")
+async def vector_stores_root_delete(request: Request) -> Response:
+    return await _forward(request)
+
+
+# ---- /v1/vector_stores/{path:path} (split methods to avoid duplicate operationId) ----
+@router.get("/v1/vector_stores/{path:path}")
+async def vector_stores_subpaths_get(path: str, request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.post("/v1/vector_stores/{path:path}")
+async def vector_stores_subpaths_post(path: str, request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.put("/v1/vector_stores/{path:path}")
+async def vector_stores_subpaths_put(path: str, request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.patch("/v1/vector_stores/{path:path}")
+async def vector_stores_subpaths_patch(path: str, request: Request) -> Response:
+    return await _forward(request)
+
+
+@router.delete("/v1/vector_stores/{path:path}")
+async def vector_stores_subpaths_delete(path: str, request: Request) -> Response:
+    return await _forward(request)
+
+
+# ---- Alias paths (kept hidden from OpenAPI) ----
 _METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
-
-
-@router.api_route("/v1/vector_stores", methods=_METHODS)
-async def vector_stores_root(request: Request) -> Response:
-    return await forward_openai_request(request)
-
-
-@router.api_route("/v1/vector_stores/{path:path}", methods=_METHODS)
-async def vector_stores_subpaths(path: str, request: Request) -> Response:
-    return await forward_openai_request(request)
 
 
 @router.api_route("/vector_stores", methods=_METHODS, include_in_schema=False)
 async def vector_stores_root_alias(request: Request) -> Response:
-    return await forward_openai_request(request)
+    return await _forward(request)
 
 
 @router.api_route("/vector_stores/{path:path}", methods=_METHODS, include_in_schema=False)
 async def vector_stores_subpaths_alias(path: str, request: Request) -> Response:
-    return await forward_openai_request(request)
+    return await _forward(request)
 ```
 
-## FILE: app/routes/videos.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/routes/videos.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -3562,11 +3570,11 @@ async def videos_passthrough(path: str, request: Request):
     return await forward_openai_request(request)
 ```
 
-## FILE: app/utils/__init__.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/utils/__init__.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 ```
 
-## FILE: app/utils/authy.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/utils/authy.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/utils/authy.py
 
@@ -3684,7 +3692,7 @@ def check_relay_key(
         )
 ```
 
-## FILE: app/utils/error_handler.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/utils/error_handler.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # app/utils/error_handler.py
 
@@ -3828,7 +3836,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 ```
 
-## FILE: app/utils/http_client.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/utils/http_client.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -3855,7 +3863,7 @@ __all__ = [
 ]
 ```
 
-## FILE: app/utils/logger.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: app/utils/logger.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 from __future__ import annotations
 
@@ -3939,11 +3947,11 @@ def exception(msg: str, *args, **kwargs) -> None:
 
 ## BASELINE (tests/)
 
-## FILE: tests/__init__.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: tests/__init__.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 ```
 
-## FILE: tests/client.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: tests/client.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # tests/client.py
 
@@ -3980,7 +3988,7 @@ def _build_client() -> TestClient:
 client: TestClient = _build_client()
 ```
 
-## FILE: tests/conftest.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: tests/conftest.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # tests/conftest.py
 from __future__ import annotations
@@ -4017,7 +4025,7 @@ async def async_client() -> AsyncIterator[httpx.AsyncClient]:
         yield client
 ```
 
-## FILE: tests/test_local_e2e.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: tests/test_local_e2e.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # tests/test_local_e2e.py
 from __future__ import annotations
@@ -4201,7 +4209,7 @@ async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncC
     assert "/v1/responses/compact" in data["endpoints"]["responses_compact"]
 ```
 
-## FILE: tests/test_relay_auth_guard.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: tests/test_relay_auth_guard.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 # tests/test_relay_auth_guard.py
 from __future__ import annotations
@@ -4245,11 +4253,11 @@ async def test_responses_requires_valid_relay_key() -> None:
 
 ## BASELINE (static/)
 
-## FILE: static/.well-known/__init__.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: static/.well-known/__init__.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 ```
 
-## FILE: static/.well-known/ai-plugin.json @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: static/.well-known/ai-plugin.json @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 {
   "schema_version": "v1",
@@ -4278,11 +4286,11 @@ async def test_responses_requires_valid_relay_key() -> None:
 
 ## BASELINE (schemas/)
 
-## FILE: schemas/__init__.py @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: schemas/__init__.py @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 ```
 
-## FILE: schemas/openapi.yaml @ 8d044f7142d0865d49703a01b2f15d490192b852
+## FILE: schemas/openapi.yaml @ 18103db6e2ea3cc7184ef495a046bb2d6d31cea8
 ```
 openapi: 3.1.0
 info:
