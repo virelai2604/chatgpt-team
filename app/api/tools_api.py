@@ -6,6 +6,10 @@ Serves the relay's tools manifest at:
   - GET /manifest
   - GET /v1/manifest
 
+Intent:
+  - Option A (Actions-friendly): expose a small, JSON-only tool surface.
+  - Full route inventory lives in OpenAPI at /openapi.json.
+
 The integration tests expect:
   data["endpoints"]["responses"] includes "/v1/responses"
   data["endpoints"]["responses_compact"] includes "/v1/responses/compact"
@@ -36,8 +40,8 @@ def _read_json(path: Path) -> Any:
 def _extract_tools(payload: Any) -> List[Dict[str, Any]]:
     """
     Accept multiple on-disk shapes safely:
-      - {"tools": [...]}                       (legacy/expected by manifests/__init__.py in your note)
-      - {"data": [...], "object": "list", ...} (what your /manifest currently returns)
+      - {"tools": [...]}                       (legacy)
+      - {"data": [...], "object": "list", ...} (what /manifest returns)
       - [...]                                   (raw list of tool dicts)
     """
     if isinstance(payload, list):
@@ -93,8 +97,7 @@ def build_manifest_response(tools: Optional[List[Dict[str, Any]]] = None) -> Dic
     settings = get_settings()
     tools_list = tools if tools is not None else load_tools_manifest()
 
-    # Keep your current behavior: endpoints.responses lists both paths,
-    # but ALSO add endpoints.responses_compact for the test expectation.
+    # Keep current behavior for tests and clients.
     endpoints: Dict[str, List[str]] = {
         # Option A: single Action-friendly proxy entrypoint.
         "proxy": ["/v1/proxy"],
@@ -108,20 +111,32 @@ def build_manifest_response(tools: Optional[List[Dict[str, Any]]] = None) -> Dic
         or "ChatGPT Team Relay"
     )
 
+    # IMPORTANT: We intentionally do not list multipart/binary families (e.g., /v1/uploads)
+    # in this tools manifest. Those routes may exist in the app (see /openapi.json) but are
+    # excluded from the Actions-safe tool surface by design.
+    meta: Dict[str, Any] = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "relay_name": relay_name,
+        "manifest_scope": "actions_safe",
+        "option": "A",
+        "openapi_url": "/openapi.json",
+        "endpoints_note": (
+            "This manifest is a curated, JSON-only tool surface. "
+            "Multipart/binary route families (e.g., Uploads) are intentionally excluded; "
+            "refer to /openapi.json for the full route inventory."
+        ),
+    }
+
     return {
         "object": "list",
         "data": tools_list,
         "endpoints": endpoints,
-        "meta": {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "relay_name": relay_name,
-        },
+        "meta": meta,
     }
 
 
 @router.get("/manifest")
 async def get_manifest_root() -> Dict[str, Any]:
-    # Returning a dict is fine—FastAPI will serialize it as JSON.
     logger.info("Serving tools manifest (root alias)")
     return build_manifest_response()
 
