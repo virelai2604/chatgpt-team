@@ -15,16 +15,19 @@ services:
     region: singapore
     plan: starter
 
-    # If you deploy via GitHub Actions deploy hook, keep this false.
-    autoDeploy: false
+    # BIFL: Use the current Blueprint field (replaces deprecated autoDeploy).
+    # off = do not redeploy on commits automatically.
+    autoDeployTrigger: off
 
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
 
+    # Render requires binding to 0.0.0.0 and the PORT env var.
     startCommand: |
       uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
+    # Render health checks use GET and must return 2xx/3xx.
     healthCheckPath: /v1/health
 
     envVars:
@@ -35,7 +38,6 @@ services:
         value: production
 
       # -------- OpenAI upstream config --------
-      # Either of these is fine for your codebase; it normalizes /v1 away.
       - key: OPENAI_API_BASE
         value: https://api.openai.com/v1
 
@@ -69,6 +71,8 @@ services:
         value: "120"
       - key: PROXY_TIMEOUT
         value: "120"
+
+      # Render uses this env var to select Python version (must be fully qualified here).
       - key: PYTHON_VERSION
         value: "3.12.5"
 
