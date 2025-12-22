@@ -46,6 +46,13 @@ _HOP_BY_HOP_HEADERS = {
     "upgrade",
 }
 
+# Must not forward these upstream (common relay bug sources)
+_STRIP_REQUEST_HEADERS = {
+    "authorization",    # relay key
+    "host",             # never forward localhost host to OpenAI
+    "content-length",   # let httpx compute it for upstream request
+}
+
 
 def normalize_base_url(base_url: str) -> str:
     """
@@ -77,14 +84,41 @@ def join_url(base_v1: str, path: str) -> str:
     return base_v1 + p
 
 
+# -------------------------
+# Backwards-compat shims
+# -------------------------
+
+def _get_timeout_seconds() -> float:
+    """Return the default upstream timeout in seconds (float)."""
+    s = _settings()
+    raw = getattr(s, "proxy_timeout", None)
+    if raw is None:
+        raw = getattr(s, "openai_timeout", None)
+    try:
+        return float(raw) if raw is not None else 120.0
+    except (TypeError, ValueError):
+        return 120.0
+
+
+def build_upstream_url(path: str) -> str:
+    """Build a fully-qualified OpenAI upstream URL for a given path."""
+    s = _settings()
+    base = getattr(s, "openai_api_base", "https://api.openai.com/v1")
+    return join_url(base, path)
+
+
+def filter_upstream_headers(headers: Mapping[str, str]) -> dict[str, str]:
+    """Filter hop-by-hop headers and relay/transport headers from inbound headers."""
+    return _filter_inbound_headers(headers)
+
+
 def _filter_inbound_headers(headers: Mapping[str, str]) -> dict[str, str]:
     out: dict[str, str] = {}
     for k, v in headers.items():
         lk = k.lower()
         if lk in _HOP_BY_HOP_HEADERS:
             continue
-        # Never forward the relay's own Authorization header upstream.
-        if lk == "authorization":
+        if lk in _STRIP_REQUEST_HEADERS:
             continue
         out[k] = v
     return out
@@ -120,14 +154,11 @@ def build_outbound_headers(
 
 
 def _maybe_model_dump(obj: Any) -> dict[str, Any]:
-    """
-    OpenAI SDK objects are Pydantic-like; support both model_dump() and dict() forms.
-    """
+    """OpenAI SDK objects are Pydantic-like; support model_dump() and dict()."""
     if hasattr(obj, "model_dump"):
         return obj.model_dump()  # type: ignore[no-any-return]
     if isinstance(obj, dict):
         return obj
-    # Fallback: try json round-trip
     try:
         return json.loads(json.dumps(obj, default=str))
     except Exception:
@@ -141,11 +172,11 @@ def _maybe_model_dump(obj: Any) -> dict[str, Any]:
 async def forward_openai_request(request: Request) -> Response:
     """
     Forward an incoming FastAPI request to the upstream OpenAI API using httpx.
-    This is suitable for:
+    Suitable for:
       - JSON
       - multipart/form-data (Uploads/Files)
-      - binary content endpoints (as long as you return Response with correct headers)
-      - SSE streaming (when upstream responds as text/event-stream)
+      - binary content endpoints
+      - SSE streaming (when client sets Accept: text/event-stream)
     """
     s = _settings()
     base = getattr(s, "openai_api_base", "https://api.openai.com/v1")
@@ -154,23 +185,23 @@ async def forward_openai_request(request: Request) -> Response:
 
     upstream_url = join_url(base, request.url.path)
 
-    headers = build_outbound_headers(inbound_headers=request.headers, openai_api_key=key)
-
     # Preserve query string
     query = request.url.query
     if query:
         upstream_url = upstream_url + "?" + query
 
-    client = get_async_httpx_client(timeout=timeout_s)
-
     # Read body bytes once; forward as-is.
     body = await request.body()
 
+    headers = build_outbound_headers(inbound_headers=request.headers, openai_api_key=key)
+
     relay_log.debug("Forwarding %s %s -> %s", request.method, request.url.path, upstream_url)
+
+    client = get_async_httpx_client(timeout=timeout_s)
 
     # Streaming SSE support
     accept = request.headers.get("accept", "")
-    wants_sse = "text/event-stream" in accept.lower()
+    wants_sse = "text/event-stream" in (accept or "").lower()
 
     if wants_sse:
         async def event_generator():
@@ -180,6 +211,7 @@ async def forward_openai_request(request: Request) -> Response:
                 headers=headers,
                 content=body if body else None,
             ) as upstream_resp:
+                # If upstream errors, it will generally send JSON or text; raising is fine here.
                 upstream_resp.raise_for_status()
                 async for chunk in upstream_resp.aiter_bytes():
                     if chunk:
@@ -198,7 +230,6 @@ async def forward_openai_request(request: Request) -> Response:
         content=body if body else None,
     )
 
-    # Copy response headers except hop-by-hop
     resp_headers: dict[str, str] = {}
     for k, v in upstream_resp.headers.items():
         if k.lower() in _HOP_BY_HOP_HEADERS:
@@ -233,7 +264,6 @@ async def forward_openai_method_path(
 
     # Merge/encode query parameters
     if query:
-        # Preserve ordering and repeated keys where possible
         pairs: list[tuple[str, str]] = []
         for k, v in query.items():
             if v is None:
@@ -291,15 +321,6 @@ async def forward_responses_create(
     *,
     request: Optional[Request] = None,
 ) -> dict[str, Any]:
-    """Create a Response via the OpenAI Python SDK.
-
-    Route handlers may call this helper in two ways:
-      1) forward_responses_create(payload_dict)
-      2) forward_responses_create(request=request)
-
-    We support both to keep route code simple (e.g., when a route needs to
-    inspect or mutate the JSON before calling the SDK).
-    """
     client = get_async_openai_client()
 
     if request is not None:
@@ -318,10 +339,6 @@ async def forward_embeddings_create(
     *,
     request: Optional[Request] = None,
 ) -> dict[str, Any]:
-    """Create embeddings via the OpenAI Python SDK.
-
-    Accepts either a JSON payload dict or a FastAPI Request.
-    """
     client = get_async_openai_client()
 
     if request is not None:
@@ -342,8 +359,6 @@ async def forward_files_list() -> dict[str, Any]:
 
 
 async def forward_files_create() -> dict[str, Any]:
-    # Files create is multipart; use generic forwarder path in route (preferred).
-    # This helper exists for compatibility with some route variants.
     raise HTTPException(status_code=400, detail="Use multipart passthrough for file uploads")
 
 
