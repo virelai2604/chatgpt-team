@@ -28,6 +28,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Must exist at repo root
           GITLEAKS_CONFIG: .gitleaks.toml
 
   tests:
@@ -41,10 +42,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            pyproject.toml
 
       - name: Install dependencies
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
+
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           elif [ -f pyproject.toml ]; then
@@ -54,10 +61,14 @@ jobs:
             exit 1
           fi
 
+          # Ensure pytest exists even if not included in runtime deps
+          pip install pytest
+
       - name: Run tests
         env:
           RELAY_AUTH_ENABLED: "false"
         run: |
+          set -euo pipefail
           pytest -q
 
   deploy-render:
@@ -68,15 +79,19 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch')
     steps:
-      - name: Trigger Render deploy hook (deploy this commit)
+      - name: Trigger Render deploy hook (deploy latest)
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
+          set -euo pipefail
           if [ -z "${RENDER_DEPLOY_HOOK_URL}" ]; then
             echo "Missing secret: RENDER_DEPLOY_HOOK_URL"
             exit 1
           fi
-          curl -fsSL -X POST "${RENDER_DEPLOY_HOOK_URL}?ref=${GITHUB_SHA}"
+
+          # Prefer deploying branch HEAD via deploy hook.
+          # If you pin a specific commit via Render APIs, be aware it may affect auto-deploy behavior.
+          curl -fsSL -X POST "${RENDER_DEPLOY_HOOK_URL}"
 
   smoke-prod:
     name: Smoke Test (Production)
@@ -86,15 +101,29 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch')
     steps:
-      - name: Smoke: manifest + openapi
+      - name: Install jq
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Smoke: manifest + openapi (retry)
         run: |
           set -euo pipefail
           BASE="https://chatgpt-team-relay.onrender.com"
 
-          echo "Checking /manifest ..."
-          curl -fsSL "${BASE}/manifest" | jq -e '.endpoints.proxy and .endpoints.responses and .endpoints.responses_compact' >/dev/null
+          echo "Polling production for readiness..."
+          for i in $(seq 1 30); do
+            if curl -fsSL "${BASE}/manifest" | jq -e '.endpoints.proxy and .endpoints.responses and .endpoints.responses_compact' >/dev/null; then
+              echo "OK: /manifest"
+              curl -fsSL "${BASE}/openapi.json" >/dev/null
+              echo "OK: /openapi.json"
+              echo "Smoke tests OK."
+              exit 0
+            fi
+            echo "Not ready yet (${i}/30). Waiting 10s..."
+            sleep 10
+          done
 
-          echo "Checking /openapi.json ..."
-          curl -fsSL "${BASE}/openapi.json" >/dev/null
-
-          echo "Smoke tests OK."
+          echo "Smoke test failed: production did not become ready in time."
+          exit 1

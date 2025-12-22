@@ -3,19 +3,29 @@ title = "chatgpt-team-relay gitleaks config"
 [extend]
 useDefault = true
 
+# Global allowlist:
+# - Avoid file-level allowlisting for repo artifacts (baseline/changes), so secrets can't hide there.
+# - Allow only explicit placeholders that contain literal "..." (real secrets won't contain "...")
 [allowlist]
-description = "Allowlist documented placeholders only (never real secrets)."
-paths = [
-  '''^docs/README\.md$''',
-  '''^\.env\.example\.env$''',
-  '''^chatgpt_baseline\.md$''',
-  '''^chatgpt_changes\.md$'''
+description = "Allowlist only explicit placeholders (literal '...'); do not bypass scanning for baseline/changes/docs."
+regexTarget = "line"
+
+regexes = [
+  # OpenAI placeholder key examples (explicitly non-real because it contains '...')
+  '''\bsk-\.\.\.\b''',
+  '''\bOPENAI_API_KEY\s*=\s*sk-\.\.\.\b''',
+
+  # Optional: allow other documented placeholders that use literal "..."
+  '''\bRELAY_KEY\s*=\s*\.\.\.\b''',
+  '''\bRENDER_DEPLOY_HOOK_URL\s*=\s*https?://\.\.\.\b''',
 ]
 
-# Allow only placeholder patterns like "sk-..." (literal three dots).
-# Real keys won't contain "...".
-regexTarget = "line"
-regexes = [
-  '''\bsk-\.\.\.\b''',
-  '''\bOPENAI_API_KEY\s*=\s*sk-\.\.\.\b'''
+# Optional path exclusions for generated folders (keep small; prefer not committing these at all).
+# Paths here are regex patterns. Use only for truly generated content.
+paths = [
+  '''^\.venv/''',
+  '''^\.pytest_cache/''',
+  '''^node_modules/''',
+  '''^dist/''',
+  '''^build/''',
 ]
