@@ -2,9 +2,63 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
+import sys
+from typing import Any, Optional
 
 _LOGGER_ROOT_NAME = "chatgpt_team_relay"
+
+
+def _coerce_log_level(value: Any) -> int:
+    """
+    Convert arbitrary env/config values into a valid logging level integer.
+
+    Why:
+      - Render env vars are always strings; misconfig like LOG_LEVEL=FALSE
+        will crash logging.setLevel("FALSE") with ValueError.
+      - We harden to avoid taking the whole service down due to config typos.
+
+    Accepts:
+      - int levels (e.g. 20)
+      - standard names (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+      - common aliases (WARN, FATAL)
+      - "true/false" -> fallback to INFO
+    """
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+
+    if isinstance(value, bool):
+        # Treat booleans as "use default verbosity" rather than crashing.
+        return logging.INFO
+
+    s = str(value or "").strip()
+    if not s:
+        return logging.INFO
+
+    s_upper = s.upper()
+
+    # Common misconfigs where someone thought this was a boolean toggle.
+    if s_upper in {"TRUE", "FALSE"}:
+        return logging.INFO
+
+    # Numeric strings
+    if s_upper.isdigit():
+        try:
+            return int(s_upper)
+        except Exception:
+            return logging.INFO
+
+    # Common aliases
+    if s_upper == "WARN":
+        s_upper = "WARNING"
+    elif s_upper == "FATAL":
+        s_upper = "CRITICAL"
+
+    # Official mapping (Py 3.11+)
+    mapping = logging.getLevelNamesMapping()
+    if s_upper in mapping:
+        return int(mapping[s_upper])
+
+    return logging.INFO
 
 
 def configure_logging(level: Optional[str] = None) -> None:
@@ -14,18 +68,21 @@ def configure_logging(level: Optional[str] = None) -> None:
     - Avoids duplicate handlers on reload
     - Sets a clean, grep-friendly format
     """
-    resolved_level = (level or os.getenv("LOG_LEVEL") or "INFO").upper()
+    resolved_level = _coerce_log_level(level or os.getenv("LOG_LEVEL") or "INFO")
+
     root_logger = logging.getLogger(_LOGGER_ROOT_NAME)
 
     # Idempotency: don't stack handlers on reload.
     if getattr(root_logger, "_relay_configured", False):
         root_logger.setLevel(resolved_level)
+        for h in list(root_logger.handlers):
+            h.setLevel(resolved_level)
         return
 
     root_logger.setLevel(resolved_level)
     root_logger.propagate = False
 
-    handler = logging.StreamHandler()
+    handler = logging.StreamHandler(stream=sys.stdout)
     handler.setLevel(resolved_level)
     handler.setFormatter(
         logging.Formatter(
