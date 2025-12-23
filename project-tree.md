@@ -95,6 +95,9 @@
   📁 schemas
     📄 __init__.py
     📄 openapi.yaml
+  📁 scripts
+    📄 New Text Document.txt
+    📄 batch_download_test.sh
   📁 static
     📁 .well-known
       📄 __init__.py
@@ -103,5 +106,6 @@
     📄 __init__.py
     📄 client.py
     📄 conftest.py
+    📄 test_files_and_batches_integration.py
     📄 test_local_e2e.py
     📄 test_relay_auth_guard.py
