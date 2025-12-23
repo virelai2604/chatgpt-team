@@ -1,47 +1,39 @@
-
----
-
-### `RELAY_PROGRESS_SUMMARY_v7.md` (full file)
-
-```md
 # Relay Progress Summary (v7)
 
+## Executive summary (2025-12-23)
+All success-gate integration tests are green locally (Gate A/B/C/D).
+
 ## What you ran
-- `pytest -m integration -vv tests/test_success_gates_integration.py`
-- Local server:
+- Ensured the tests targeted the local relay:
+  - `unset RELAY_BASE_URL` (defaults to `http://localhost:8000`)
+  - `export RELAY_TOKEN=dummy`
+  - `export INTEGRATION_OPENAI_API_KEY=1`
+- Started the server:
   - `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
-- A direct python `requests` probe to `POST /v1/uploads`
+- Ran:
+  - `pytest -m integration -vv tests/test_success_gates_integration.py`
 
-## Current result (local)
-✅ All four success gates now pass (4/4) when running against localhost:
+## Results
+- Gate A (Uploads E2E): **PASS**
+- Gate B (SSE smoke): **PASS**
+- Gate C (OpenAPI operationId uniqueness): **PASS**
+- Gate D (containers/videos content endpoints, no relay 5xx): **PASS**
 
-- Gate A (Uploads E2E: happy path + cancel path): PASS
-- Gate B (SSE smoke): PASS
-- Gate C (OpenAPI operationId uniqueness): PASS
-- Gate D (containers/videos `/content` endpoints no relay 5xx): PASS
+## Key fixes since v6
+1. **Empty-body POST validation**
+   - Upload cancel now accepts requests with no body + no `Content-Type` (previously 415).
+2. **Content proxying error handling**
+   - Containers/videos content endpoints propagate upstream 4xx and do not convert them to relay 5xx (previously 500 via `raise_for_status()`).
+3. **Header/encoding robustness**
+   - Prevent client JSON decode failures by ensuring response headers match the actual body encoding (avoid/strip misleading `Content-Encoding` where appropriate).
+4. **Compatibility cleanups**
+   - Ensure imports/exports required by route modules are present (forward_* helpers, http_client shim, ErrorResponse model).
 
-## Previously failing (as recorded in v6)
-- Gate A cancel path previously returned 415 due to strict Content-Type validation on empty-body POST.
-- Gate D containers content previously returned relay 500 due to upstream error handling during streaming.
-(These are now resolved locally.)
+## Current status
+- Local relay is ready for deployment / remote verification.
 
-## Last “failure” root cause (not code)
-The remaining observed failure was caused by **test targeting**:
-
-- `RELAY_BASE_URL` was set to the hosted relay (`https://chatgpt-team-relay.onrender.com`),
-  so the integration test and python probe hit the hosted service rather than `http://localhost:8000`.
-- In that configuration, python `requests` saw `Content-Encoding: gzip` and response bytes that were not directly JSON,
-  causing `Response.json()` to raise `JSONDecodeError`.
-
-Fix:
-- `unset RELAY_BASE_URL` (or set it explicitly to `http://localhost:8000`) before running local gates.
-
-## Definition of “done” (local)
-- `pytest -m integration -vv tests/test_success_gates_integration.py` returns 4 passed.
-
-## Next milestone (hosted parity)
-1) Redeploy hosted relay from the current repo state.
-2) Rerun:
-   - a python `requests` probe for `/v1/uploads` JSON decoding
-   - the 4 success gates with `RELAY_BASE_URL=https://chatgpt-team-relay.onrender.com`
-3) If hosted differs from local, treat it as a deployment/config drift issue and resolve until parity is achieved.
+## Next steps
+1. Redeploy onrender with this code and run the same integration gates against:
+   - `export RELAY_BASE_URL=https://chatgpt-team-relay.onrender.com`
+2. Add a regression smoke check for `Content-Encoding`/JSON parsing (local + remote).
+3. Decide whether to keep compatibility shims long-term or deprecate them once internal imports are consolidated.
