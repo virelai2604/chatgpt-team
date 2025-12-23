@@ -1,173 +1,87 @@
 from __future__ import annotations
 
-"""
-Canonical HTTP/OpenAI client factory for the relay.
-
-Design goals:
-- One pooled httpx AsyncClient per (event loop, timeout) for upstream forwarding
-- One pooled OpenAI AsyncOpenAI per (event loop, timeout) for SDK-style calls
-- Safe cleanup for reload/shutdown
-
-IMPORTANT:
-Do not paste terminal tracebacks into this file. A single stray line like:
-    ModuleNotFoundError: ...
-will cause a SyntaxError and prevent Uvicorn from importing the app.
-"""
-
 import asyncio
-from typing import Dict, Optional, Tuple, cast
+from typing import Dict, Optional, Tuple
 
 import httpx
-from openai import AsyncOpenAI, DefaultAsyncHttpxClient
+from openai import AsyncOpenAI
 
-from app.core.config import settings
-from app.utils.logger import get_logger
+from app.core.config import get_settings
 
-log = get_logger(__name__)
-
-# Keyed by (id(loop), timeout_seconds)
-_HTTPX_CLIENTS: Dict[Tuple[int, float], httpx.AsyncClient] = {}
-_OPENAI_CLIENTS: Dict[Tuple[int, float], AsyncOpenAI] = {}
-
-_lock = asyncio.Lock()
-
-
-def _get_setting(name_snake: str, name_upper: str, default=None):
-    """
-    Read a setting from either snake_case or UPPER_CASE attributes.
-    """
-    if hasattr(settings, name_snake):
-        return getattr(settings, name_snake)
-    if hasattr(settings, name_upper):
-        return getattr(settings, name_upper)
-    return default
-
-
-def _default_timeout_seconds() -> float:
-    # Prefer PROXY timeout for relay->OpenAI forwarding.
-    v = _get_setting("proxy_timeout_seconds", "PROXY_TIMEOUT_SECONDS", None)
-    if v is None:
-        v = _get_setting("relay_timeout_seconds", "RELAY_TIMEOUT_SECONDS", 90)
-    try:
-        return float(v)
-    except Exception:
-        return 90.0
-
-
-def _normalize_base_url_for_sdk(base_url: str) -> str:
-    """
-    The OpenAI SDK expects base_url ending with /v1 (it will append endpoint paths like /responses).
-    """
-    b = (base_url or "").strip()
-    if not b:
-        return "https://api.openai.com/v1"
-    b = b.rstrip("/")
-    if b.endswith("/v1"):
-        return b
-    return f"{b}/v1"
+# Loop-local caches: each running event loop gets its own clients.
+_LOOP_CLIENTS: Dict[int, Tuple[AsyncOpenAI, httpx.AsyncClient]] = {}
 
 
 def _loop_id() -> int:
-    return id(asyncio.get_running_loop())
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop; fall back to current loop (best effort).
+        loop = asyncio.get_event_loop()
+    return id(loop)
 
 
-async def get_async_httpx_client(timeout_s: Optional[float] = None) -> httpx.AsyncClient:
+def get_async_openai_client(*, timeout: Optional[float] = None) -> AsyncOpenAI:
     """
-    Shared httpx client for forwarding relay requests upstream.
+    Return an AsyncOpenAI client that shares a loop-local httpx.AsyncClient.
+
+    Optional:
+      - timeout: override the httpx timeout (seconds) for this loop's shared client.
     """
-    t = float(timeout_s) if timeout_s is not None else _default_timeout_seconds()
-    key = (_loop_id(), t)
-
-    async with _lock:
-        client = _HTTPX_CLIENTS.get(key)
-        if client is not None:
-            return client
-
-        timeout = httpx.Timeout(t)
-        client = httpx.AsyncClient(timeout=timeout)
-        _HTTPX_CLIENTS[key] = client
-        return client
+    openai_client, _ = _get_or_create_clients(timeout=timeout)
+    return openai_client
 
 
-async def get_async_openai_client(timeout_s: Optional[float] = None) -> AsyncOpenAI:
+def get_async_httpx_client(*, timeout: Optional[float] = None) -> httpx.AsyncClient:
     """
-    Shared OpenAI SDK client (AsyncOpenAI). Uses its own DefaultAsyncHttpxClient.
+    Return a loop-local shared httpx.AsyncClient.
+
+    Optional:
+      - timeout: override the client's timeout (seconds). If the client already exists,
+        we update its timeout best-effort.
     """
-    t = float(timeout_s) if timeout_s is not None else _default_timeout_seconds()
-    key = (_loop_id(), t)
+    _, http_client = _get_or_create_clients(timeout=timeout)
+    if timeout is not None:
+        # Best-effort update; safe even if httpx internals change.
+        try:
+            http_client.timeout = httpx.Timeout(timeout)
+        except Exception:
+            pass
+    return http_client
 
-    async with _lock:
-        client = _OPENAI_CLIENTS.get(key)
-        if client is not None:
-            return client
 
-        api_key = cast(
-            str,
-            _get_setting("openai_api_key", "OPENAI_API_KEY", None),
-        )
-        api_base = cast(
-            str,
-            _get_setting("openai_api_base", "OPENAI_API_BASE", "https://api.openai.com/v1"),
-        )
-        organization = _get_setting("openai_organization", "OPENAI_ORGANIZATION", None)
+def _get_or_create_clients(*, timeout: Optional[float]) -> Tuple[AsyncOpenAI, httpx.AsyncClient]:
+    lid = _loop_id()
+    if lid in _LOOP_CLIENTS:
+        return _LOOP_CLIENTS[lid]
 
-        # Optional: combine beta headers if present
-        assistants_beta = _get_setting("openai_assistants_beta", "OPENAI_ASSISTANTS_BETA", None)
-        realtime_beta = _get_setting("openai_realtime_beta", "OPENAI_REALTIME_BETA", None)
-        betas = [b for b in [assistants_beta, realtime_beta] if b]
-        default_headers = {}
-        if betas:
-            default_headers["OpenAI-Beta"] = ",".join(betas)
+    settings = get_settings()
 
-        http_client = DefaultAsyncHttpxClient(timeout=httpx.Timeout(t))
+    timeout_s = float(timeout) if timeout is not None else float(getattr(settings, "relay_timeout_seconds", 120.0))
+    http_client = httpx.AsyncClient(timeout=httpx.Timeout(timeout_s))
 
-        client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=_normalize_base_url_for_sdk(api_base),
-            organization=organization,
-            default_headers=default_headers or None,
-            http_client=http_client,
-        )
-        _OPENAI_CLIENTS[key] = client
-        return client
+    openai_client = AsyncOpenAI(
+        api_key=settings.openai_api_key,
+        base_url=getattr(settings, "openai_base_url", None) or "https://api.openai.com/v1",
+        http_client=http_client,
+    )
+
+    _LOOP_CLIENTS[lid] = (openai_client, http_client)
+    return openai_client, http_client
 
 
 async def close_async_clients() -> None:
     """
-    Close and clear all cached clients for the current process.
-    Useful on shutdown and reload.
+    Close all loop-local clients (safe to call at shutdown).
     """
-    async with _lock:
-        openai_items = list(_OPENAI_CLIENTS.items())
-        httpx_items = list(_HTTPX_CLIENTS.items())
-        _OPENAI_CLIENTS.clear()
-        _HTTPX_CLIENTS.clear()
-
-    # Close OpenAI clients (their internal http_client) first.
-    for (loop_id, timeout_s), client in openai_items:
+    for lid, (openai_client, http_client) in list(_LOOP_CLIENTS.items()):
         try:
-            await client.close()
-        except Exception:
-            log.exception("Failed closing OpenAI client loop=%s timeout=%s", loop_id, timeout_s)
-
-    # Close httpx clients used for forwarding.
-    for (loop_id, timeout_s), client in httpx_items:
-        try:
-            await client.aclose()
-        except Exception:
-            log.exception("Failed closing httpx client loop=%s timeout=%s", loop_id, timeout_s)
+            # OpenAI client uses the same http client; closing httpx is sufficient.
+            await http_client.aclose()
+        finally:
+            _LOOP_CLIENTS.pop(lid, None)
 
 
 async def aclose_all_clients() -> None:
-    """
-    Backwards-compatible alias.
-    """
+    # Back-compat alias
     await close_async_clients()
-
-
-__all__ = [
-    "get_async_httpx_client",
-    "get_async_openai_client",
-    "close_async_clients",
-    "aclose_all_clients",
-]

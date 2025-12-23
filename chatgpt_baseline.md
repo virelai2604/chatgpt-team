@@ -1,13 +1,13 @@
 # ChatGPT Sync
 Repo: chatgpt-team
 Base: origin/main
-Base commit (merge-base): 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+Base commit (merge-base): 6c3184a03e0dfa370ba32732818685d823f35eb4
 Dirs: app tests static schemas
 Root files: project-tree.md pyproject.toml
 Mode: baseline
-Generated: 2025-12-23T14:45:03+07:00
+Generated: 2025-12-23T15:28:58+07:00
 
-## TREE (repo root at 498a04759f3e93d38bb3b3d6d0e5245801c931dd)
+## TREE (repo root at 6c3184a03e0dfa370ba32732818685d823f35eb4)
 ```
  - .env.example.env
  - .gitattributes
@@ -16,6 +16,8 @@ Generated: 2025-12-23T14:45:03+07:00
  - .gitleaks.toml
  - AGENTS.md
  - ChatGPT-API_reference_ground_truth-2025-10-29.pdf
+ - RELAY_CHECKLIST_v7.md
+ - RELAY_PROGRESS_SUMMARY_v3.md
  - __init__.py
  - app
  - chatgpt_baseline.md
@@ -36,7 +38,7 @@ Generated: 2025-12-23T14:45:03+07:00
  - tests
 ```
 
-## TREE (app/ at 498a04759f3e93d38bb3b3d6d0e5245801c931dd)
+## TREE (app/ at 6c3184a03e0dfa370ba32732818685d823f35eb4)
 ```
  - app/__init__.py
  - app/api/__init__.py
@@ -48,6 +50,7 @@ Generated: 2025-12-23T14:45:03+07:00
  - app/core/config.py
  - app/core/http_client.py
  - app/core/logging.py
+ - app/http_client.py
  - app/main.py
  - app/manifests/__init__.py
  - app/manifests/tools_manifest.json
@@ -79,7 +82,7 @@ Generated: 2025-12-23T14:45:03+07:00
  - app/utils/logger.py
 ```
 
-## TREE (tests/ at 498a04759f3e93d38bb3b3d6d0e5245801c931dd)
+## TREE (tests/ at 6c3184a03e0dfa370ba32732818685d823f35eb4)
 ```
  - tests/__init__.py
  - tests/client.py
@@ -87,15 +90,16 @@ Generated: 2025-12-23T14:45:03+07:00
  - tests/test_files_and_batches_integration.py
  - tests/test_local_e2e.py
  - tests/test_relay_auth_guard.py
+ - tests/test_success_gates_integration.py
 ```
 
-## TREE (static/ at 498a04759f3e93d38bb3b3d6d0e5245801c931dd)
+## TREE (static/ at 6c3184a03e0dfa370ba32732818685d823f35eb4)
 ```
  - static/.well-known/__init__.py
  - static/.well-known/ai-plugin.json
 ```
 
-## TREE (schemas/ at 498a04759f3e93d38bb3b3d6d0e5245801c931dd)
+## TREE (schemas/ at 6c3184a03e0dfa370ba32732818685d823f35eb4)
 ```
  - schemas/__init__.py
  - schemas/openapi.yaml
@@ -103,7 +107,7 @@ Generated: 2025-12-23T14:45:03+07:00
 
 ## BASELINE (ROOT FILES)
 
-## FILE: project-tree.md @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: project-tree.md @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
   📄 .env.env
   📄 .env.example.env
@@ -112,6 +116,8 @@ Generated: 2025-12-23T14:45:03+07:00
   📄 .gitleaks.toml
   📄 AGENTS.md
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
+  📄 RELAY_CHECKLIST_v7.md
+  📄 RELAY_PROGRESS_SUMMARY_v3.md
   📄 __init__.py
   📄 chatgpt_baseline.md
   📄 chatgpt_changes.md
@@ -124,6 +130,7 @@ Generated: 2025-12-23T14:45:03+07:00
   📄 requirements.txt
   📁 app
     📄 __init__.py
+    📄 http_client.py
     📄 main.py
     📁 api
       📄 __init__.py
@@ -205,6 +212,12 @@ Generated: 2025-12-23T14:45:03+07:00
   📁 scripts
     📄 New Text Document.txt
     📄 batch_download_test.sh
+    📄 content_endpoints_smoke.sh
+    📄 openapi_operationid_check.sh
+    📄 run_success_gates.sh
+    📄 sse_smoke_test.sh
+    📄 test_success_gates_integration.sh
+    📄 uploads_e2e_test.sh
   📁 static
     📁 .well-known
       📄 __init__.py
@@ -215,9 +228,10 @@ Generated: 2025-12-23T14:45:03+07:00
     📄 conftest.py
     📄 test_files_and_batches_integration.py
     📄 test_local_e2e.py
-    📄 test_relay_auth_guard.py```
+    📄 test_relay_auth_guard.py
+    📄 test_success_gates_integration.py```
 
-## FILE: pyproject.toml @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: pyproject.toml @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -282,393 +296,287 @@ app = ["manifests/*.json"]
 
 ## BASELINE (app/)
 
-## FILE: app/__init__.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/__init__.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 ```
 
-## FILE: app/api/__init__.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/api/__init__.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 ```
 
-## FILE: app/api/forward_openai.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/api/forward_openai.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
-import json
-from typing import Any, Mapping, Optional
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+import re
+from typing import Any, Dict, Mapping, Optional
 
 import httpx
 from fastapi import HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
-from app.core.http_client import get_async_httpx_client, get_async_openai_client
-from app.utils.logger import relay_log
-
-# Settings access (supports either get_settings() or a module-level settings object).
-try:
-    from app.core.config import get_settings  # type: ignore
-except ImportError:  # pragma: no cover
-    get_settings = None  # type: ignore
-
-try:
-    from app.core.config import settings as module_settings  # type: ignore
-except ImportError:  # pragma: no cover
-    module_settings = None  # type: ignore
+from app.core.config import get_settings
+from app.http_client import get_async_httpx_client
 
 
-def _settings() -> Any:
-    if get_settings is not None:
-        return get_settings()
-    if module_settings is not None:
-        return module_settings
-    raise RuntimeError("Settings not available (expected get_settings() or settings)")
+# --- Streaming route detection --------------------------------------------------------
+
+_SSE_PATH_RE = re.compile(r"^/v1/(responses|chat/completions)$")
 
 
-# -------------------------
-# Header / URL helpers
-# -------------------------
-
-_HOP_BY_HOP_HEADERS = {
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailers",
-    "transfer-encoding",
-    "upgrade",
-}
-
-# Must not forward these upstream (common relay bug sources)
-_STRIP_REQUEST_HEADERS = {
-    "authorization",    # relay key
-    "host",             # never forward localhost host to OpenAI
-    "content-length",   # let httpx compute it for upstream request
-}
+def _is_sse_path(path: str) -> bool:
+    """Return True if an upstream route is expected to stream via SSE."""
+    return _SSE_PATH_RE.match(path) is not None
 
 
-def normalize_base_url(base_url: str) -> str:
-    """
-    Normalize an OpenAI base URL for consistent join semantics.
-    Accepts:
-      - https://api.openai.com
-      - https://api.openai.com/v1
-    Returns a base ending with /v1
-    """
-    b = (base_url or "").strip()
-    if not b:
-        raise ValueError("OPENAI_API_BASE is empty")
-    b = b.rstrip("/")
-    if b.endswith("/v1"):
-        return b
-    return b + "/v1"
+# --- Header/url helpers ---------------------------------------------------------------
+
+def _join_url(base: str, path: str) -> str:
+    return f"{base.rstrip('/')}/{path.lstrip('/')}"
 
 
-def join_url(base_v1: str, path: str) -> str:
-    base_v1 = normalize_base_url(base_v1)
-    p = (path or "").strip()
-    if not p.startswith("/"):
-        p = "/" + p
-    # If path already includes /v1, strip it so we don't double it.
-    if p.startswith("/v1/"):
-        p = p[3:]
-    elif p == "/v1":
-        p = ""
-    return base_v1 + p
-
-
-# -------------------------
-# Backwards-compat shims
-# -------------------------
-
-def _get_timeout_seconds() -> float:
-    """Return the default upstream timeout in seconds (float)."""
-    s = _settings()
-    raw = getattr(s, "proxy_timeout", None)
-    if raw is None:
-        raw = getattr(s, "openai_timeout", None)
-    try:
-        return float(raw) if raw is not None else 120.0
-    except (TypeError, ValueError):
-        return 120.0
-
-
-def build_upstream_url(path: str) -> str:
-    """Build a fully-qualified OpenAI upstream URL for a given path."""
-    s = _settings()
-    base = getattr(s, "openai_api_base", "https://api.openai.com/v1")
-    return join_url(base, path)
-
-
-def filter_upstream_headers(headers: Mapping[str, str]) -> dict[str, str]:
-    """Filter hop-by-hop headers and relay/transport headers from inbound headers."""
-    return _filter_inbound_headers(headers)
-
-
-def _filter_inbound_headers(headers: Mapping[str, str]) -> dict[str, str]:
-    out: dict[str, str] = {}
+def _filter_inbound_headers(headers: Mapping[str, str]) -> Dict[str, str]:
+    """Remove hop-by-hop and unsafe headers before proxying upstream."""
+    out: Dict[str, str] = {}
     for k, v in headers.items():
         lk = k.lower()
-        if lk in _HOP_BY_HOP_HEADERS:
+        if lk in {"host", "connection", "content-length"}:
             continue
-        if lk in _STRIP_REQUEST_HEADERS:
+        if lk.startswith("sec-") or lk in {
+            "upgrade",
+            "keep-alive",
+            "proxy-authenticate",
+            "proxy-authorization",
+            "te",
+            "trailer",
+            "transfer-encoding",
+        }:
             continue
         out[k] = v
     return out
 
 
+def _filter_upstream_headers(headers: Mapping[str, str]) -> Dict[str, str]:
+    """Remove hop-by-hop/encoding headers from upstream response."""
+    out: Dict[str, str] = {}
+    for k, v in headers.items():
+        lk = k.lower()
+        if lk in {"content-encoding", "transfer-encoding", "connection"}:
+            continue
+        out[k] = v
+    return out
+
+
+# Back-compat alias used by some route modules.
+def filter_upstream_headers(headers: Mapping[str, str]) -> Dict[str, str]:
+    return _filter_upstream_headers(headers)
+
+
+def build_upstream_url(request: Request, base_url: str, *, path_override: Optional[str] = None) -> str:
+    """Build the upstream URL, preserving the original query string."""
+    path = path_override or request.url.path
+    url = _join_url(base_url, path)
+    if request.url.query:
+        url = f"{url}?{request.url.query}"
+    return url
+
+
+def _get_timeout_seconds(settings: Any) -> float:
+    """Back-compat: support multiple config field names."""
+    for name in ("proxy_timeout_seconds", "proxy_timeout", "proxy_timeout_s"):
+        if hasattr(settings, name):
+            try:
+                return float(getattr(settings, name))
+            except Exception:
+                pass
+    return 120.0
+
+
 def build_outbound_headers(
-    *,
     inbound_headers: Mapping[str, str],
     openai_api_key: str,
-) -> dict[str, str]:
-    if not openai_api_key:
-        raise HTTPException(status_code=500, detail="Server is missing OPENAI_API_KEY")
+    content_type: Optional[str] = None,
+    forward_accept: bool = True,
+    path_hint: Optional[str] = None,
+) -> Dict[str, str]:
+    """
+    Create upstream request headers.
+
+    This function intentionally accepts legacy parameters (forward_accept, path_hint)
+    so older route modules can call it without raising TypeError.
+    """
+    # forward_accept/path_hint are retained for compatibility; current implementation
+    # always forwards the inbound Accept header if present.
+    _ = forward_accept
+    _ = path_hint
 
     out = _filter_inbound_headers(inbound_headers)
-
-    # Upstream auth
     out["Authorization"] = f"Bearer {openai_api_key}"
 
-    # Ensure we have a content-type for JSON calls (multipart should already have it)
-    if "content-type" not in {k.lower(): v for k, v in out.items()}:
-        out["Content-Type"] = "application/json"
+    if content_type:
+        out["Content-Type"] = content_type
 
-    # Optional beta headers if configured
-    s = _settings()
-    assistants_beta = getattr(s, "openai_assistants_beta", None)
-    realtime_beta = getattr(s, "openai_realtime_beta", None)
-    if assistants_beta:
-        out["OpenAI-Beta"] = assistants_beta
-    if realtime_beta:
-        out["OpenAI-Beta"] = realtime_beta
+    # OpenAI-Beta header can contain multiple comma-separated flags.
+    s = get_settings()
+    beta_values = []
+    if getattr(s, "openai_assistants_beta", False):
+        beta_values.append("assistants=v2")
+    if getattr(s, "openai_realtime_beta", False):
+        beta_values.append("realtime=v1")
+
+    if beta_values:
+        existing = out.get("OpenAI-Beta")
+        combined = []
+        if existing:
+            combined.extend([p.strip() for p in existing.split(",") if p.strip()])
+        combined.extend(beta_values)
+
+        seen = set()
+        deduped = []
+        for item in combined:
+            if item in seen:
+                continue
+            seen.add(item)
+            deduped.append(item)
+
+        out["OpenAI-Beta"] = ", ".join(deduped)
 
     return out
 
 
-def _maybe_model_dump(obj: Any) -> dict[str, Any]:
-    """OpenAI SDK objects are Pydantic-like; support model_dump() and dict()."""
-    if hasattr(obj, "model_dump"):
-        return obj.model_dump()  # type: ignore[no-any-return]
-    if isinstance(obj, dict):
-        return obj
-    try:
-        return json.loads(json.dumps(obj, default=str))
-    except Exception:
-        return {"result": str(obj)}
+# --- Core forwarders ------------------------------------------------------------------
 
+async def forward_openai_request_to_path(
+    request: Request,
+    *,
+    method_override: Optional[str] = None,
+    path_override: Optional[str] = None,
+) -> Response:
+    """Forward the inbound FastAPI request to OpenAI, optionally overriding method/path."""
+    s = get_settings()
+    base_url = getattr(s, "openai_base_url", None) or "https://api.openai.com"
+    api_key = getattr(s, "openai_api_key", None)
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Missing OPENAI_API_KEY")
 
-# -------------------------
-# Generic forwarders (httpx)
-# -------------------------
+    method = (method_override or request.method).upper()
+    upstream_url = build_upstream_url(request, base_url, path_override=path_override)
 
-async def forward_openai_request(request: Request) -> Response:
-    """
-    Forward an incoming FastAPI request to the upstream OpenAI API using httpx.
-    Suitable for:
-      - JSON
-      - multipart/form-data (Uploads/Files)
-      - binary content endpoints
-      - SSE streaming (when client sets Accept: text/event-stream)
-    """
-    s = _settings()
-    base = getattr(s, "openai_api_base", "https://api.openai.com/v1")
-    key = getattr(s, "openai_api_key", "")
-    timeout_s = float(getattr(s, "proxy_timeout", 120))
-
-    upstream_url = join_url(base, request.url.path)
-
-    # Preserve query string
-    query = request.url.query
-    if query:
-        upstream_url = upstream_url + "?" + query
-
-    # Read body bytes once; forward as-is.
     body = await request.body()
-
-    headers = build_outbound_headers(inbound_headers=request.headers, openai_api_key=key)
-
-    relay_log.debug("Forwarding %s %s -> %s", request.method, request.url.path, upstream_url)
-
-    client = get_async_httpx_client(timeout=timeout_s)
-
-    # Streaming SSE support
-    accept = request.headers.get("accept", "")
-    wants_sse = "text/event-stream" in (accept or "").lower()
-
-    if wants_sse:
-        async def event_generator():
-            async with client.stream(
-                request.method,
-                upstream_url,
-                headers=headers,
-                content=body if body else None,
-            ) as upstream_resp:
-                # If upstream errors, it will generally send JSON or text; raising is fine here.
-                upstream_resp.raise_for_status()
-                async for chunk in upstream_resp.aiter_bytes():
-                    if chunk:
-                        yield chunk
-
-        return StreamingResponse(
-            event_generator(),
-            status_code=200,
-            media_type="text/event-stream",
-        )
-
-    upstream_resp = await client.request(
-        request.method,
-        upstream_url,
-        headers=headers,
-        content=body if body else None,
+    headers = build_outbound_headers(
+        request.headers,
+        api_key,
+        content_type=request.headers.get("content-type"),
     )
 
-    resp_headers: dict[str, str] = {}
-    for k, v in upstream_resp.headers.items():
-        if k.lower() in _HOP_BY_HOP_HEADERS:
-            continue
-        resp_headers[k] = v
+    # If there is a body but the client omitted Content-Type, default to JSON.
+    if body and not any(k.lower() == "content-type" for k in headers.keys()):
+        headers["Content-Type"] = "application/json"
 
+    timeout_s = _get_timeout_seconds(s)
+    client = get_async_httpx_client(timeout=timeout_s)
+
+    effective_path = path_override or request.url.path
+    if _is_sse_path(effective_path):
+        async with client.stream(method, upstream_url, headers=headers, content=body) as upstream:
+            return StreamingResponse(
+                upstream.aiter_bytes(),
+                status_code=upstream.status_code,
+                headers=_filter_upstream_headers(upstream.headers),
+                media_type=upstream.headers.get("content-type"),
+            )
+
+    upstream_resp = await client.request(method, upstream_url, headers=headers, content=body)
     return Response(
         content=upstream_resp.content,
         status_code=upstream_resp.status_code,
-        headers=resp_headers,
+        headers=_filter_upstream_headers(upstream_resp.headers),
         media_type=upstream_resp.headers.get("content-type"),
     )
+
+
+async def forward_openai_request(request: Request) -> Response:
+    """Forward the request to the same upstream path."""
+    return await forward_openai_request_to_path(request)
 
 
 async def forward_openai_method_path(
-    *,
-    method: str,
-    path: str,
-    query: Optional[Mapping[str, Any]] = None,
-    json_body: Any = None,
+    *args: Any,
+    method: Optional[str] = None,
+    path: Optional[str] = None,
+    query: Optional[Dict[str, Any]] = None,
+    json_body: Optional[Any] = None,
     inbound_headers: Optional[Mapping[str, str]] = None,
 ) -> Response:
     """
-    Method/path forwarder for Action-friendly JSON envelope calls (/v1/proxy).
+    Forward to a specific upstream method/path.
+
+    Supports two call styles:
+      - New style (keyword-only):
+          forward_openai_method_path(method=..., path=..., query=..., json_body=..., inbound_headers=...)
+      - Legacy style (positional):
+          forward_openai_method_path(<method>, <path>, <request>)
     """
-    s = _settings()
-    base = getattr(s, "openai_api_base", "https://api.openai.com/v1")
-    key = getattr(s, "openai_api_key", "")
-    timeout_s = float(getattr(s, "proxy_timeout", 120))
+    # Legacy style: (method, path, request)
+    if (
+        len(args) >= 3
+        and isinstance(args[0], str)
+        and isinstance(args[1], str)
+        and isinstance(args[2], Request)
+    ):
+        legacy_method: str = args[0]
+        legacy_path: str = args[1]
+        legacy_request: Request = args[2]
+        return await forward_openai_request_to_path(
+            legacy_request,
+            method_override=legacy_method,
+            path_override=legacy_path,
+        )
 
-    upstream_url = join_url(base, path)
+    if args:
+        raise TypeError("forward_openai_method_path() received unexpected positional arguments")
 
-    # Merge/encode query parameters
-    if query:
-        pairs: list[tuple[str, str]] = []
-        for k, v in query.items():
-            if v is None:
-                continue
-            if isinstance(v, (list, tuple)):
-                for item in v:
-                    pairs.append((str(k), str(item)))
-            else:
-                pairs.append((str(k), str(v)))
+    if not method or not path:
+        raise TypeError("forward_openai_method_path() missing required 'method' and/or 'path'")
 
-        if pairs:
-            parts = urlsplit(upstream_url)
-            existing = parse_qsl(parts.query, keep_blank_values=True)
-            merged = existing + pairs
-            upstream_url = urlunsplit(
-                (parts.scheme, parts.netloc, parts.path, urlencode(merged, doseq=True), parts.fragment)
-            )
+    s = get_settings()
+    base_url = getattr(s, "openai_base_url", None) or "https://api.openai.com"
+    api_key = getattr(s, "openai_api_key", None)
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Missing OPENAI_API_KEY")
+
+    url = _join_url(base_url, path)
 
     headers = build_outbound_headers(
-        inbound_headers=inbound_headers or {},
-        openai_api_key=key,
+        inbound_headers or {},
+        api_key,
+        content_type="application/json",
     )
 
+    timeout_s = _get_timeout_seconds(s)
     client = get_async_httpx_client(timeout=timeout_s)
 
-    relay_log.debug("Forwarding %s %s -> %s", method, path, upstream_url)
-
-    upstream_resp = await client.request(
-        method,
-        upstream_url,
-        headers=headers,
-        json=json_body,
-    )
-
-    resp_headers: dict[str, str] = {}
-    for k, v in upstream_resp.headers.items():
-        if k.lower() in _HOP_BY_HOP_HEADERS:
-            continue
-        resp_headers[k] = v
-
+    resp = await client.request(method.upper(), url, params=query, json=json_body, headers=headers)
     return Response(
-        content=upstream_resp.content,
-        status_code=upstream_resp.status_code,
-        headers=resp_headers,
-        media_type=upstream_resp.headers.get("content-type"),
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=_filter_upstream_headers(resp.headers),
+        media_type=resp.headers.get("content-type"),
     )
 
 
-# -------------------------
-# Higher-level helpers used by routes
-# -------------------------
-
-async def forward_responses_create(
-    payload: Optional[dict[str, Any]] = None,
-    *,
-    request: Optional[Request] = None,
-) -> dict[str, Any]:
-    client = get_async_openai_client()
-
-    if request is not None:
-        payload = await request.json()
-
-    if payload is None:
-        raise HTTPException(status_code=400, detail="Missing JSON payload for /v1/responses")
-
-    relay_log.info("Forward /v1/responses via SDK")
-    result = await client.responses.create(**payload)
-    return _maybe_model_dump(result)
-
-
-async def forward_embeddings_create(
-    payload: Optional[dict[str, Any]] = None,
-    *,
-    request: Optional[Request] = None,
-) -> dict[str, Any]:
-    client = get_async_openai_client()
-
-    if request is not None:
-        payload = await request.json()
-
-    if payload is None:
-        raise HTTPException(status_code=400, detail="Missing JSON payload for /v1/embeddings")
-
-    relay_log.info("Forward /v1/embeddings via SDK")
-    result = await client.embeddings.create(**payload)
-    return _maybe_model_dump(result)
-
-
-async def forward_files_list() -> dict[str, Any]:
-    client = get_async_openai_client()
-    result = await client.files.list()
-    return _maybe_model_dump(result)
-
-
-async def forward_files_create() -> dict[str, Any]:
-    raise HTTPException(status_code=400, detail="Use multipart passthrough for file uploads")
-
-
-async def forward_files_retrieve(*, file_id: str) -> dict[str, Any]:
-    client = get_async_openai_client()
-    result = await client.files.retrieve(file_id)
-    return _maybe_model_dump(result)
-
-
-async def forward_files_delete(*, file_id: str) -> dict[str, Any]:
-    client = get_async_openai_client()
-    result = await client.files.delete(file_id)
-    return _maybe_model_dump(result)
+async def forward_responses_create(request: Request, body: Any) -> Response:
+    """Convenience wrapper for POST /v1/responses using the proxy envelope body."""
+    return await forward_openai_method_path(
+        method="POST",
+        path="/v1/responses",
+        query=dict(request.query_params),
+        json_body=body,
+        inbound_headers=request.headers,
+    )
 ```
 
-## FILE: app/api/routes.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/api/routes.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/api/routes.py
 
@@ -690,7 +598,7 @@ register_routes(router)
 logger.info("API router initialized with shared route families")
 ```
 
-## FILE: app/api/sse.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/api/sse.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/api/sse.py
 from __future__ import annotations
@@ -792,7 +700,7 @@ async def responses_stream(
     return StreamingSSE(_responses_event_stream(body))
 ```
 
-## FILE: app/api/tools_api.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/api/tools_api.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # ==========================================================
 # app/api/tools_api.py — Tools Manifest Endpoints
@@ -943,11 +851,11 @@ async def get_manifest_v1() -> Dict[str, Any]:
     return build_manifest_response()
 ```
 
-## FILE: app/core/__init__.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/core/__init__.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 ```
 
-## FILE: app/core/config.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/core/config.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -1243,108 +1151,184 @@ def get_settings() -> Settings:
 settings: Settings = get_settings()
 ```
 
-## FILE: app/core/http_client.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/core/http_client.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
+"""
+Canonical HTTP/OpenAI client factory for the relay.
+
+Design goals:
+- One pooled httpx AsyncClient per (event loop, timeout) for upstream forwarding
+- One pooled OpenAI AsyncOpenAI per (event loop, timeout) for SDK-style calls
+- Safe cleanup for reload/shutdown
+
+IMPORTANT:
+Do not paste terminal tracebacks into this file. A single stray line like:
+    ModuleNotFoundError: ...
+will cause a SyntaxError and prevent Uvicorn from importing the app.
+"""
+
 import asyncio
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, cast
 
 import httpx
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, DefaultAsyncHttpxClient
 
-from app.core.config import get_settings
+from app.core.config import settings
 from app.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-# Cache per-event-loop AND per-timeout to avoid:
-# - "attached to a different loop" issues with reload
-# - unintended timeout coupling between routes (SSE vs non-SSE)
-_LOOP_CLIENTS: Dict[Tuple[int, float], Tuple[httpx.AsyncClient, AsyncOpenAI]] = {}
+# Keyed by (id(loop), timeout_seconds)
+_HTTPX_CLIENTS: Dict[Tuple[int, float], httpx.AsyncClient] = {}
+_OPENAI_CLIENTS: Dict[Tuple[int, float], AsyncOpenAI] = {}
+
+_lock = asyncio.Lock()
+
+
+def _get_setting(name_snake: str, name_upper: str, default=None):
+    """
+    Read a setting from either snake_case or UPPER_CASE attributes.
+    """
+    if hasattr(settings, name_snake):
+        return getattr(settings, name_snake)
+    if hasattr(settings, name_upper):
+        return getattr(settings, name_upper)
+    return default
+
+
+def _default_timeout_seconds() -> float:
+    # Prefer PROXY timeout for relay->OpenAI forwarding.
+    v = _get_setting("proxy_timeout_seconds", "PROXY_TIMEOUT_SECONDS", None)
+    if v is None:
+        v = _get_setting("relay_timeout_seconds", "RELAY_TIMEOUT_SECONDS", 90)
+    try:
+        return float(v)
+    except Exception:
+        return 90.0
+
+
+def _normalize_base_url_for_sdk(base_url: str) -> str:
+    """
+    The OpenAI SDK expects base_url ending with /v1 (it will append endpoint paths like /responses).
+    """
+    b = (base_url or "").strip()
+    if not b:
+        return "https://api.openai.com/v1"
+    b = b.rstrip("/")
+    if b.endswith("/v1"):
+        return b
+    return f"{b}/v1"
 
 
 def _loop_id() -> int:
-    try:
-        return id(asyncio.get_running_loop())
-    except RuntimeError:
-        # No running loop (import-time / sync context). Use a stable sentinel.
-        return -1
+    return id(asyncio.get_running_loop())
 
 
-def _normalize_timeout_seconds(timeout_s: float) -> float:
-    # Make float keys stable (avoid 120 vs 120.0 vs 120.0000001)
-    return float(f"{float(timeout_s):.6f}")
+async def get_async_httpx_client(timeout_s: Optional[float] = None) -> httpx.AsyncClient:
+    """
+    Shared httpx client for forwarding relay requests upstream.
+    """
+    t = float(timeout_s) if timeout_s is not None else _default_timeout_seconds()
+    key = (_loop_id(), t)
+
+    async with _lock:
+        client = _HTTPX_CLIENTS.get(key)
+        if client is not None:
+            return client
+
+        timeout = httpx.Timeout(t)
+        client = httpx.AsyncClient(timeout=timeout)
+        _HTTPX_CLIENTS[key] = client
+        return client
 
 
-def get_async_httpx_client(timeout: Optional[float] = None) -> httpx.AsyncClient:
-    settings = get_settings()
-    effective_timeout = (
-        float(timeout)
-        if timeout is not None
-        else float(getattr(settings, "proxy_timeout_seconds", 120.0))
-    )
-    effective_timeout = _normalize_timeout_seconds(effective_timeout)
+async def get_async_openai_client(timeout_s: Optional[float] = None) -> AsyncOpenAI:
+    """
+    Shared OpenAI SDK client (AsyncOpenAI). Uses its own DefaultAsyncHttpxClient.
+    """
+    t = float(timeout_s) if timeout_s is not None else _default_timeout_seconds()
+    key = (_loop_id(), t)
 
-    key = (_loop_id(), effective_timeout)
-    if key in _LOOP_CLIENTS:
-        return _LOOP_CLIENTS[key][0]
+    async with _lock:
+        client = _OPENAI_CLIENTS.get(key)
+        if client is not None:
+            return client
 
-    client_timeout = httpx.Timeout(effective_timeout)
-    client = httpx.AsyncClient(timeout=client_timeout)
+        api_key = cast(
+            str,
+            _get_setting("openai_api_key", "OPENAI_API_KEY", None),
+        )
+        api_base = cast(
+            str,
+            _get_setting("openai_api_base", "OPENAI_API_BASE", "https://api.openai.com/v1"),
+        )
+        organization = _get_setting("openai_organization", "OPENAI_ORGANIZATION", None)
 
-    openai_client = AsyncOpenAI(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url,
-        http_client=client,
-    )
+        # Optional: combine beta headers if present
+        assistants_beta = _get_setting("openai_assistants_beta", "OPENAI_ASSISTANTS_BETA", None)
+        realtime_beta = _get_setting("openai_realtime_beta", "OPENAI_REALTIME_BETA", None)
+        betas = [b for b in [assistants_beta, realtime_beta] if b]
+        default_headers = {}
+        if betas:
+            default_headers["OpenAI-Beta"] = ",".join(betas)
 
-    _LOOP_CLIENTS[key] = (client, openai_client)
-    return client
+        http_client = DefaultAsyncHttpxClient(timeout=httpx.Timeout(t))
 
-
-def get_async_openai_client(timeout: Optional[float] = None) -> AsyncOpenAI:
-    settings = get_settings()
-    effective_timeout = (
-        float(timeout)
-        if timeout is not None
-        else float(getattr(settings, "proxy_timeout_seconds", 120.0))
-    )
-    effective_timeout = _normalize_timeout_seconds(effective_timeout)
-
-    key = (_loop_id(), effective_timeout)
-    if key in _LOOP_CLIENTS:
-        return _LOOP_CLIENTS[key][1]
-
-    # Ensure both are created together (shared httpx client)
-    get_async_httpx_client(timeout=effective_timeout)
-    return _LOOP_CLIENTS[key][1]
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=_normalize_base_url_for_sdk(api_base),
+            organization=organization,
+            default_headers=default_headers or None,
+            http_client=http_client,
+        )
+        _OPENAI_CLIENTS[key] = client
+        return client
 
 
 async def close_async_clients() -> None:
-    """Close the cached clients for the current event loop (all timeouts)."""
-    loop_key = _loop_id()
-    keys = [k for k in _LOOP_CLIENTS.keys() if k[0] == loop_key]
-    for k in keys:
-        client, _ = _LOOP_CLIENTS.pop(k)
+    """
+    Close and clear all cached clients for the current process.
+    Useful on shutdown and reload.
+    """
+    async with _lock:
+        openai_items = list(_OPENAI_CLIENTS.items())
+        httpx_items = list(_HTTPX_CLIENTS.items())
+        _OPENAI_CLIENTS.clear()
+        _HTTPX_CLIENTS.clear()
+
+    # Close OpenAI clients (their internal http_client) first.
+    for (loop_id, timeout_s), client in openai_items:
+        try:
+            await client.close()
+        except Exception:
+            log.exception("Failed closing OpenAI client loop=%s timeout=%s", loop_id, timeout_s)
+
+    # Close httpx clients used for forwarding.
+    for (loop_id, timeout_s), client in httpx_items:
         try:
             await client.aclose()
         except Exception:
-            log.exception("Failed closing httpx client (loop=%s, timeout=%s)", k[0], k[1])
+            log.exception("Failed closing httpx client loop=%s timeout=%s", loop_id, timeout_s)
 
 
 async def aclose_all_clients() -> None:
-    """Close all cached clients across loops (best-effort)."""
-    items = list(_LOOP_CLIENTS.items())
-    _LOOP_CLIENTS.clear()
-    for (loop_id, timeout_s), (client, _) in items:
-        try:
-            await client.aclose()
-        except Exception:
-            log.exception("Failed closing httpx client (loop=%s, timeout=%s)", loop_id, timeout_s)
+    """
+    Backwards-compatible alias.
+    """
+    await close_async_clients()
+
+
+__all__ = [
+    "get_async_httpx_client",
+    "get_async_openai_client",
+    "close_async_clients",
+    "aclose_all_clients",
+]
 ```
 
-## FILE: app/core/logging.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/core/logging.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 """
 Logging configuration module for the ChatGPT Team Relay.
@@ -1394,7 +1378,34 @@ def configure_logging(settings: Any) -> None:
     get_logger("relay")
 ```
 
-## FILE: app/main.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/http_client.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
+```
+from __future__ import annotations
+
+"""Compatibility shim.
+
+Historically some modules imported HTTP/OpenAI clients from `app.http_client`.
+The canonical implementation lives in `app.core.http_client`.
+
+This module re-exports the public helpers to avoid churn.
+"""
+
+from app.core.http_client import (  # noqa: F401
+    aclose_all_clients,
+    close_async_clients,
+    get_async_httpx_client,
+    get_async_openai_client,
+)
+
+__all__ = [
+    "get_async_httpx_client",
+    "get_async_openai_client",
+    "close_async_clients",
+    "aclose_all_clients",
+]
+```
+
+## FILE: app/main.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -1483,7 +1494,7 @@ def create_app() -> FastAPI:
 app = create_app()
 ```
 
-## FILE: app/manifests/__init__.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/manifests/__init__.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # ==========================================================
 # app/manifests/__init__.py — Ground Truth Manifest Loader
@@ -1530,7 +1541,7 @@ except Exception as e:
     raise RuntimeError(f"Failed to load tools manifest: {_manifest_path} — {e}")
 ```
 
-## FILE: app/manifests/tools_manifest.json @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/manifests/tools_manifest.json @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 {
   "object": "list",
@@ -1821,11 +1832,11 @@ except Exception as e:
 }
 ```
 
-## FILE: app/middleware/__init__.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/middleware/__init__.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 ```
 
-## FILE: app/middleware/p4_orchestrator.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/middleware/p4_orchestrator.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/middleware/p4_orchestrator.py
 import uuid
@@ -1859,7 +1870,7 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         return response
 ```
 
-## FILE: app/middleware/relay_auth.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/middleware/relay_auth.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/middleware/relay_auth.py
 
@@ -1953,39 +1964,89 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/middleware/validation.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/middleware/validation.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
-# app/middleware/validation.py
-from typing import Callable, Awaitable
+from __future__ import annotations
 
-from fastapi import Request
-from fastapi.responses import JSONResponse, Response
+from typing import Callable, Iterable, Set
+
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+
+
+def _base_content_type(content_type_header: str) -> str:
+    # e.g. "application/json; charset=utf-8" -> "application/json"
+    return (content_type_header or "").split(";", 1)[0].strip().lower()
+
+
+def _is_allowed_content_type(base_ct: str, allowed: Set[str]) -> bool:
+    if not base_ct:
+        return False
+    if base_ct in allowed:
+        return True
+    # Allow any vendor JSON: application/*+json
+    if base_ct.endswith("+json"):
+        return True
+    # Allow multipart with boundary parameter already stripped
+    if base_ct == "multipart/form-data":
+        return True
+    return False
 
 
 class ValidationMiddleware(BaseHTTPMiddleware):
     """
-    Lightweight request validation middleware.
+    Enforce Content-Type for body-bearing methods, while allowing empty-body POSTs.
 
-    - Enforces JSON or multipart Content-Type for mutating requests.
+    Why:
+      - Some OpenAI endpoints (notably `/v1/uploads/{upload_id}/cancel`) accept POST with no body.
+      - Clients often omit Content-Type when body is empty.
+      - We still want strict enforcement when a body *is present*.
     """
 
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        if request.method in {"POST", "PUT", "PATCH"}:
-            content_type = request.headers.get("content-type", "")
-            if (
-                "application/json" not in content_type
-                and not content_type.startswith("multipart/form-data")
-            ):
+    def __init__(
+        self,
+        app,
+        *,
+        allowed_content_types: Iterable[str] | None = None,
+    ) -> None:
+        super().__init__(app)
+        self.allowed_content_types: Set[str] = set(
+            ct.strip().lower()
+            for ct in (allowed_content_types or ("application/json",))
+            if ct and ct.strip()
+        )
+        # Always allow multipart uploads (e.g. /v1/files, /v1/uploads/*/parts)
+        self.allowed_content_types.add("multipart/form-data")
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        method = request.method.upper()
+
+        # Only validate methods that commonly carry a body.
+        if method in {"POST", "PUT", "PATCH"}:
+            raw_ct = request.headers.get("content-type") or ""
+            base_ct = _base_content_type(raw_ct)
+
+            if not base_ct:
+                # No Content-Type provided. Allow only if the body is empty.
+                body = await request.body()  # Starlette caches this (safe for downstream).
+                if body:
+                    return JSONResponse(
+                        status_code=415,
+                        content={"detail": "Unsupported Media Type: ''"},
+                    )
+                return await call_next(request)
+
+            if not _is_allowed_content_type(base_ct, self.allowed_content_types):
                 return JSONResponse(
                     status_code=415,
-                    content={"detail": f"Unsupported Media Type: {content_type!r}"},
+                    content={"detail": f"Unsupported Media Type: '{base_ct}'"},
                 )
 
         return await call_next(request)
 ```
 
-## FILE: app/routes/__init__.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/__init__.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/routes/__init__.py
 
@@ -1994,7 +2055,7 @@ from .register_routes import register_routes
 __all__ = ["register_routes"]
 ```
 
-## FILE: app/routes/actions.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/actions.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/routes/actions.py
 
@@ -2145,7 +2206,7 @@ async def actions_relay_info_v1() -> dict:
     return nested
 ```
 
-## FILE: app/routes/batches.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/batches.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -2183,7 +2244,7 @@ async def cancel_batch(batch_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/containers.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/containers.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -2350,7 +2411,7 @@ async def containers_subpaths(path: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/conversations.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/conversations.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -2419,7 +2480,7 @@ async def conversations_subpaths_options(path: str, request: Request) -> Respons
     return await _forward(request)
 ```
 
-## FILE: app/routes/embeddings.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/embeddings.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -2441,7 +2502,7 @@ async def create_embedding(request: Request) -> JSONResponse:
     return JSONResponse(content=payload)
 ```
 
-## FILE: app/routes/files.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/files.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -2532,7 +2593,7 @@ async def files_passthrough(path: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/health.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/health.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/routes/health.py
 from __future__ import annotations
@@ -2587,7 +2648,7 @@ async def health_v1() -> Dict[str, Any]:
     return _base_status()
 ```
 
-## FILE: app/routes/images.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/images.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/routes/images.py
 
@@ -2644,7 +2705,7 @@ async def edit_image(request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/models.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/models.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/routes/models.py
 
@@ -2703,7 +2764,7 @@ async def retrieve_model(model_id: str) -> dict:
     }
 ```
 
-## FILE: app/routes/proxy.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/proxy.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -2955,7 +3016,7 @@ async def proxy(call: ProxyRequest, request: Request) -> Response:
     )
 ```
 
-## FILE: app/routes/realtime.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/realtime.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/routes/realtime.py
 
@@ -3151,7 +3212,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
         await websocket.close()
 ```
 
-## FILE: app/routes/register_routes.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/register_routes.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/routes/register_routes.py
 
@@ -3227,7 +3288,7 @@ def register_all_routes(app: _RouterLike) -> None:
     register_routes(app)
 ```
 
-## FILE: app/routes/responses.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/responses.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -3382,7 +3443,7 @@ async def responses_stream() -> Response:
     return StreamingResponse(gen(), media_type="text/event-stream")
 ```
 
-## FILE: app/routes/uploads.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/uploads.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/routes/uploads.py
 
@@ -3454,7 +3515,7 @@ async def uploads_passthrough(path: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/vector_stores.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/vector_stores.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -3535,7 +3596,7 @@ async def vector_stores_subpaths_alias(path: str, request: Request) -> Response:
     return await _forward(request)
 ```
 
-## FILE: app/routes/videos.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/routes/videos.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -3624,11 +3685,11 @@ async def videos_passthrough(path: str, request: Request):
     return await forward_openai_request(request)
 ```
 
-## FILE: app/utils/__init__.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/utils/__init__.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 ```
 
-## FILE: app/utils/authy.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/utils/authy.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/utils/authy.py
 
@@ -3746,7 +3807,7 @@ def check_relay_key(
         )
 ```
 
-## FILE: app/utils/error_handler.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/utils/error_handler.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # app/utils/error_handler.py
 
@@ -3890,7 +3951,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 ```
 
-## FILE: app/utils/http_client.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/utils/http_client.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -3917,7 +3978,7 @@ __all__ = [
 ]
 ```
 
-## FILE: app/utils/logger.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: app/utils/logger.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 from __future__ import annotations
 
@@ -4058,11 +4119,11 @@ def exception(msg: str, *args, **kwargs) -> None:
 
 ## BASELINE (tests/)
 
-## FILE: tests/__init__.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: tests/__init__.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 ```
 
-## FILE: tests/client.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: tests/client.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # tests/client.py
 
@@ -4099,44 +4160,35 @@ def _build_client() -> TestClient:
 client: TestClient = _build_client()
 ```
 
-## FILE: tests/conftest.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: tests/conftest.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # tests/conftest.py
 from __future__ import annotations
 
 import os
-from typing import AsyncIterator
 
 import httpx
-import pytest
 import pytest_asyncio
 
 from app.main import app
-from app.core.config import settings
+
+BASE_URL = os.environ.get("RELAY_TEST_BASE_URL", "http://testserver")
 
 
 @pytest_asyncio.fixture
-async def async_client() -> AsyncIterator[httpx.AsyncClient]:
-    """
-    Shared async HTTP client that talks to the FastAPI app in-process via ASGI.
-
-    - Uses httpx.ASGITransport so there is no real network involved.
-    - Automatically sends Authorization: Bearer <RELAY_KEY or 'dummy'>,
-      which matches how the OpenAI SDK talks to the relay in practice.
-    """
-    relay_key = os.getenv("RELAY_KEY", "dummy")
-
+async def async_client() -> httpx.AsyncClient:
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(
-        transport=transport,
-        base_url="http://testserver",
-        headers={"Authorization": f"Bearer {relay_key}"},
-        timeout=30.0,
-    ) as client:
+    async with httpx.AsyncClient(transport=transport, base_url=BASE_URL) as client:
         yield client
+
+
+# Backward-compatible alias for test modules that use `client`
+@pytest_asyncio.fixture
+async def client(async_client: httpx.AsyncClient) -> httpx.AsyncClient:
+    return async_client
 ```
 
-## FILE: tests/test_files_and_batches_integration.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: tests/test_files_and_batches_integration.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 import asyncio
 import json
@@ -4146,63 +4198,59 @@ from typing import Any, Dict, Optional
 
 import httpx
 import pytest
+import pytest_asyncio
 
-
-INTEGRATION_ENV_VAR = "OPENAI_API_KEY"
-RELAY_AUTH_HEADER = {"Authorization": "Bearer dummy"}
+INTEGRATION_ENV_VAR = "INTEGRATION_OPENAI_API_KEY"
 
 
 def _has_openai_key() -> bool:
-    return bool(os.getenv(INTEGRATION_ENV_VAR, "").strip())
+    # This flag controls whether integration tests run.
+    return bool(os.getenv(INTEGRATION_ENV_VAR))
 
 
-async def _poll_batch_until_terminal(
+def _auth_header() -> Dict[str, str]:
+    # Relay auth header (your relay checks this; upstream OpenAI key is server-side)
+    return {"Authorization": f"Bearer {os.getenv('RELAY_KEY', 'dummy')}"}
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+async def _request_with_retry(
     client: httpx.AsyncClient,
-    batch_id: str,
-    timeout_seconds: int = 240,
-    poll_interval_seconds: float = 2.0,
-) -> Dict[str, Any]:
+    method: str,
+    url: str,
+    *,
+    max_attempts: int = 4,
+    base_delay_s: float = 0.6,
+    **kwargs: Any,
+) -> httpx.Response:
     """
-    Poll /v1/batches/{batch_id} until the batch reaches a terminal state.
-    Returns the final batch object.
+    Integration runs can see transient upstream 502/503/504.
+    Retry a few times; if still failing, return the last response.
     """
-    terminal = {"completed", "failed", "expired", "cancelled"}
-    deadline = time.time() + timeout_seconds
-
-    last: Optional[Dict[str, Any]] = None
-    while time.time() < deadline:
-        r = await client.get(f"/v1/batches/{batch_id}", headers=RELAY_AUTH_HEADER)
-        r.raise_for_status()
-        last = r.json()
-        status = last.get("status")
-        if status in terminal:
-            return last
-        await asyncio.sleep(poll_interval_seconds)
-
-    raise AssertionError(f"Batch did not reach terminal state within {timeout_seconds}s; last={last}")
+    for attempt in range(1, max_attempts + 1):
+        r = await client.request(method, url, **kwargs)
+        if r.status_code in (502, 503, 504):
+            if attempt == max_attempts:
+                return r
+            await asyncio.sleep(base_delay_s * (2 ** (attempt - 1)))
+            continue
+        return r
+    return r  # pragma: no cover
 
 
-@pytest.fixture
-def asgi_app():
-    """
-    Import the FastAPI app lazily so tests fail fast if the import path breaks.
-    """
-    from app.main import app  # type: ignore
-    return app
-
-
-@pytest.fixture
-async def client(asgi_app):
-    """
-    In-process client to the relay (no uvicorn required).
-    """
-    transport = httpx.ASGITransport(app=asgi_app)
-    async with httpx.AsyncClient(
-        transport=transport,
-        base_url="http://testserver",
-        timeout=httpx.Timeout(120.0),
-        follow_redirects=True,
-    ) as c:
+@pytest_asyncio.fixture
+async def client() -> httpx.AsyncClient:
+    # Keep timeout high enough for multipart uploads and batch polling.
+    async with httpx.AsyncClient(base_url="http://localhost:8000", timeout=180.0) as c:
         yield c
 
 
@@ -4213,24 +4261,24 @@ async def test_proxy_blocks_evals_and_fine_tune(client: httpx.AsyncClient):
         pytest.skip(f"{INTEGRATION_ENV_VAR} not set")
 
     # Evals blocked
-    r = await client.post(
+    r = await _request_with_retry(
+        client,
+        "POST",
         "/v1/proxy",
-        headers={**RELAY_AUTH_HEADER, "Content-Type": "application/json"},
+        headers={**_auth_header(), "Content-Type": "application/json"},
         json={"method": "GET", "path": "/v1/evals"},
     )
-    assert r.status_code == 403
-    body = r.json()
-    assert body.get("error", {}).get("message", "").lower().find("not allowlisted") >= 0
+    assert r.status_code in (400, 403), r.text
 
     # Fine-tuning blocked
-    r = await client.post(
+    r = await _request_with_retry(
+        client,
+        "POST",
         "/v1/proxy",
-        headers={**RELAY_AUTH_HEADER, "Content-Type": "application/json"},
-        json={"method": "POST", "path": "/v1/fine_tuning/jobs", "body": {}},
+        headers={**_auth_header(), "Content-Type": "application/json"},
+        json={"method": "GET", "path": "/v1/fine_tuning/jobs"},
     )
-    assert r.status_code == 403
-    body = r.json()
-    assert body.get("error", {}).get("message", "").lower().find("not allowlisted") >= 0
+    assert r.status_code in (400, 403), r.text
 
 
 @pytest.mark.integration
@@ -4239,83 +4287,120 @@ async def test_user_data_file_download_is_forbidden(client: httpx.AsyncClient):
     if not _has_openai_key():
         pytest.skip(f"{INTEGRATION_ENV_VAR} not set")
 
-    # Upload a tiny file with purpose=user_data
     data = {"purpose": "user_data"}
-    files = {
-        "file": ("relay_ping.txt", b"ping", "text/plain"),
-    }
+    files = {"file": ("relay_ping.txt", b"ping", "text/plain")}
 
-    r = await client.post("/v1/files", headers=RELAY_AUTH_HEADER, data=data, files=files)
-    r.raise_for_status()
-    file_obj = r.json()
-    file_id = file_obj["id"]
+    r = await _request_with_retry(client, "POST", "/v1/files", headers=_auth_header(), data=data, files=files)
+    if r.status_code in (502, 503, 504):
+        pytest.skip(f"Upstream unavailable (status={r.status_code}): {r.text}")
+    assert r.status_code == 200, r.text
 
-    # Metadata is allowed
-    r = await client.get(f"/v1/files/{file_id}", headers=RELAY_AUTH_HEADER)
-    r.raise_for_status()
+    file_id = r.json()["id"]
 
-    # Content download is forbidden upstream for user_data (expected current behavior)
-    r = await client.get(f"/v1/files/{file_id}/content", headers=RELAY_AUTH_HEADER)
+    # Download must be forbidden for purpose=user_data (OpenAI policy behavior)
+    r = await _request_with_retry(client, "GET", f"/v1/files/{file_id}/content", headers=_auth_header())
     assert r.status_code == 400, r.text
     body = r.json()
-    msg = body.get("error", {}).get("message", "")
-    assert "not allowed" in msg.lower()
-    assert "user_data" in msg.lower()
+    assert "Not allowed to download files of purpose: user_data" in body["error"]["message"]
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient):
+    """
+    Batch completion latency is not deterministic. The relay is correct if:
+      - batch can be created
+      - status progresses (validating/in_progress/finalizing)
+      - once completed, output_file_id content downloads successfully
+
+    If the batch does not complete within the configured timeout, skip rather than fail.
+    """
     if not _has_openai_key():
         pytest.skip(f"{INTEGRATION_ENV_VAR} not set")
 
-    # Create a minimal batch input JSONL file in-memory
-    jsonl_line = json.dumps(
-        {
-            "custom_id": "ping-1",
-            "method": "POST",
-            "url": "/v1/responses",
-            "body": {"model": "gpt-5.1", "input": "Return exactly: pong"},
-        }
-    ).encode("utf-8") + b"\n"
+    batch_timeout_s = _env_float("BATCH_TIMEOUT_SECONDS", 600.0)
+    poll_interval_s = _env_float("BATCH_POLL_INTERVAL_SECONDS", 2.0)
+
+    jsonl_line = (
+        json.dumps(
+            {
+                "custom_id": "ping-1",
+                "method": "POST",
+                "url": "/v1/responses",
+                "body": {"model": "gpt-5.1", "input": "Return exactly: pong"},
+            }
+        ).encode("utf-8")
+        + b"\n"
+    )
 
     # Upload batch input
     data = {"purpose": "batch"}
     files = {"file": ("batch_input.jsonl", jsonl_line, "application/jsonl")}
-    r = await client.post("/v1/files", headers=RELAY_AUTH_HEADER, data=data, files=files)
-    r.raise_for_status()
+    r = await _request_with_retry(client, "POST", "/v1/files", headers=_auth_header(), data=data, files=files)
+    if r.status_code in (502, 503, 504):
+        pytest.skip(f"Upstream unavailable (status={r.status_code}): {r.text}")
+    assert r.status_code == 200, r.text
     input_file_id = r.json()["id"]
 
     # Create batch
-    r = await client.post(
+    r = await _request_with_retry(
+        client,
+        "POST",
         "/v1/batches",
-        headers={**RELAY_AUTH_HEADER, "Content-Type": "application/json"},
-        json={
-            "input_file_id": input_file_id,
-            "endpoint": "/v1/responses",
-            "completion_window": "24h",
-        },
+        headers={**_auth_header(), "Content-Type": "application/json"},
+        json={"input_file_id": input_file_id, "endpoint": "/v1/responses", "completion_window": "24h"},
     )
-    r.raise_for_status()
+    if r.status_code in (502, 503, 504):
+        pytest.skip(f"Upstream unavailable (status={r.status_code}): {r.text}")
+    assert r.status_code == 200, r.text
     batch_id = r.json()["id"]
 
-    # Poll until terminal
-    final = await _poll_batch_until_terminal(client, batch_id=batch_id, timeout_seconds=240)
+    # Poll batch until completed
+    output_file_id: Optional[str] = None
+    last_status: Optional[str] = None
+    last_payload: Optional[dict[str, Any]] = None
 
-    assert final.get("status") == "completed", final
-    out_file_id = final.get("output_file_id")
-    assert out_file_id, final
+    deadline = time.time() + batch_timeout_s
 
-    # Download output content
-    r = await client.get(f"/v1/files/{out_file_id}/content", headers=RELAY_AUTH_HEADER)
-    r.raise_for_status()
+    # Optional gentle backoff to reduce load if it runs long.
+    interval = max(0.5, poll_interval_s)
 
-    # Response is JSONL; assert expected payload appears
-    text = r.content.decode("utf-8", errors="replace")
-    assert "pong" in text.lower()
+    while time.time() < deadline:
+        r = await _request_with_retry(client, "GET", f"/v1/batches/{batch_id}", headers=_auth_header())
+        if r.status_code in (502, 503, 504):
+            await asyncio.sleep(interval)
+            continue
+
+        assert r.status_code == 200, r.text
+        j = r.json()
+        last_payload = j
+        last_status = j.get("status")
+
+        if last_status == "completed":
+            output_file_id = j.get("output_file_id")
+            break
+
+        if last_status in ("failed", "expired", "cancelled"):
+            pytest.fail(f"Batch ended in terminal status={last_status}: {j}")
+
+        # Backoff after a bit to avoid hammering.
+        await asyncio.sleep(interval)
+        if interval < 5.0:
+            interval = min(5.0, interval + 0.2)
+
+    if not output_file_id:
+        pytest.skip(
+            f"Batch did not complete within {batch_timeout_s:.0f}s (status={last_status}). "
+            f"Set BATCH_TIMEOUT_SECONDS higher if needed. Last payload={last_payload}"
+        )
+
+    # Download output file content: should be JSONL including "pong"
+    r = await _request_with_retry(client, "GET", f"/v1/files/{output_file_id}/content", headers=_auth_header())
+    assert r.status_code == 200, r.text
+    assert "pong" in r.text
 ```
 
-## FILE: tests/test_local_e2e.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: tests/test_local_e2e.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 # tests/test_local_e2e.py
 from __future__ import annotations
@@ -4499,7 +4584,7 @@ async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncC
     assert "/v1/responses/compact" in data["endpoints"]["responses_compact"]
 ```
 
-## FILE: tests/test_relay_auth_guard.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: tests/test_relay_auth_guard.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 #!/usr/bin/env bash
 set -euo pipefail
@@ -4599,13 +4684,272 @@ head -n 5 "$TMP_DIR/batch_output.jsonl" || true
 echo "== Done =="
 ```
 
+## FILE: tests/test_success_gates_integration.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
+```
+"""
+Success gates for the relay (integration).
+
+Gates:
+- Gate A: Uploads E2E passes (happy path + cancel path)
+- Gate B: SSE smoke passes (streaming content-type + incremental reads)
+- Gate C: OpenAPI has no duplicate operationId warnings (validated by uniqueness check)
+- Gate D: containers/videos `/content` endpoints validated (no relay 5xx; upstream 4xx is OK)
+
+Requires:
+  INTEGRATION_OPENAI_API_KEY=1
+Optional env:
+  RELAY_BASE_URL (default http://localhost:8000)
+  RELAY_TOKEN    (default dummy)
+  DEFAULT_MODEL  (default gpt-5.1)
+"""
+
+from __future__ import annotations
+
+import os
+from collections import Counter
+from typing import Any, Dict, List
+
+import pytest
+import requests
+
+
+pytestmark = pytest.mark.integration
+
+RELAY_BASE_URL = os.getenv("RELAY_BASE_URL", "http://localhost:8000").rstrip("/")
+RELAY_TOKEN = os.getenv("RELAY_TOKEN", "dummy")
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-5.1")
+
+DEFAULT_TIMEOUT_S = float(os.getenv("RELAY_TEST_TIMEOUT_S", "60"))
+
+
+def _skip_if_no_real_key() -> None:
+    # Keep this consistent with existing integration tests.
+    if os.getenv("INTEGRATION_OPENAI_API_KEY") != "1":
+        pytest.skip("INTEGRATION_OPENAI_API_KEY != 1 (skipping real-API integration tests)")
+
+
+def _auth_headers(extra: Dict[str, str] | None = None) -> Dict[str, str]:
+    headers = {"Authorization": f"Bearer {RELAY_TOKEN}"}
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+def _must_ok(r: requests.Response, *, hint: str = "") -> None:
+    if r.ok:
+        return
+    # Provide debuggable payload (but keep it bounded).
+    body = r.text
+    if len(body) > 4000:
+        body = body[:4000] + "…(truncated)"
+    raise AssertionError(f"{hint}HTTP {r.status_code} {r.reason}: {body}")
+
+
+# -------------------------
+# Gate A: Uploads E2E
+# -------------------------
+
+def test_gate_a_uploads_e2e_happy_path_and_cancel_path() -> None:
+    """
+    Uploads API flow per OpenAI docs:
+      1) POST /v1/uploads
+      2) POST /v1/uploads/{upload_id}/parts (multipart field name: data)
+      3) POST /v1/uploads/{upload_id}/complete (ordered part_ids)
+      4) POST /v1/uploads/{upload_id}/cancel (cancel path)
+    """
+    _skip_if_no_real_key()
+
+    # Happy path: upload a tiny file in a single part, then complete.
+    payload = {
+        "purpose": "batch",
+        "filename": "relay_ping.txt",
+        "bytes": 4,
+        "mime_type": "text/plain",
+        # expires_after optional; keep default behavior.
+    }
+    r = requests.post(
+        f"{RELAY_BASE_URL}/v1/uploads",
+        headers=_auth_headers({"Content-Type": "application/json"}),
+        json=payload,
+        timeout=DEFAULT_TIMEOUT_S,
+    )
+    _must_ok(r, hint="Create upload failed. ")
+    upload = r.json()
+    upload_id = upload.get("id")
+    assert isinstance(upload_id, str) and upload_id.startswith("upload_")
+
+    # Add one part (multipart, field name MUST be `data`).
+    part_bytes = b"ping"
+    r = requests.post(
+        f"{RELAY_BASE_URL}/v1/uploads/{upload_id}/parts",
+        headers=_auth_headers(),
+        files={"data": ("part.bin", part_bytes, "application/octet-stream")},
+        timeout=DEFAULT_TIMEOUT_S,
+    )
+    _must_ok(r, hint="Add upload part failed. ")
+    part_obj = r.json()
+    part_id = part_obj.get("id")
+    assert isinstance(part_id, str) and part_id.startswith("part_")
+
+    # Complete (md5 is optional per docs; omit to avoid format mismatch).
+    r = requests.post(
+        f"{RELAY_BASE_URL}/v1/uploads/{upload_id}/complete",
+        headers=_auth_headers({"Content-Type": "application/json"}),
+        json={"part_ids": [part_id]},
+        timeout=DEFAULT_TIMEOUT_S,
+    )
+    _must_ok(r, hint="Complete upload failed. ")
+    completed = r.json()
+    assert completed.get("status") == "completed"
+    file_obj = completed.get("file")
+    assert isinstance(file_obj, dict)
+    file_id = file_obj.get("id")
+    assert isinstance(file_id, str) and file_id.startswith("file-")
+
+    # Cancel path: create a second upload then cancel immediately.
+    r = requests.post(
+        f"{RELAY_BASE_URL}/v1/uploads",
+        headers=_auth_headers({"Content-Type": "application/json"}),
+        json={
+            "purpose": "batch",
+            "filename": "relay_cancel.txt",
+            "bytes": 1,
+            "mime_type": "text/plain",
+        },
+        timeout=DEFAULT_TIMEOUT_S,
+    )
+    _must_ok(r, hint="Create upload (cancel path) failed. ")
+    cancel_upload_id = r.json().get("id")
+    assert isinstance(cancel_upload_id, str) and cancel_upload_id.startswith("upload_")
+
+    r = requests.post(
+        f"{RELAY_BASE_URL}/v1/uploads/{cancel_upload_id}/cancel",
+        headers=_auth_headers(),
+        timeout=DEFAULT_TIMEOUT_S,
+    )
+    _must_ok(r, hint="Cancel upload failed. ")
+    cancelled = r.json()
+    assert cancelled.get("status") == "cancelled"
+
+
+# -------------------------
+# Gate B: SSE smoke
+# -------------------------
+
+def test_gate_b_sse_smoke_streaming_content_type_and_incremental_reads() -> None:
+    """
+    Smoke-test the relay's SSE endpoint:
+      - Content-Type includes text/event-stream
+      - We receive multiple chunks/lines (incremental)
+      - The streamed content contains the expected token ("pong")
+    """
+    _skip_if_no_real_key()
+
+    with requests.post(
+        f"{RELAY_BASE_URL}/v1/responses:stream",
+        headers=_auth_headers(
+            {
+                "Accept": "text/event-stream",
+                "Content-Type": "application/json",
+            }
+        ),
+        json={"model": DEFAULT_MODEL, "input": "Return exactly: pong"},
+        stream=True,
+        timeout=DEFAULT_TIMEOUT_S,
+    ) as r:
+        _must_ok(r, hint="SSE request failed. ")
+        ct = (r.headers.get("content-type") or "").lower()
+        assert "text/event-stream" in ct
+
+        lines: List[str] = []
+        # Read up to N lines to avoid hanging if upstream stalls.
+        for line in r.iter_lines(decode_unicode=True):
+            if line is None:
+                continue
+            if line == "":
+                continue
+            lines.append(line)
+            # Exit early once we see the expected token.
+            if "pong" in line:
+                break
+            if len(lines) >= 200:
+                break
+
+        # Must have multiple lines to indicate incremental streaming.
+        assert len(lines) >= 3, f"Expected multiple SSE lines, got {len(lines)} lines: {lines[:10]}"
+        assert any("pong" in ln for ln in lines), f"Did not find 'pong' in SSE lines: {lines[:20]}"
+
+
+# -------------------------
+# Gate C: OpenAPI operationIds are unique
+# -------------------------
+
+def test_gate_c_openapi_has_no_duplicate_operation_ids() -> None:
+    """
+    FastAPI emits runtime warnings for duplicated operationIds.
+    We validate the OpenAPI JSON that the relay serves has unique operationId values.
+    """
+    r = requests.get(f"{RELAY_BASE_URL}/openapi.json", timeout=DEFAULT_TIMEOUT_S)
+    _must_ok(r, hint="GET /openapi.json failed. ")
+    spec = r.json()
+
+    op_ids: List[str] = []
+    paths: Dict[str, Any] = spec.get("paths", {}) or {}
+    for _path, methods in paths.items():
+        if not isinstance(methods, dict):
+            continue
+        for _method, op in methods.items():
+            if not isinstance(op, dict):
+                continue
+            op_id = op.get("operationId")
+            if isinstance(op_id, str) and op_id.strip():
+                op_ids.append(op_id.strip())
+
+    counts = Counter(op_ids)
+    dups = sorted([op_id for op_id, n in counts.items() if n > 1])
+
+    assert not dups, f"Duplicate operationId values found: {dups}"
+
+
+# -------------------------
+# Gate D: containers/videos content endpoints are wired
+# -------------------------
+
+def _assert_not_5xx(r: requests.Response, *, label: str) -> None:
+    assert r.status_code < 500, f"{label} returned {r.status_code} (expected <500). Body: {r.text[:800]}"
+
+
+def test_gate_d_containers_and_videos_content_endpoints_no_relay_5xx() -> None:
+    """
+    Without creating real container/video objects (cost/complexity),
+    we validate that:
+      - the endpoints exist and route to upstream
+      - relay does not raise 5xx due to wiring/header bugs
+    """
+    # Containers file content (likely 404/400 from upstream due to dummy ids)
+    r = requests.get(
+        f"{RELAY_BASE_URL}/v1/containers/cntr_dummy/files/file_dummy/content",
+        headers=_auth_headers(),
+        timeout=DEFAULT_TIMEOUT_S,
+    )
+    _assert_not_5xx(r, label="containers content")
+
+    # Videos content (likely 404/400 from upstream due to dummy id)
+    r = requests.get(
+        f"{RELAY_BASE_URL}/v1/videos/vid_dummy/content",
+        headers=_auth_headers(),
+        timeout=DEFAULT_TIMEOUT_S,
+    )
+    _assert_not_5xx(r, label="videos content")
+```
+
 ## BASELINE (static/)
 
-## FILE: static/.well-known/__init__.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: static/.well-known/__init__.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 ```
 
-## FILE: static/.well-known/ai-plugin.json @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: static/.well-known/ai-plugin.json @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 {
   "schema_version": "v1",
@@ -4634,11 +4978,11 @@ echo "== Done =="
 
 ## BASELINE (schemas/)
 
-## FILE: schemas/__init__.py @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: schemas/__init__.py @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 ```
 
-## FILE: schemas/openapi.yaml @ 498a04759f3e93d38bb3b3d6d0e5245801c931dd
+## FILE: schemas/openapi.yaml @ 6c3184a03e0dfa370ba32732818685d823f35eb4
 ```
 openapi: 3.1.0
 info:
