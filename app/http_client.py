@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-"""
-Compatibility shim.
+"""Compatibility shim.
 
-Some modules historically imported HTTP/OpenAI clients from `app.http_client`.
-The canonical implementation lives in `app.core.http_client` (and is also re-exported
-from `app.utils.http_client`).
+Historically some modules imported HTTP/OpenAI clients from `app.http_client`.
+The canonical implementation lives in `app.core.http_client`.
 
-This module exists to keep legacy imports working.
+This module re-exports the public helpers to avoid churn.
 """
 
 from app.core.http_client import (  # noqa: F401
