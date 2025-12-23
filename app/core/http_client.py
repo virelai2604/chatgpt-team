@@ -1,5 +1,34 @@
 from __future__ import annotations
 
+"""Compatibility shim.
+
+Historically some modules imported HTTP/OpenAI clients from app.utils.http_client.
+The canonical implementation lives in app.core.http_client.
+
+This module re-exports the public helpers to avoid churn.
+"""
+
+from app.core.http_client import (  # noqa: F401
+    aclose_all_clients,
+    close_async_clients,
+    get_async_httpx_client,
+    get_async_openai_client,
+)
+
+__all__ = [
+    "get_async_httpx_client",
+    "get_async_openai_client",
+    "close_async_clients",
+    "aclose_all_clients",
+]
+
+
+ModuleNotFoundError: No module named 'app.http_client'
+
+and at "\\wsl.localhost\Ubuntu\home\user\code\chatgpt-team\app\core\http_client.py"
+
+from __future__ import annotations
+
 import asyncio
 from typing import Dict, Optional, Tuple
 
@@ -95,3 +124,4 @@ async def aclose_all_clients() -> None:
             await client.aclose()
         except Exception:
             log.exception("Failed closing httpx client (loop=%s, timeout=%s)", loop_id, timeout_s)
+
