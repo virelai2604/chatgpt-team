@@ -1,5 +1,3 @@
-from __future__ import annotations
+from .error import ErrorDetail, ErrorResponse
 
-from .error import ErrorResponse
-
-__all__ = ["ErrorResponse"]
+__all__ = ["ErrorDetail", "ErrorResponse"]

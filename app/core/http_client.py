@@ -1,87 +1,99 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Dict, Optional, Tuple
+import contextvars
+from typing import Optional, Tuple
 
 import httpx
 from openai import AsyncOpenAI
 
-from app.core.config import get_settings
-
-# Loop-local caches: each running event loop gets its own clients.
-_LOOP_CLIENTS: Dict[int, Tuple[AsyncOpenAI, httpx.AsyncClient]] = {}
+from app.core.config import settings
 
 
-def _loop_id() -> int:
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        # No running loop; fall back to current loop (best effort).
-        loop = asyncio.get_event_loop()
-    return id(loop)
+_httpx_client_var: contextvars.ContextVar[Optional[Tuple[asyncio.AbstractEventLoop, httpx.AsyncClient]]] = (
+    contextvars.ContextVar("httpx_async_client", default=None)
+)
+_openai_client_var: contextvars.ContextVar[Optional[Tuple[asyncio.AbstractEventLoop, AsyncOpenAI]]] = (
+    contextvars.ContextVar("openai_async_client", default=None)
+)
 
 
-def get_async_openai_client(*, timeout: Optional[float] = None) -> AsyncOpenAI:
+def _get_setting(*names: str, default=None):
+    for name in names:
+        if hasattr(settings, name):
+            val = getattr(settings, name)
+            if val is not None:
+                return val
+    return default
+
+
+def _default_timeout_s() -> float:
+    # Support multiple historical config names.
+    return float(
+        _get_setting(
+            "RELAY_TIMEOUT",
+            "RELAY_TIMEOUT_S",
+            "OPENAI_TIMEOUT",
+            "OPENAI_TIMEOUT_S",
+            default=60.0,
+        )
+    )
+
+
+def get_async_httpx_client(timeout: Optional[float] = None) -> httpx.AsyncClient:
     """
-    Return an AsyncOpenAI client that shares a loop-local httpx.AsyncClient.
-
-    Optional:
-      - timeout: override the httpx timeout (seconds) for this loop's shared client.
+    Canonical shared AsyncClient (per event loop).
     """
-    openai_client, _ = _get_or_create_clients(timeout=timeout)
-    return openai_client
+    loop = asyncio.get_running_loop()
+    cached = _httpx_client_var.get()
+    if cached and cached[0] is loop:
+        return cached[1]
+
+    t = float(timeout) if timeout is not None else _default_timeout_s()
+
+    client = httpx.AsyncClient(
+        timeout=httpx.Timeout(t),
+        limits=httpx.Limits(max_connections=200, max_keepalive_connections=50),
+        follow_redirects=True,
+    )
+    _httpx_client_var.set((loop, client))
+    return client
 
 
-def get_async_httpx_client(*, timeout: Optional[float] = None) -> httpx.AsyncClient:
+def get_async_openai_client() -> AsyncOpenAI:
     """
-    Return a loop-local shared httpx.AsyncClient.
-
-    Optional:
-      - timeout: override the client's timeout (seconds). If the client already exists,
-        we update its timeout best-effort.
+    Canonical shared AsyncOpenAI client (per event loop).
     """
-    _, http_client = _get_or_create_clients(timeout=timeout)
-    if timeout is not None:
-        # Best-effort update; safe even if httpx internals change.
-        try:
-            http_client.timeout = httpx.Timeout(timeout)
-        except Exception:
-            pass
-    return http_client
+    loop = asyncio.get_running_loop()
+    cached = _openai_client_var.get()
+    if cached and cached[0] is loop:
+        return cached[1]
 
+    api_key = _get_setting("OPENAI_API_KEY", "openai_api_key")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not configured.")
 
-def _get_or_create_clients(*, timeout: Optional[float]) -> Tuple[AsyncOpenAI, httpx.AsyncClient]:
-    lid = _loop_id()
-    if lid in _LOOP_CLIENTS:
-        return _LOOP_CLIENTS[lid]
+    base_url = _get_setting(
+        "OPENAI_BASE_URL",
+        "OPENAI_API_BASE",
+        "openai_base_url",
+        "openai_api_base",
+        default="https://api.openai.com/v1",
+    )
 
-    settings = get_settings()
+    organization = _get_setting("OPENAI_ORG", "OPENAI_ORGANIZATION", "openai_organization")
+    project = _get_setting("OPENAI_PROJECT", "openai_project")
 
-    timeout_s = float(timeout) if timeout is not None else float(getattr(settings, "relay_timeout_seconds", 120.0))
-    http_client = httpx.AsyncClient(timeout=httpx.Timeout(timeout_s))
+    # Reuse our HTTPX pool for upstream calls.
+    http_client = get_async_httpx_client()
 
-    openai_client = AsyncOpenAI(
-        api_key=settings.openai_api_key,
-        base_url=getattr(settings, "openai_base_url", None) or "https://api.openai.com/v1",
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        organization=organization,
+        project=project,
         http_client=http_client,
     )
 
-    _LOOP_CLIENTS[lid] = (openai_client, http_client)
-    return openai_client, http_client
-
-
-async def close_async_clients() -> None:
-    """
-    Close all loop-local clients (safe to call at shutdown).
-    """
-    for lid, (openai_client, http_client) in list(_LOOP_CLIENTS.items()):
-        try:
-            # OpenAI client uses the same http client; closing httpx is sufficient.
-            await http_client.aclose()
-        finally:
-            _LOOP_CLIENTS.pop(lid, None)
-
-
-async def aclose_all_clients() -> None:
-    # Back-compat alias
-    await close_async_clients()
+    _openai_client_var.set((loop, client))
+    return client
