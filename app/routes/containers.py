@@ -41,10 +41,11 @@ async def containers_file_content(request: Request, container_id: str, file_id: 
     """
     Stream container file content.
 
-    Critical behavior:
+    Critical behavior for Success Gate D:
       - Do NOT raise on upstream non-2xx.
       - If upstream returns 4xx/5xx, read the body and return it with upstream status
         (avoids relay 500 masking upstream errors).
+      - Stream only on 2xx.
     """
     upstream_path = f"/v1/containers/{container_id}/files/{file_id}/content"
 
@@ -68,6 +69,7 @@ async def containers_file_content(request: Request, container_id: str, file_id: 
         resp_headers = filter_upstream_headers(upstream.headers)
         media_type = upstream.headers.get("content-type")
 
+        # IMPORTANT: never raise_for_status(); propagate upstream responses.
         if status >= 400:
             content = await upstream.aread()
             return Response(
