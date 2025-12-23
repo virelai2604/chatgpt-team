@@ -59,9 +59,7 @@ class ValidationMiddleware(BaseHTTPMiddleware):
                         request.url.path,
                         content_type,
                     )
-                    err = ErrorResponse(
-                        detail=f"Unsupported Media Type: '{content_type}'",
-                    )
+                    err = ErrorResponse(detail=f"Unsupported Media Type: '{content_type}'")
                     return err.to_response(status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
         return await call_next(request)

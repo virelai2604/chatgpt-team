@@ -5,8 +5,8 @@
   📄 .gitleaks.toml
   📄 AGENTS.md
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
-  📄 RELAY_CHECKLIST_v7.md
-  📄 RELAY_PROGRESS_SUMMARY_v3.md
+  📄 RELAY_CHECKLIST_v10.md
+  📄 RELAY_PROGRESS_SUMMARY_v6.md
   📄 __init__.py
   📄 chatgpt_baseline.md
   📄 chatgpt_changes.md
@@ -40,6 +40,9 @@
       📄 p4_orchestrator.py
       📄 relay_auth.py
       📄 validation.py
+    📁 models
+      📄 __init__.py
+      📄 error.py
     📁 routes
       📄 __init__.py
       📄 actions.py

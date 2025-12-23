@@ -122,24 +122,26 @@ def _get_timeout_seconds(settings: Optional[Any] = None) -> float:
                 return float(getattr(s, name))
             except Exception:
                 pass
-    return 120.0
+    # Conservative fallback.
+    return 90.0
 
 
 def build_outbound_headers(
     inbound_headers: Mapping[str, str],
+    *,
     openai_api_key: Optional[str] = None,
-    content_type: Optional[str] = None,
+    content_type: Optional[str] = "application/json",
     forward_accept: bool = True,
     path_hint: Optional[str] = None,
 ) -> Dict[str, str]:
     """
-    Build headers for upstream OpenAI request.
+    Build outbound headers for upstream OpenAI requests.
 
-    - If `openai_api_key` is not provided, it is taken from settings.
-    - `path_hint` is accepted for older callers (not required for current behavior).
+    - Copies safe inbound headers
+    - Forces Authorization: Bearer <OPENAI_API_KEY>
+    - Optionally sets Content-Type
+    - Preserves Accept if requested
     """
-    _ = path_hint  # retained for compatibility
-
     s = get_settings()
     api_key = openai_api_key or getattr(s, "openai_api_key", None)
     if not api_key:
@@ -147,42 +149,95 @@ def build_outbound_headers(
 
     out = _filter_inbound_headers(inbound_headers)
 
-    if not forward_accept:
-        out.pop("Accept", None)
-
+    # Overwrite auth to ensure relay uses server-side key.
     out["Authorization"] = f"Bearer {api_key}"
 
-    if content_type:
+    # Optional organization/project headers if present.
+    org = getattr(s, "openai_organization", None)
+    proj = getattr(s, "openai_project", None)
+    if org:
+        out["OpenAI-Organization"] = str(org)
+    if proj:
+        out["OpenAI-Project"] = str(proj)
+
+    # Optional beta flags (if configured).
+    beta = getattr(s, "openai_beta", None)
+    if beta:
+        out["OpenAI-Beta"] = str(beta)
+
+    # Content-Type handling:
+    # - For JSON routes we set application/json
+    # - For multipart routes caller should pass content_type=None
+    if content_type is not None:
         out["Content-Type"] = content_type
+    else:
+        out.pop("Content-Type", None)
 
-    # Optional OpenAI-Beta flags (safe to include; deduped).
-    beta_values = []
-    if getattr(s, "openai_assistants_beta", False):
-        beta_values.append("assistants=v2")
-    if getattr(s, "openai_realtime_beta", False):
-        beta_values.append("realtime=v1")
+    if not forward_accept:
+        # Some upstream routes are happier without Accept forwarding.
+        out.pop("Accept", None)
 
-    if beta_values:
-        existing = out.get("OpenAI-Beta")
-        combined = []
-        if existing:
-            combined.extend([p.strip() for p in existing.split(",") if p.strip()])
-        combined.extend(beta_values)
-
-        seen = set()
-        deduped = []
-        for item in combined:
-            if item in seen:
-                continue
-            seen.add(item)
-            deduped.append(item)
-
-        out["OpenAI-Beta"] = ", ".join(deduped)
+    # Route-specific hinting (no-op unless you later need special cases).
+    _ = path_hint
 
     return out
 
 
-# --- Core forwarders ------------------------------------------------------------------
+async def forward_openai_request(request: Request) -> Response:
+    """
+    Forward the inbound Request to OpenAI upstream.
+
+    - Detects SSE routes and streams bytes without buffering
+    - Otherwise returns a buffered Response with upstream headers filtered
+    """
+    s = get_settings()
+    base_url = getattr(s, "openai_base_url", None) or "https://api.openai.com"
+    api_key = getattr(s, "openai_api_key", None)
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Missing OPENAI_API_KEY")
+
+    upstream_url = build_upstream_url(request, base_url)
+
+    headers = build_outbound_headers(
+        request.headers,
+        openai_api_key=api_key,
+        content_type=request.headers.get("content-type"),
+        forward_accept=True,
+        path_hint=request.url.path,
+    )
+
+    timeout_s = _get_timeout_seconds(s)
+    client = get_async_httpx_client(timeout=timeout_s)
+
+    method = request.method.upper()
+
+    # Streaming detection: either explicit SSE endpoint or Accept header indicates SSE
+    if _is_sse_path(request.url.path) or _accepts_sse(request.headers):
+        body = await request.body()
+        upstream = await client.stream(method, upstream_url, headers=headers, content=body)
+
+        async def _iter_bytes():
+            async with upstream:
+                async for chunk in upstream.aiter_bytes():
+                    yield chunk
+
+        return StreamingResponse(
+            _iter_bytes(),
+            status_code=upstream.status_code,
+            headers=_filter_upstream_headers(upstream.headers),
+            media_type=upstream.headers.get("content-type"),
+        )
+
+    body = await request.body()
+    resp = await client.request(method, upstream_url, headers=headers, content=body)
+
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=_filter_upstream_headers(resp.headers),
+        media_type=resp.headers.get("content-type"),
+    )
+
 
 async def forward_openai_request_to_path(
     request: Request,
@@ -191,7 +246,7 @@ async def forward_openai_request_to_path(
     path_override: Optional[str] = None,
 ) -> Response:
     """
-    Forward an inbound FastAPI request to OpenAI, optionally overriding method/path.
+    Forward request to a different method and/or path than the inbound request.
     """
     s = get_settings()
     base_url = getattr(s, "openai_base_url", None) or "https://api.openai.com"
@@ -200,57 +255,49 @@ async def forward_openai_request_to_path(
         raise HTTPException(status_code=500, detail="Missing OPENAI_API_KEY")
 
     method = (method_override or request.method).upper()
-    upstream_url = build_upstream_url(request, base_url, path_override=path_override)
-
-    body = await request.body()
-    inbound_ct = request.headers.get("content-type")
+    upstream_path = path_override or request.url.path
+    upstream_url = build_upstream_url(request, base_url, path_override=upstream_path)
 
     headers = build_outbound_headers(
         request.headers,
         openai_api_key=api_key,
-        content_type=inbound_ct,
+        content_type=request.headers.get("content-type"),
         forward_accept=True,
-        path_hint=path_override or request.url.path,
+        path_hint=upstream_path,
     )
-
-    # If there is a body but the client omitted Content-Type, default to JSON.
-    if body and not inbound_ct:
-        headers["Content-Type"] = "application/json"
 
     timeout_s = _get_timeout_seconds(s)
     client = get_async_httpx_client(timeout=timeout_s)
 
-    effective_path = path_override or request.url.path
-    if _accepts_sse(request.headers) or _is_sse_path(effective_path):
-        async with client.stream(method, upstream_url, headers=headers, content=body) as upstream:
-            return StreamingResponse(
-                upstream.aiter_bytes(),
-                status_code=upstream.status_code,
-                headers=_filter_upstream_headers(upstream.headers),
-                media_type=upstream.headers.get("content-type"),
-            )
+    # Preserve body
+    body = await request.body()
 
-    upstream_resp = await client.request(method, upstream_url, headers=headers, content=body)
+    # SSE handling for override paths too
+    if _is_sse_path(upstream_path) or _accepts_sse(request.headers):
+        upstream = await client.stream(method, upstream_url, headers=headers, content=body)
+
+        async def _iter_bytes():
+            async with upstream:
+                async for chunk in upstream.aiter_bytes():
+                    yield chunk
+
+        return StreamingResponse(
+            _iter_bytes(),
+            status_code=upstream.status_code,
+            headers=_filter_upstream_headers(upstream.headers),
+            media_type=upstream.headers.get("content-type"),
+        )
+
+    resp = await client.request(method, upstream_url, headers=headers, content=body)
     return Response(
-        content=upstream_resp.content,
-        status_code=upstream_resp.status_code,
-        headers=_filter_upstream_headers(upstream_resp.headers),
-        media_type=upstream_resp.headers.get("content-type"),
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=_filter_upstream_headers(resp.headers),
+        media_type=resp.headers.get("content-type"),
     )
 
 
-async def forward_openai_request(request: Request) -> Response:
-    return await forward_openai_request_to_path(request)
-
-
-async def forward_openai_method_path(
-    *args: Any,
-    method: Optional[str] = None,
-    path: Optional[str] = None,
-    query: Optional[Dict[str, Any]] = None,
-    json_body: Optional[Any] = None,
-    inbound_headers: Optional[Mapping[str, str]] = None,
-) -> Response:
+async def forward_openai_method_path(*args: Any, **kwargs: Any) -> Response:
     """
     Forward to a specific upstream method/path.
 
@@ -258,6 +305,12 @@ async def forward_openai_method_path(
       - Legacy positional: forward_openai_method_path(<method>, <path>, <request>)
       - New keyword-only: forward_openai_method_path(method=..., path=..., query=..., json_body=..., inbound_headers=...)
     """
+    method: Optional[str] = kwargs.pop("method", None)
+    path: Optional[str] = kwargs.pop("path", None)
+    query: Optional[Dict[str, Any]] = kwargs.pop("query", None)
+    json_body: Optional[Any] = kwargs.pop("json_body", None)
+    inbound_headers: Optional[Mapping[str, str]] = kwargs.pop("inbound_headers", None)
+
     # Legacy style: (method, path, request)
     if (
         len(args) >= 3
