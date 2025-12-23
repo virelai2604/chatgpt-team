@@ -2,20 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any, Callable
 
 import httpx
 from openai import AsyncOpenAI
 
 from app.core.config import settings
 
+_httpx_client_var: contextvars.ContextVar[
+    Optional[Tuple[asyncio.AbstractEventLoop, httpx.AsyncClient]]
+] = contextvars.ContextVar("httpx_async_client", default=None)
 
-_httpx_client_var: contextvars.ContextVar[Optional[Tuple[asyncio.AbstractEventLoop, httpx.AsyncClient]]] = (
-    contextvars.ContextVar("httpx_async_client", default=None)
-)
-_openai_client_var: contextvars.ContextVar[Optional[Tuple[asyncio.AbstractEventLoop, AsyncOpenAI]]] = (
-    contextvars.ContextVar("openai_async_client", default=None)
-)
+_openai_client_var: contextvars.ContextVar[
+    Optional[Tuple[asyncio.AbstractEventLoop, AsyncOpenAI]]
+] = contextvars.ContextVar("openai_async_client", default=None)
 
 
 def _get_setting(*names: str, default=None):
@@ -43,6 +43,8 @@ def _default_timeout_s() -> float:
 def get_async_httpx_client(timeout: Optional[float] = None) -> httpx.AsyncClient:
     """
     Canonical shared AsyncClient (per event loop).
+
+    This is the single HTTP connection pool used for all upstream calls.
     """
     loop = asyncio.get_running_loop()
     cached = _httpx_client_var.get()
@@ -63,6 +65,8 @@ def get_async_httpx_client(timeout: Optional[float] = None) -> httpx.AsyncClient
 def get_async_openai_client() -> AsyncOpenAI:
     """
     Canonical shared AsyncOpenAI client (per event loop).
+
+    Uses the canonical HTTPX pool from get_async_httpx_client().
     """
     loop = asyncio.get_running_loop()
     cached = _openai_client_var.get()
@@ -97,3 +101,67 @@ def get_async_openai_client() -> AsyncOpenAI:
 
     _openai_client_var.set((loop, client))
     return client
+
+
+async def _maybe_close(obj: Any) -> None:
+    """
+    Best-effort close for objects that may expose:
+      - aclose() (async)
+      - close() (sync or async)
+    """
+    if obj is None:
+        return
+
+    closer: Optional[Callable[[], Any]] = None
+    if hasattr(obj, "aclose") and callable(getattr(obj, "aclose")):
+        closer = getattr(obj, "aclose")
+    elif hasattr(obj, "close") and callable(getattr(obj, "close")):
+        closer = getattr(obj, "close")
+
+    if closer is None:
+        return
+
+    try:
+        res = closer()
+        if asyncio.iscoroutine(res):
+            await res
+    except Exception:
+        # Shutdown should be best-effort; avoid masking the real shutdown path.
+        return
+
+
+async def close_async_clients() -> None:
+    """
+    FastAPI shutdown hook.
+
+    Closes cached per-event-loop clients created by:
+      - get_async_httpx_client()
+      - get_async_openai_client()
+
+    Safe to call multiple times.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop: nothing to close safely in this context.
+        return
+
+    cached_openai = _openai_client_var.get()
+    cached_httpx = _httpx_client_var.get()
+
+    # Close OpenAI client first (it references the HTTP client).
+    if cached_openai and cached_openai[0] is loop:
+        await _maybe_close(cached_openai[1])
+        _openai_client_var.set(None)
+
+    # Close HTTPX pool.
+    if cached_httpx and cached_httpx[0] is loop:
+        await _maybe_close(cached_httpx[1])
+        _httpx_client_var.set(None)
+
+
+__all__ = [
+    "get_async_httpx_client",
+    "get_async_openai_client",
+    "close_async_clients",
+]
