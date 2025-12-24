@@ -14,6 +14,7 @@ skipped unless INTEGRATION_OPENAI_API_KEY=1.
 
 from __future__ import annotations
 
+import base64
 import os
 from typing import Any, Dict, Iterable
 
@@ -35,6 +36,10 @@ RELAY_TOKEN = (
 DEFAULT_TIMEOUT_S = float(os.getenv("RELAY_TEST_TIMEOUT_S", "30"))
 INTEGRATION_ENV_VAR = "INTEGRATION_OPENAI_API_KEY"
 
+# Minimal valid 1x1 PNG (transparent-ish). Avoids adding binary fixtures to the repo.
+_PNG_1X1_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+_PNG_1X1_BYTES = base64.b64decode(_PNG_1X1_B64)
+
 
 def _auth_headers(extra: Dict[str, str] | None = None) -> Dict[str, str]:
     headers = {"Authorization": f"Bearer {RELAY_TOKEN}"}
@@ -45,7 +50,6 @@ def _auth_headers(extra: Dict[str, str] | None = None) -> Dict[str, str]:
 
 def _skip_if_no_real_key() -> None:
     """Skip tests that may call upstream OpenAI unless explicitly enabled."""
-
     if os.getenv(INTEGRATION_ENV_VAR, "").strip() != "1":
         pytest.skip(f"Set {INTEGRATION_ENV_VAR}=1 to run upstream-proxy smoke tests")
 
@@ -92,6 +96,7 @@ def test_openapi_includes_extended_route_families() -> None:
 
     # Images
     assert "/v1/images/generations" in paths, "Missing /v1/images/generations route"
+    assert "/v1/images/variations" in paths, "Missing /v1/images/variations route"
 
     # Vector stores
     assert "/v1/vector_stores" in paths, "Missing /v1/vector_stores route"
@@ -184,6 +189,27 @@ def test_images_generations_wiring_no_5xx() -> None:
         timeout=DEFAULT_TIMEOUT_S,
     )
     assert r.status_code < 500, f"images generations returned {r.status_code}: {r.text[:400]}"
+
+
+@pytest.mark.integration
+def test_images_variations_wiring_no_5xx() -> None:
+    """Images variations endpoint should never produce a relay 5xx due to wiring."""
+
+    _skip_if_no_real_key()
+
+    # Multipart/form-data: file + fields.
+    # Use an intentionally invalid model to avoid any billable work; wiring is the goal.
+    files = {"image": ("input.png", _PNG_1X1_BYTES, "image/png")}
+    data = {"model": "__invalid_model__", "n": "1", "size": "256x256"}
+
+    r = requests.post(
+        f"{RELAY_BASE_URL}/v1/images/variations",
+        headers=_auth_headers(),
+        files=files,
+        data=data,
+        timeout=DEFAULT_TIMEOUT_S,
+    )
+    assert r.status_code < 500, f"images variations returned {r.status_code}: {r.text[:400]}"
 
 
 @pytest.mark.integration
