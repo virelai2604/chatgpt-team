@@ -1,4 +1,5 @@
-"""tests/test_files_and_batches_integration.py
+"""
+tests/test_files_and_batches_integration.py
 
 Integration tests for the relay's Files + Batches behavior.
 
@@ -14,7 +15,7 @@ RELAY_TOKEN / RELAY_KEY
   Relay auth token. Tests prefer RELAY_TOKEN, and fall back to RELAY_KEY.
 
 INTEGRATION_OPENAI_API_KEY
-  Gate for upstream-hitting tests. If unset/empty, expensive OpenAI-dependent tests
+  Gate for upstream-hitting tests. If unset/empty, OpenAI-dependent tests
   are skipped (to keep default CI runs cheap/safe).
 """
 
@@ -110,6 +111,7 @@ async def client() -> AsyncIterator[httpx.AsyncClient]:
         base_url=RELAY_BASE_URL,
         timeout=DEFAULT_TIMEOUT_S,
         headers=_auth_headers(),
+        follow_redirects=True,
     ) as c:
         yield c
 
@@ -163,9 +165,30 @@ async def test_user_data_file_download_is_forbidden(client: httpx.AsyncClient) -
     file_id = body.get("id")
     assert isinstance(file_id, str) and file_id, f"unexpected file id: {body}"
 
-    # user_data file downloads should be forbidden by relay (privacy guardrail)
+    # user_data file downloads should be blocked by the relay privacy guardrail.
+    #
+    # Observed behavior: the relay returns an OpenAI-shaped error payload with HTTP 400
+    # (invalid_request_error) and message like:
+    #   "Not allowed to download files of purpose: user_data"
+    #
+    # Some deployments may choose to map this to 403. Either is acceptable as long as
+    # the guardrail is clearly enforced and never 2xx.
     r = await _request_with_retry(client, "GET", f"/v1/files/{file_id}/content", headers=_auth_headers())
-    assert r.status_code in (401, 403), f"expected forbidden, got {r.status_code}: {r.text[:200]}"
+    assert r.status_code in (400, 403), f"expected blocked download, got {r.status_code}: {r.text[:200]}"
+
+    if r.status_code == 400:
+        # Validate the error is specifically about user_data download being blocked.
+        try:
+            err_body = r.json()
+        except Exception:
+            pytest.fail(f"expected JSON error body for 400, got non-JSON: {r.text[:200]}")
+
+        msg = (
+            ((err_body.get("error") or {}).get("message") or "")
+            if isinstance(err_body, dict)
+            else ""
+        ).lower()
+        assert "user_data" in msg and "not allowed" in msg, f"unexpected 400 error message: {msg!r}"
 
 
 @pytest.mark.integration
