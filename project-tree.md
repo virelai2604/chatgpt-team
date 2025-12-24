@@ -5,8 +5,8 @@
   📄 .gitleaks.toml
   📄 AGENTS.md
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
-  📄 RELAY_CHECKLIST_v10.md
-  📄 RELAY_PROGRESS_SUMMARY_v6.md
+  📄 RELAY_CHECKLIST_v14.md
+  📄 RELAY_PROGRESS_SUMMARY_v7.md
   📄 __init__.py
   📄 chatgpt_baseline.md
   📄 chatgpt_changes.md
@@ -118,7 +118,9 @@
     📄 __init__.py
     📄 client.py
     📄 conftest.py
+    📄 test_extended_routes_smoke_integration.py
     📄 test_files_and_batches_integration.py
     📄 test_local_e2e.py
     📄 test_relay_auth_guard.py
+    📄 test_remaining_routes_smoke_integration.py
     📄 test_success_gates_integration.py
