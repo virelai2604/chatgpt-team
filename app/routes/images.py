@@ -21,15 +21,10 @@ async def create_image(request: Request) -> Response:
 
     Covers:
       - POST /v1/images/generations
-      - POST /v1/images
+      - POST /v1/images (alias)
 
-    Tests:
-      - test_image_generations_forward
-
-    They assert:
-      * HTTP 200
-      * JSON body matches the stub from `forward_spy`
-        (echo_path == "/v1/images/generations", echo_method == "POST")
+    Notes:
+      - Typical payload is JSON.
     """
     logger.info("→ [images] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
@@ -40,14 +35,26 @@ async def edit_image(request: Request) -> Response:
     """
     Image edits passthrough.
 
-    This is used by:
-      - test_image_edits_forward
+    Covers:
+      - POST /v1/images/edits
 
-    The test stubs the upstream endpoint:
-      POST https://api.openai.com/v1/images/edits
-
-    Our job is simply to forward the request and return whatever
-    upstream sends (status code + JSON body).
+    Notes:
+      - Commonly multipart/form-data (file upload). We forward as-is.
     """
     logger.info("→ [images] %s %s (edits)", request.method, request.url.path)
+    return await forward_openai_request(request)
+
+
+@router.post("/images/variations")
+async def create_image_variation(request: Request) -> Response:
+    """
+    Image variations passthrough.
+
+    Covers:
+      - POST /v1/images/variations
+
+    Notes:
+      - Commonly multipart/form-data (image file input). We forward as-is.
+    """
+    logger.info("→ [images] %s %s (variations)", request.method, request.url.path)
     return await forward_openai_request(request)
