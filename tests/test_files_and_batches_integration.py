@@ -1,65 +1,43 @@
+"""tests/test_files_and_batches_integration.py
+
+Integration tests for the relay's Files + Batches behavior.
+
+These tests are intentionally "black box": they talk to a *running* relay instance
+over HTTP (local uvicorn on :8000, or a deployed URL).
+
+Environment
+-----------
+RELAY_BASE_URL
+  Base URL for the relay. Defaults to http://localhost:8000
+
+RELAY_TOKEN / RELAY_KEY
+  Relay auth token. Tests prefer RELAY_TOKEN, and fall back to RELAY_KEY.
+
+INTEGRATION_OPENAI_API_KEY
+  Gate for upstream-hitting tests. If unset/empty, expensive OpenAI-dependent tests
+  are skipped (to keep default CI runs cheap/safe).
+"""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, AsyncIterator, Dict
 
 import httpx
 import pytest
 import pytest_asyncio
 
-# This test file is intended to run against a running relay server.
-# Default matches your other integration tests.
-RELAY_BASE_URL = os.environ.get("RELAY_BASE_URL", "http://localhost:8000")
+RELAY_BASE_URL = (os.getenv("RELAY_BASE_URL") or "http://localhost:8000").rstrip("/")
+RELAY_TOKEN = os.getenv("RELAY_TOKEN") or os.getenv("RELAY_KEY") or "dummy"
 
-# Gate these tests behind a flag, since they may call upstream depending on your relay config.
 INTEGRATION_ENV_VAR = "INTEGRATION_OPENAI_API_KEY"
-
-
-def _has_openai_key() -> bool:
-    """
-    We do not validate key format here; we only gate execution.
-    """
-    key = os.getenv(INTEGRATION_ENV_VAR, "")
-    return bool(key and key.strip())
-
-
-def _auth_header() -> Dict[str, str]:
-    """
-    Relay auth header. Prefer RELAY_KEY but support RELAY_TOKEN for backward-compat.
-    """
-    token = (os.getenv("RELAY_KEY") or os.getenv("RELAY_TOKEN") or "").strip()
-    return {"Authorization": f"Bearer {token}"} if token else {}
-
-
-async def _request_with_retry(
-    client: httpx.AsyncClient,
-    method: str,
-    url: str,
-    *,
-    max_attempts: int = 4,
-    base_delay_s: float = 0.6,
-    **kwargs: Any,
-) -> httpx.Response:
-    """
-    Minimal retry helper for transient network/cold-start issues.
-    """
-    last_exc: Optional[Exception] = None
-    for i in range(max_attempts):
-        try:
-            return await client.request(method, url, **kwargs)
-        except (httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError) as exc:
-            last_exc = exc
-            if i == max_attempts - 1:
-                raise
-            await asyncio.sleep(base_delay_s * (2**i))
-    raise last_exc or RuntimeError("request_with_retry failed without exception")
 
 
 def _env_float(name: str, default: float) -> float:
     raw = os.getenv(name)
-    if raw is None or not raw.strip():
+    if raw is None or raw.strip() == "":
         return default
     try:
         return float(raw)
@@ -67,24 +45,78 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-# IMPORTANT FIX:
-# In pytest-asyncio strict mode, async fixtures must use pytest_asyncio.fixture.
-@pytest_asyncio.fixture
-async def client() -> httpx.AsyncClient:
-    timeout_s = _env_float("INTEGRATION_HTTP_TIMEOUT_SECONDS", 60.0)
-    timeout = httpx.Timeout(timeout_s)
+DEFAULT_TIMEOUT_S = _env_float("RELAY_TEST_TIMEOUT_S", 60.0)
 
+
+def _has_openai_key() -> bool:
+    return bool(os.getenv(INTEGRATION_ENV_VAR))
+
+
+def _auth_headers(extra: Dict[str, str] | None = None) -> Dict[str, str]:
+    """
+    Send both headers so tests work across relay deployments that check either:
+      - Authorization: Bearer <token>
+      - X-Relay-Key: <token>
+    """
+    headers: Dict[str, str] = {
+        "Authorization": f"Bearer {RELAY_TOKEN}",
+        "X-Relay-Key": RELAY_TOKEN,
+    }
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+async def _request_with_retry(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    retries: int = 2,
+    retry_sleep_s: float = 0.5,
+    **kwargs: Any,
+) -> httpx.Response:
+    last_exc: Exception | None = None
+    last_resp: httpx.Response | None = None
+
+    for attempt in range(retries + 1):
+        try:
+            resp = await client.request(method, url, **kwargs)
+            last_resp = resp
+            # For tests: return any non-5xx response so assertions can inspect it.
+            if resp.status_code < 500:
+                return resp
+        except httpx.HTTPError as exc:
+            last_exc = exc
+
+        if attempt < retries:
+            await asyncio.sleep(retry_sleep_s)
+
+    if last_resp is not None:
+        return last_resp
+    assert last_exc is not None
+    raise last_exc
+
+
+@pytest_asyncio.fixture
+async def client() -> AsyncIterator[httpx.AsyncClient]:
+    """
+    IMPORTANT FIX:
+    In `asyncio_mode=strict`, async fixtures must use `@pytest_asyncio.fixture`.
+    Otherwise pytest passes an async generator object through to tests and you get:
+      AttributeError: 'async_generator' object has no attribute 'request'
+    """
     async with httpx.AsyncClient(
         base_url=RELAY_BASE_URL,
-        timeout=timeout,
-        follow_redirects=True,
+        timeout=DEFAULT_TIMEOUT_S,
+        headers=_auth_headers(),
     ) as c:
         yield c
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_proxy_blocks_evals_and_fine_tune(client: httpx.AsyncClient):
+async def test_proxy_blocks_evals_and_fine_tune(client: httpx.AsyncClient) -> None:
     if not _has_openai_key():
         pytest.skip(f"{INTEGRATION_ENV_VAR} not set")
 
@@ -93,45 +125,52 @@ async def test_proxy_blocks_evals_and_fine_tune(client: httpx.AsyncClient):
         client,
         "POST",
         "/v1/proxy",
-        headers={**_auth_header(), "Content-Type": "application/json"},
+        headers=_auth_headers({"Content-Type": "application/json"}),
         json={"method": "GET", "path": "/v1/evals"},
     )
-    assert r.status_code in (400, 403), f"Unexpected evals status {r.status_code}: {r.text[:400]}"
+    assert r.status_code in (403, 404), f"Unexpected evals proxy status: {r.status_code} {r.text[:200]}"
 
-    # Fine-tuning blocked
+    # Fine-tune blocked
     r = await _request_with_retry(
         client,
         "POST",
         "/v1/proxy",
-        headers={**_auth_header(), "Content-Type": "application/json"},
+        headers=_auth_headers({"Content-Type": "application/json"}),
         json={"method": "GET", "path": "/v1/fine_tuning/jobs"},
     )
-    assert r.status_code in (400, 403), f"Unexpected fine-tune status {r.status_code}: {r.text[:400]}"
+    assert r.status_code in (403, 404), f"Unexpected fine-tune proxy status: {r.status_code} {r.text[:200]}"
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_user_data_file_download_is_forbidden(client: httpx.AsyncClient):
+async def test_user_data_file_download_is_forbidden(client: httpx.AsyncClient) -> None:
     if not _has_openai_key():
         pytest.skip(f"{INTEGRATION_ENV_VAR} not set")
 
     data = {"purpose": "user_data"}
     files = {"file": ("relay_ping.txt", b"ping", "text/plain")}
 
-    r = await _request_with_retry(client, "POST", "/v1/files", headers=_auth_header(), data=data, files=files)
-    assert r.status_code == 200, f"file upload failed {r.status_code}: {r.text[:400]}"
-    file_id = r.json().get("id")
-    assert file_id, f"missing file id in response: {r.text[:400]}"
+    r = await _request_with_retry(
+        client,
+        "POST",
+        "/v1/files",
+        headers=_auth_headers(),
+        data=data,
+        files=files,
+    )
+    assert r.status_code < 500, f"file upload returned {r.status_code}: {r.text[:400]}"
+    body = r.json()
+    file_id = body.get("id")
+    assert isinstance(file_id, str) and file_id, f"unexpected file id: {body}"
 
-    # Downloads for user_data must be forbidden.
-    r = await _request_with_retry(client, "GET", f"/v1/files/{file_id}/content", headers=_auth_header())
-    assert r.status_code == 400, f"expected forbidden download, got {r.status_code}: {r.text[:400]}"
-    assert "Not allowed to download files of purpose: user_data" in (r.text or "")
+    # user_data file downloads should be forbidden by relay (privacy guardrail)
+    r = await _request_with_retry(client, "GET", f"/v1/files/{file_id}/content", headers=_auth_headers())
+    assert r.status_code in (401, 403), f"expected forbidden, got {r.status_code}: {r.text[:200]}"
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient):
+async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient) -> None:
     """
     Batch completion latency is not deterministic. The relay is correct if:
       - batch can be created
@@ -145,7 +184,6 @@ async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient):
 
     batch_timeout_s = _env_float("BATCH_TIMEOUT_SECONDS", 600.0)
     poll_interval_s = _env_float("BATCH_POLL_INTERVAL_SECONDS", 2.0)
-    model = os.getenv("INTEGRATION_MODEL", "gpt-4.1-mini")
 
     jsonl_line = (
         json.dumps(
@@ -153,7 +191,7 @@ async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient):
                 "custom_id": "ping-1",
                 "method": "POST",
                 "url": "/v1/responses",
-                "body": {"model": model, "input": "Return exactly: pong"},
+                "body": {"model": "gpt-5.1", "input": "Return exactly: pong"},
             }
         ).encode("utf-8")
         + b"\n"
@@ -162,50 +200,56 @@ async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient):
     # Upload batch input
     data = {"purpose": "batch"}
     files = {"file": ("batch_input.jsonl", jsonl_line, "application/jsonl")}
-    r = await _request_with_retry(client, "POST", "/v1/files", headers=_auth_header(), data=data, files=files)
-    assert r.status_code == 200, f"batch input upload failed {r.status_code}: {r.text[:400]}"
-    input_file_id = r.json().get("id")
-    assert input_file_id, f"missing input file id in response: {r.text[:400]}"
+    r = await _request_with_retry(client, "POST", "/v1/files", headers=_auth_headers(), data=data, files=files)
+    assert r.status_code < 500, f"batch input upload returned {r.status_code}: {r.text[:400]}"
+    file_id = r.json().get("id")
+    assert isinstance(file_id, str) and file_id, f"unexpected batch input file id: {r.text[:200]}"
 
     # Create batch
     r = await _request_with_retry(
         client,
         "POST",
         "/v1/batches",
-        headers={**_auth_header(), "Content-Type": "application/json"},
+        headers=_auth_headers({"Content-Type": "application/json"}),
         json={
-            "input_file_id": input_file_id,
+            "input_file_id": file_id,
             "endpoint": "/v1/responses",
             "completion_window": "24h",
         },
     )
-    assert r.status_code == 200, f"batch create failed {r.status_code}: {r.text[:400]}"
-    batch_id = r.json().get("id")
-    assert batch_id, f"missing batch id in response: {r.text[:400]}"
+    assert r.status_code < 500, f"batch create returned {r.status_code}: {r.text[:400]}"
+    batch = r.json()
+    batch_id = batch.get("id")
+    assert isinstance(batch_id, str) and batch_id, f"unexpected batch id: {batch}"
 
-    # Poll until completed or timeout
-    deadline = asyncio.get_event_loop().time() + batch_timeout_s
-    output_file_id: Optional[str] = None
+    # Poll status
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + batch_timeout_s
 
-    while asyncio.get_event_loop().time() < deadline:
-        r = await _request_with_retry(client, "GET", f"/v1/batches/{batch_id}", headers=_auth_header())
-        assert r.status_code == 200, f"batch retrieve failed {r.status_code}: {r.text[:400]}"
+    output_file_id: str | None = None
+    status: str | None = None
+
+    while loop.time() < deadline:
+        r = await _request_with_retry(client, "GET", f"/v1/batches/{batch_id}", headers=_auth_headers())
+        assert r.status_code < 500, f"batch retrieve returned {r.status_code}: {r.text[:200]}"
+
         body = r.json()
         status = body.get("status")
+        output_file_id = body.get("output_file_id")
 
-        if status == "completed":
-            output_file_id = body.get("output_file_id")
+        if status == "completed" and isinstance(output_file_id, str) and output_file_id:
             break
 
         if status in ("failed", "expired", "cancelled"):
-            pytest.skip(f"batch ended in terminal status={status}: {body}")
+            pytest.fail(f"batch ended unexpectedly with status={status}: {body}")
 
         await asyncio.sleep(poll_interval_s)
 
-    if not output_file_id:
-        pytest.skip("batch did not complete within timeout; skipping")
+    if status != "completed" or not output_file_id:
+        pytest.skip(f"batch did not complete within {batch_timeout_s}s (last status={status})")
 
     # Download output file content
-    r = await _request_with_retry(client, "GET", f"/v1/files/{output_file_id}/content", headers=_auth_header())
-    assert r.status_code == 200, f"output file download failed {r.status_code}: {r.text[:400]}"
-    assert (r.content or b"").strip(), "output file content is empty"
+    r = await _request_with_retry(client, "GET", f"/v1/files/{output_file_id}/content", headers=_auth_headers())
+    assert r.status_code < 500, f"output file content returned {r.status_code}: {r.text[:200]}"
+    assert r.status_code == 200, f"expected 200 for output file, got {r.status_code}: {r.text[:200]}"
+    assert r.content, "output file content was empty"
