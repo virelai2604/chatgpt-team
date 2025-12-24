@@ -36,10 +36,6 @@ RELAY_TOKEN = (
 DEFAULT_TIMEOUT_S = float(os.getenv("RELAY_TEST_TIMEOUT_S", "30"))
 INTEGRATION_ENV_VAR = "INTEGRATION_OPENAI_API_KEY"
 
-# Minimal valid 1x1 PNG (transparent-ish). Avoids adding binary fixtures to the repo.
-_PNG_1X1_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
-_PNG_1X1_BYTES = base64.b64decode(_PNG_1X1_B64)
-
 
 def _auth_headers(extra: Dict[str, str] | None = None) -> Dict[str, str]:
     headers = {"Authorization": f"Bearer {RELAY_TOKEN}"}
@@ -50,6 +46,7 @@ def _auth_headers(extra: Dict[str, str] | None = None) -> Dict[str, str]:
 
 def _skip_if_no_real_key() -> None:
     """Skip tests that may call upstream OpenAI unless explicitly enabled."""
+
     if os.getenv(INTEGRATION_ENV_VAR, "").strip() != "1":
         pytest.skip(f"Set {INTEGRATION_ENV_VAR}=1 to run upstream-proxy smoke tests")
 
@@ -197,9 +194,16 @@ def test_images_variations_wiring_no_5xx() -> None:
 
     _skip_if_no_real_key()
 
-    # Multipart/form-data: file + fields.
+    # A minimal valid PNG (1x1) to exercise multipart forwarding without external deps.
+    tiny_png_b64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+vmFoAAAAASUVORK5CYII="
+    )
+    png_bytes = base64.b64decode(tiny_png_b64)
+
+    # IMPORTANT: Do not set Content-Type manually for multipart; requests will set the boundary.
+    files = {"image": ("input.png", png_bytes, "image/png")}
+
     # Use an intentionally invalid model to avoid any billable work; wiring is the goal.
-    files = {"image": ("input.png", _PNG_1X1_BYTES, "image/png")}
     data = {"model": "__invalid_model__", "n": "1", "size": "256x256"}
 
     r = requests.post(

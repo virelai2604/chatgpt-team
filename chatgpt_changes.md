@@ -1,17 +1,17 @@
 # ChatGPT Sync
 Repo: chatgpt-team
 Base: origin/main
-Base commit (merge-base): 1988e390cc18edd0a31759fa300f1add05a7555f
+Base commit (merge-base): e5a4e25443c8c00303455244b28fb04b9c370fdf
 Dirs: app tests static schemas src scripts/src
-Root files: project-tree.md pyproject.toml __init__.py generate_tree.py
+Root files: project-tree.md pyproject.toml chatgpt_sync.sh AGENTS.md __init__.py generate_tree.py
 Mode: changes
-Generated: 2025-12-24T18:42:15+07:00
+Generated: 2025-12-24T19:50:08+07:00
 
-## CHANGE SUMMARY (since 1988e390cc18edd0a31759fa300f1add05a7555f, includes worktree)
+## CHANGE SUMMARY (since e5a4e25443c8c00303455244b28fb04b9c370fdf, includes worktree)
 
 > No changes detected in scope.
 
-## PATCH (since 1988e390cc18edd0a31759fa300f1add05a7555f, includes worktree)
+## PATCH (since e5a4e25443c8c00303455244b28fb04b9c370fdf, includes worktree)
 
 > (empty)
 

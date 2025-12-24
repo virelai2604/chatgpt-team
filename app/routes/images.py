@@ -40,6 +40,9 @@ async def edit_image(request: Request) -> Response:
     """
     Image edits passthrough.
 
+    This is used by:
+      - test_image_edits_forward
+
     The test stubs the upstream endpoint:
       POST https://api.openai.com/v1/images/edits
 
@@ -51,7 +54,7 @@ async def edit_image(request: Request) -> Response:
 
 
 @router.post("/images/variations")
-async def create_image_variation(request: Request) -> Response:
+async def variation_image(request: Request) -> Response:
     """
     Image variations passthrough.
 
@@ -59,8 +62,12 @@ async def create_image_variation(request: Request) -> Response:
       - POST /v1/images/variations
 
     Notes:
-      - Upstream expects multipart/form-data with an 'image' file field.
-      - Typically used with DALL·E 2 class models (depending on OpenAI support).
+      - Typically multipart/form-data (file upload).
+      - We intentionally do not parse/validate the form here; we forward bytes as-is.
+      - This keeps the relay “dumb and durable” while still making the subroute explicit.
+
+    Integration smoke tests:
+      - test_images_variations_wiring_no_5xx
     """
     logger.info("→ [images] %s %s (variations)", request.method, request.url.path)
     return await forward_openai_request(request)
