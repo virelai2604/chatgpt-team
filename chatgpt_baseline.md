@@ -1,13 +1,13 @@
 # ChatGPT Sync
 Repo: chatgpt-team
 Base: origin/main
-Base commit (merge-base): fc0b59b7878c9438674dc6266dfe0dceefab5feb
+Base commit (merge-base): b113e248f9dafbfe0a389493a68fe1cdf95143b1
 Dirs: app tests static schemas src scripts/src
 Root files: project-tree.md pyproject.toml chatgpt_sync.sh AGENTS.md __init__.py generate_tree.py
 Mode: baseline
-Generated: 2025-12-25T23:25:24+07:00
+Generated: 2025-12-25T23:27:31+07:00
 
-## TREE (repo root at fc0b59b7878c9438674dc6266dfe0dceefab5feb)
+## TREE (repo root at b113e248f9dafbfe0a389493a68fe1cdf95143b1)
 ```
  - .env.example.env
  - .gitattributes
@@ -41,7 +41,7 @@ Generated: 2025-12-25T23:25:24+07:00
  - tests
 ```
 
-## TREE (app/ at fc0b59b7878c9438674dc6266dfe0dceefab5feb)
+## TREE (app/ at b113e248f9dafbfe0a389493a68fe1cdf95143b1)
 ```
  - app/__init__.py
  - app/api/__init__.py
@@ -87,7 +87,7 @@ Generated: 2025-12-25T23:25:24+07:00
  - app/utils/logger.py
 ```
 
-## TREE (tests/ at fc0b59b7878c9438674dc6266dfe0dceefab5feb)
+## TREE (tests/ at b113e248f9dafbfe0a389493a68fe1cdf95143b1)
 ```
  - tests/__init__.py
  - tests/client.py
@@ -102,29 +102,29 @@ Generated: 2025-12-25T23:25:24+07:00
  - tests/test_success_gates_integration.py
 ```
 
-## TREE (static/ at fc0b59b7878c9438674dc6266dfe0dceefab5feb)
+## TREE (static/ at b113e248f9dafbfe0a389493a68fe1cdf95143b1)
 ```
  - static/.well-known/__init__.py
  - static/.well-known/ai-plugin.json
 ```
 
-## TREE (schemas/ at fc0b59b7878c9438674dc6266dfe0dceefab5feb)
+## TREE (schemas/ at b113e248f9dafbfe0a389493a68fe1cdf95143b1)
 ```
  - schemas/__init__.py
  - schemas/openapi.yaml
 ```
 
-## TREE (src/ at fc0b59b7878c9438674dc6266dfe0dceefab5feb)
+## TREE (src/ at b113e248f9dafbfe0a389493a68fe1cdf95143b1)
 ```
 ```
 
-## TREE (scripts/src/ at fc0b59b7878c9438674dc6266dfe0dceefab5feb)
+## TREE (scripts/src/ at b113e248f9dafbfe0a389493a68fe1cdf95143b1)
 ```
 ```
 
 ## BASELINE (ROOT FILES)
 
-## FILE: project-tree.md @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: project-tree.md @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
   📄 .env.env
   📄 .env.example.env
@@ -261,7 +261,7 @@ Generated: 2025-12-25T23:25:24+07:00
     📄 test_remaining_routes_smoke_integration.py
     📄 test_success_gates_integration.py```
 
-## FILE: pyproject.toml @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: pyproject.toml @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -324,7 +324,7 @@ exclude = ["tests*", "docs*", "render*"]
 app = ["manifests/*.json"]
 ```
 
-## FILE: chatgpt_sync.sh @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: chatgpt_sync.sh @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 #!/usr/bin/env bash
 set -euo pipefail
@@ -763,7 +763,7 @@ mv "$tmp_out" "$OUT_FILE"
 echo "Wrote: ${REPO_ROOT}/${OUT_FILE}"
 ```
 
-## FILE: AGENTS.md @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: AGENTS.md @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # Repository Guidelines – ChatGPT Team Relay (Codex Max / Custom Action Focus)
 
@@ -908,11 +908,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## FILE: __init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: __init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 ```
 
-## FILE: generate_tree.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: generate_tree.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 #!/usr/bin/env python3
 """
@@ -986,15 +986,15 @@ if __name__ == "__main__":
 
 ## BASELINE (app/)
 
-## FILE: app/__init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/__init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 ```
 
-## FILE: app/api/__init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/api/__init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 ```
 
-## FILE: app/api/forward_openai.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/api/forward_openai.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -1319,7 +1319,7 @@ __all__ = [
 ]
 ```
 
-## FILE: app/api/routes.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/api/routes.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # app/api/routes.py
 
@@ -1341,7 +1341,7 @@ register_routes(router)
 logger.info("API router initialized with shared route families")
 ```
 
-## FILE: app/api/sse.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/api/sse.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -1423,7 +1423,7 @@ async def responses_stream(request: Request) -> Response:
         return JSONResponse(status_code=424, content={"detail": "Relay wiring error", "error": str(exc)})
 ```
 
-## FILE: app/api/tools_api.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/api/tools_api.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # app/api/tools_api.py
 from __future__ import annotations
@@ -1531,11 +1531,11 @@ async def openapi_actions(request: Request) -> JSONResponse:
     return JSONResponse(filtered)
 ```
 
-## FILE: app/core/__init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/core/__init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 ```
 
-## FILE: app/core/config.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/core/config.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -1623,7 +1623,7 @@ def get_settings() -> Settings:
 settings = get_settings()
 ```
 
-## FILE: app/core/http_client.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/core/http_client.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -1689,7 +1689,7 @@ def get_async_openai_client(*, timeout_seconds: Optional[float] = None) -> Async
     return client
 ```
 
-## FILE: app/core/logging.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/core/logging.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 """
 Logging configuration module for the ChatGPT Team Relay.
@@ -1739,7 +1739,7 @@ def configure_logging(settings: Any) -> None:
     get_logger("relay")
 ```
 
-## FILE: app/http_client.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/http_client.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 """
 Compatibility shim for legacy imports.
@@ -1767,7 +1767,7 @@ __all__ = [
 ]
 ```
 
-## FILE: app/main.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/main.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -1818,7 +1818,7 @@ def create_app() -> FastAPI:
 app = create_app()
 ```
 
-## FILE: app/manifests/__init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/manifests/__init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # ==========================================================
 # app/manifests/__init__.py — Ground Truth Manifest Loader
@@ -1865,7 +1865,7 @@ except Exception as e:
     raise RuntimeError(f"Failed to load tools manifest: {_manifest_path} — {e}")
 ```
 
-## FILE: app/manifests/tools_manifest.json @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/manifests/tools_manifest.json @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 {
   "object": "list",
@@ -2156,11 +2156,11 @@ except Exception as e:
 }
 ```
 
-## FILE: app/middleware/__init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/middleware/__init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 ```
 
-## FILE: app/middleware/p4_orchestrator.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/middleware/p4_orchestrator.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # app/middleware/p4_orchestrator.py
 import uuid
@@ -2194,63 +2194,62 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         return response
 ```
 
-## FILE: app/middleware/relay_auth.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/middleware/relay_auth.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
-from typing import Optional
-
+from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.core.config import settings
+from app.utils.authy import check_relay_key
 
 
 _PUBLIC_PATHS = {
+    "/",
     "/health",
     "/v1/health",
     "/manifest",
     "/openapi.json",
     "/openapi.actions.json",
+    "/docs",
+    "/redoc",
 }
 
 
-def _extract_relay_key(request: Request) -> Optional[str]:
-    # Preferred header
-    x_key = request.headers.get("X-Relay-Key")
-    if x_key:
-        return x_key.strip()
-
-    # Bearer fallback
-    auth = request.headers.get("Authorization") or ""
-    auth = auth.strip()
-    if auth.lower().startswith("bearer "):
-        return auth[7:].strip()
-
-    return None
-
-
 class RelayAuthMiddleware(BaseHTTPMiddleware):
+    """Relay authentication guard.
+
+    Design intent:
+      - Do not require auth for health/openapi/manifest/root.
+      - Only gate /v1/* endpoints (the relay surface area).
+      - Accept either:
+          * X-Relay-Key (or settings.RELAY_AUTH_HEADER) header, or
+          * Authorization: Bearer <key>
+    """
+
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        # Allow unauthenticated access to public endpoints (health/openapi/manifest).
-        if request.url.path in _PUBLIC_PATHS or request.url.path.startswith("/static/"):
+        path = request.url.path
+
+        # Public endpoints and static assets.
+        if path in _PUBLIC_PATHS or path.startswith("/static/"):
             return await call_next(request)
 
         if not settings.RELAY_AUTH_ENABLED:
             return await call_next(request)
 
-        provided = _extract_relay_key(request)
-        if not provided:
-            return JSONResponse(status_code=401, content={"detail": "Missing relay key"})
-
-        if provided != settings.RELAY_KEY:
-            return JSONResponse(status_code=401, content={"detail": "Invalid relay key"})
+        # Only guard the relay API surface (v1); allow non-v1 app routes (e.g., landing page).
+        if path.startswith("/v1"):
+            try:
+                check_relay_key(request)
+            except HTTPException as exc:
+                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
         return await call_next(request)
 ```
 
-## FILE: app/middleware/validation.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/middleware/validation.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -2351,14 +2350,14 @@ class ValidationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/models/__init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/models/__init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from .error import ErrorDetail, ErrorResponse
 
 __all__ = ["ErrorDetail", "ErrorResponse"]
 ```
 
-## FILE: app/models/error.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/models/error.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -2397,7 +2396,7 @@ class ErrorResponse(BaseModel):
         )
 ```
 
-## FILE: app/routes/__init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/__init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # app/routes/__init__.py
 
@@ -2406,7 +2405,7 @@ from .register_routes import register_routes
 __all__ = ["register_routes"]
 ```
 
-## FILE: app/routes/actions.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/actions.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # app/routes/actions.py
 
@@ -2557,7 +2556,7 @@ async def actions_relay_info_v1() -> dict:
     return nested
 ```
 
-## FILE: app/routes/batches.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/batches.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -2595,7 +2594,7 @@ async def cancel_batch(batch_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/containers.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/containers.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -2691,7 +2690,7 @@ async def containers_file_content_head(request: Request, container_id: str, file
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/conversations.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/conversations.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -2760,7 +2759,7 @@ async def conversations_subpaths_options(path: str, request: Request) -> Respons
     return await _forward(request)
 ```
 
-## FILE: app/routes/embeddings.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/embeddings.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -2782,7 +2781,7 @@ async def create_embedding(request: Request) -> JSONResponse:
     return JSONResponse(content=payload)
 ```
 
-## FILE: app/routes/files.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/files.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -2873,7 +2872,7 @@ async def files_passthrough(path: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/health.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/health.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -2936,7 +2935,7 @@ async def v1_health() -> Dict[str, Any]:
     return _health_payload()
 ```
 
-## FILE: app/routes/images.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/images.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # app/api/images.py
 from __future__ import annotations
@@ -3288,7 +3287,7 @@ async def actions_edits(payload: ImagesEditsJSON) -> Response:
     return await _post_multipart_to_upstream(endpoint_path="/v1/images/edits", files=files, data=form)
 ```
 
-## FILE: app/routes/models.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/models.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # app/routes/models.py
 
@@ -3347,7 +3346,7 @@ async def retrieve_model(model_id: str) -> dict:
     }
 ```
 
-## FILE: app/routes/proxy.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/proxy.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -3599,7 +3598,7 @@ async def proxy(call: ProxyRequest, request: Request) -> Response:
     )
 ```
 
-## FILE: app/routes/realtime.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/realtime.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # app/routes/realtime.py
 
@@ -3795,7 +3794,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
         await websocket.close()
 ```
 
-## FILE: app/routes/register_routes.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/register_routes.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # app/routes/register_routes.py
 
@@ -3871,7 +3870,7 @@ def register_all_routes(app: _RouterLike) -> None:
     register_routes(app)
 ```
 
-## FILE: app/routes/responses.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/responses.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -3986,7 +3985,7 @@ async def delete_response(response_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/uploads.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/uploads.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -4076,7 +4075,7 @@ async def uploads_passthrough(request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/vector_stores.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/vector_stores.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -4157,7 +4156,7 @@ async def vector_stores_subpaths_alias(path: str, request: Request) -> Response:
     return await _forward(request)
 ```
 
-## FILE: app/routes/videos.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/routes/videos.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -4246,77 +4245,71 @@ async def videos_passthrough(path: str, request: Request):
     return await forward_openai_request(request)
 ```
 
-## FILE: app/utils/__init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/utils/__init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 ```
 
-## FILE: app/utils/authy.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/utils/authy.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
 from typing import Optional
 
 from fastapi import HTTPException
-from starlette.datastructures import Headers
+from starlette.requests import Request
+
+from app.core.config import settings
 
 
-def _norm_header_name(name: str) -> str:
-    return (name or "").strip().lower()
+def _get_expected_key() -> str:
+    key = (settings.RELAY_KEY or "").strip()
+    if not key:
+        raise HTTPException(status_code=500, detail="Server missing RELAY_KEY configuration")
+    return key
 
 
-def get_auth_header_key(settings) -> str:
+def _extract_from_authorization(request: Request) -> Optional[str]:
+    auth = (request.headers.get("Authorization") or "").strip()
+    if not auth:
+        return None
+
+    # Enforce Bearer scheme so clients get an actionable message.
+    if not auth.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Authorization header must use Bearer scheme")
+
+    token = auth[7:].strip()
+    return token or None
+
+
+def _extract_from_custom_header(request: Request) -> Optional[str]:
+    header_name = (settings.RELAY_AUTH_HEADER or "X-Relay-Key").strip()
+    if not header_name:
+        header_name = "X-Relay-Key"
+    value = request.headers.get(header_name)
+    return value.strip() if value else None
+
+
+def check_relay_key(request: Request) -> None:
     """
-    Returns the configured relay auth header name (normalized).
-    Defaults to 'x-relay-key'.
+    Validates relay authentication, raising HTTPException(401/500) when invalid.
+
+    Accepted inputs:
+      - Custom header (settings.RELAY_AUTH_HEADER, default: X-Relay-Key)
+      - Authorization: Bearer <key>
     """
-    raw = getattr(settings, "RELAY_AUTH_HEADER", None) or getattr(settings, "relay_auth_header", None) or "x-relay-key"
-    return _norm_header_name(raw)
+    provided = _extract_from_custom_header(request)
+    if not provided:
+        provided = _extract_from_authorization(request)
 
-
-def _get_expected_key(settings) -> str:
-    return getattr(settings, "RELAY_KEY", None) or getattr(settings, "relay_key", None) or ""
-
-
-def check_relay_key(headers: Headers, settings) -> None:
-    """
-    Enforces relay auth when enabled.
-
-    Semantics (aligned to tests):
-    - If Authorization is present but not Bearer => 401 detail includes 'Bearer'
-    - If missing => 401 'Missing relay key'
-    - If provided but wrong => 401 'Invalid relay key'
-    """
-    enabled = bool(getattr(settings, "RELAY_AUTH_ENABLED", False) or getattr(settings, "relay_auth_enabled", False))
-    if not enabled:
-        return
-
-    expected = _get_expected_key(settings)
-
-    # If Authorization exists, treat it as an attempt and validate scheme first.
-    authz = headers.get("authorization")
-    if authz:
-        if not authz.lower().startswith("bearer "):
-            raise HTTPException(status_code=401, detail="Authorization header must use Bearer scheme")
-        token = authz.split(" ", 1)[1].strip()
-        if not expected or token != expected:
-            raise HTTPException(status_code=401, detail="Invalid relay key")
-        return
-
-    # Otherwise, fall back to configured header (default x-relay-key)
-    header_key = get_auth_header_key(settings)
-    if header_key == "authorization":
-        # No Authorization header provided at all
-        raise HTTPException(status_code=401, detail="Missing relay key")
-
-    provided = headers.get(header_key)
     if not provided:
         raise HTTPException(status_code=401, detail="Missing relay key")
 
-    if not expected or provided != expected:
+    expected = _get_expected_key()
+    if provided != expected:
         raise HTTPException(status_code=401, detail="Invalid relay key")
 ```
 
-## FILE: app/utils/error_handler.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/utils/error_handler.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # app/utils/error_handler.py
 
@@ -4460,7 +4453,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 ```
 
-## FILE: app/utils/http_client.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/utils/http_client.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -4469,7 +4462,7 @@ from app.core.http_client import get_async_httpx_client
 __all__ = ["get_async_httpx_client"]
 ```
 
-## FILE: app/utils/logger.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: app/utils/logger.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -4610,11 +4603,11 @@ def exception(msg: str, *args, **kwargs) -> None:
 
 ## BASELINE (tests/)
 
-## FILE: tests/__init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: tests/__init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 ```
 
-## FILE: tests/client.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: tests/client.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # tests/client.py
 
@@ -4651,7 +4644,7 @@ def _build_client() -> TestClient:
 client: TestClient = _build_client()
 ```
 
-## FILE: tests/conftest.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: tests/conftest.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -4681,7 +4674,7 @@ async def client(async_client: httpx.AsyncClient) -> httpx.AsyncClient:
     yield async_client
 ```
 
-## FILE: tests/relay_client_example.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: tests/relay_client_example.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # relay_client_example.py
 from __future__ import annotations
@@ -4756,7 +4749,7 @@ if __name__ == "__main__":
         raise
 ```
 
-## FILE: tests/test_extended_routes_smoke_integration.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: tests/test_extended_routes_smoke_integration.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 """Extended route smoke tests (integration).
 
@@ -5020,7 +5013,7 @@ def test_realtime_sessions_create_no_5xx() -> None:
     assert r.status_code < 500, f"realtime sessions returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_files_and_batches_integration.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: tests/test_files_and_batches_integration.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 """
 tests/test_files_and_batches_integration.py
@@ -5302,7 +5295,7 @@ async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient) -> N
     assert r.content, "output file content was empty"
 ```
 
-## FILE: tests/test_images_variations_integration.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: tests/test_images_variations_integration.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 import binascii
 import os
@@ -5386,7 +5379,7 @@ def test_images_variations_wiring_no_5xx(tmp_path) -> None:
     assert r.status_code < 500, r.text
 ```
 
-## FILE: tests/test_local_e2e.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: tests/test_local_e2e.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # tests/test_local_e2e.py
 from __future__ import annotations
@@ -5570,7 +5563,7 @@ async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncC
     assert "/v1/responses/compact" in data["endpoints"]["responses_compact"]
 ```
 
-## FILE: tests/test_relay_auth_guard.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: tests/test_relay_auth_guard.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 # tests/test_relay_auth_guard.py
 """Relay auth middleware guardrails.
@@ -5653,7 +5646,7 @@ def test_relay_auth_requires_valid_key_for_v1_paths(monkeypatch: pytest.MonkeyPa
         assert body.get("object") == "list"
 ```
 
-## FILE: tests/test_remaining_routes_smoke_integration.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: tests/test_remaining_routes_smoke_integration.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 from __future__ import annotations
 
@@ -5702,7 +5695,7 @@ def test_remaining_route_families_smoke_no_5xx() -> None:
         assert r.status_code < 500, f"{method} {path} returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_success_gates_integration.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: tests/test_success_gates_integration.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 """
 Success gates for the relay (integration).
@@ -5963,11 +5956,11 @@ def test_gate_d_containers_and_videos_content_endpoints_no_relay_5xx() -> None:
 
 ## BASELINE (static/)
 
-## FILE: static/.well-known/__init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: static/.well-known/__init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 ```
 
-## FILE: static/.well-known/ai-plugin.json @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: static/.well-known/ai-plugin.json @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 {
   "schema_version": "v1",
@@ -5996,11 +5989,11 @@ def test_gate_d_containers_and_videos_content_endpoints_no_relay_5xx() -> None:
 
 ## BASELINE (schemas/)
 
-## FILE: schemas/__init__.py @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: schemas/__init__.py @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 ```
 
-## FILE: schemas/openapi.yaml @ fc0b59b7878c9438674dc6266dfe0dceefab5feb
+## FILE: schemas/openapi.yaml @ b113e248f9dafbfe0a389493a68fe1cdf95143b1
 ```
 openapi: 3.1.0
 info:

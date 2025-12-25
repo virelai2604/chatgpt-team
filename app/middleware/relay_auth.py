@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from fastapi import HTTPException, Request
+from typing import Optional
+
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.core.config import settings
-from app.utils.authy import check_relay_key
 
 
+# Paths that should remain reachable without relay auth:
+# - health checks
+# - OpenAPI + manifest (ChatGPT Actions)
+# - docs (optional)
 _PUBLIC_PATHS = {
     "/",
     "/health",
@@ -20,32 +25,44 @@ _PUBLIC_PATHS = {
 }
 
 
+def _extract_relay_key(request: Request) -> Optional[str]:
+    # Preferred header
+    x_key = request.headers.get("X-Relay-Key")
+    if x_key:
+        return x_key.strip()
+
+    # Bearer fallback
+    auth = (request.headers.get("Authorization") or "").strip()
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+
+    return None
+
+
 class RelayAuthMiddleware(BaseHTTPMiddleware):
-    """Relay authentication guard.
-
-    Design intent:
-      - Do not require auth for health/openapi/manifest/root.
-      - Only gate /v1/* endpoints (the relay surface area).
-      - Accept either:
-          * X-Relay-Key (or settings.RELAY_AUTH_HEADER) header, or
-          * Authorization: Bearer <key>
-    """
-
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        path = request.url.path
-
-        # Public endpoints and static assets.
-        if path in _PUBLIC_PATHS or path.startswith("/static/"):
+        # Public endpoints (no auth).
+        if request.url.path in _PUBLIC_PATHS or request.url.path.startswith("/static/"):
             return await call_next(request)
 
+        # If auth is disabled, do nothing.
         if not settings.RELAY_AUTH_ENABLED:
             return await call_next(request)
 
-        # Only guard the relay API surface (v1); allow non-v1 app routes (e.g., landing page).
-        if path.startswith("/v1"):
-            try:
-                check_relay_key(request)
-            except HTTPException as exc:
-                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        # If Authorization exists but is not Bearer, return a message that includes "Bearer"
+        # (tests assert this).
+        auth = (request.headers.get("Authorization") or "").strip()
+        if auth and not auth.lower().startswith("bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Authorization must be Bearer <relay_key> (or use X-Relay-Key)."},
+            )
+
+        provided = _extract_relay_key(request)
+        if not provided:
+            return JSONResponse(status_code=401, content={"detail": "Missing relay key"})
+
+        if provided != settings.RELAY_KEY:
+            return JSONResponse(status_code=401, content={"detail": "Invalid relay key"})
 
         return await call_next(request)
