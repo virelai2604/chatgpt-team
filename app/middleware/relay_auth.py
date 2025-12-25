@@ -1,90 +1,101 @@
-# app/middleware/relay_auth.py
-
 from __future__ import annotations
 
-from typing import Awaitable, Callable
+from typing import Optional
 
-from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 
-from app.utils.authy import check_relay_key
-from app.utils.logger import get_logger
+from app.core.config import settings
+from app.utils.logger import relay_log as logger
 
-logger = get_logger(__name__)
 
-# Exact paths that should always be public
-SAFE_EXACT_PATHS = {
-    "/",  # root
-    "/health",
-    "/health/",
-    "/v1/health",
-    "/v1/health/",
-    "/actions/ping",
-    "/actions/relay_info",
-    "/v1/actions/ping",
-    "/v1/actions/relay_info",
-}
+def _is_public_path(path: str) -> bool:
+    # Always-public health & docs/bootstrap endpoints
+    if path in {"/", "/health", "/v1/health"}:
+        return True
+    if path in {"/openapi.json", "/docs", "/redoc", "/manifest"}:
+        return True
+    # Actions helper endpoints are usually safe to keep public.
+    if path.startswith("/v1/actions/"):
+        return True
+    return False
 
-# Prefixes that should always be public (docs, openapi, assets, etc.)
-SAFE_PREFIXES = (
-    "/docs",
-    "/redoc",
-    "/openapi.json",
-    "/static",
-    "/favicon",
-)
+
+def _valid_tokens() -> set[str]:
+    """
+    Tokens that should be accepted for relay authentication.
+
+    Primary token: settings.RELAY_KEY
+    Optional token: settings.RELAY_AUTH_TOKEN (if present)
+    """
+    tokens: set[str] = set()
+    relay_key = getattr(settings, "RELAY_KEY", "") or ""
+    auth_token = getattr(settings, "RELAY_AUTH_TOKEN", "") or ""
+    if relay_key:
+        tokens.add(relay_key)
+    if auth_token:
+        tokens.add(auth_token)
+    return tokens
+
+
+def _extract_bearer_token(authorization: str) -> Optional[str]:
+    parts = authorization.split(None, 1)
+    if len(parts) != 2:
+        return None
+    scheme, token = parts[0], parts[1]
+    if scheme.lower() != "bearer":
+        return None
+    token = token.strip()
+    return token or None
 
 
 class RelayAuthMiddleware(BaseHTTPMiddleware):
     """
-    Optional shared-secret auth in front of the relay.
+    Gateway-style auth guard.
 
-    Controlled by env / settings:
+    Key behavior:
+    - Middleware is installed unconditionally in app/main.py.
+    - Enforcement is conditional at request-time:
+        settings.RELAY_AUTH_ENABLED and (RELAY_KEY or RELAY_AUTH_TOKEN)
 
-      - RELAY_KEY (or legacy RELAY_AUTH_TOKEN)
-      - RELAY_AUTH_ENABLED (bool)
-
-    Behavior:
-
-      - Health + docs + actions ping/info are always public.
-      - Non-/v1/ paths remain public.
-      - /v1/* paths are protected when RELAY_AUTH_ENABLED is True.
+    This supports tests that monkeypatch settings without rebuilding the ASGI app.
     """
 
-    async def dispatch(
-        self,
-        request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
 
-        # Public routes
-        if path in SAFE_EXACT_PATHS or path.startswith(SAFE_PREFIXES):
+        if _is_public_path(path):
             return await call_next(request)
 
-        # Only protect OpenAI-style API paths under /v1
+        # Only enforce when explicitly enabled.
+        if not bool(getattr(settings, "RELAY_AUTH_ENABLED", False)):
+            return await call_next(request)
+
+        allowed_tokens = _valid_tokens()
+        if not allowed_tokens:
+            logger.warning("Relay auth enabled but no RELAY_KEY/RELAY_AUTH_TOKEN set; allowing request.")
+            return await call_next(request)
+
+        # Scope: protect /v1/* by default
         if not path.startswith("/v1/"):
             return await call_next(request)
 
-        auth_header = request.headers.get("Authorization")
-        x_relay_key = request.headers.get("X-Relay-Key")
+        # Accept either X-Relay-Key or Authorization: Bearer <token>
+        x_relay_key = request.headers.get("x-relay-key")
+        if x_relay_key and x_relay_key in allowed_tokens:
+            return await call_next(request)
 
-        try:
-            # Will no-op if RELAY_AUTH_ENABLED is False
-            check_relay_key(auth_header=auth_header, x_relay_key=x_relay_key)
-        except HTTPException as exc:
-            # DO NOT let this bubble out as an exception to httpx;
-            # convert to a normal JSON error response.
-            logger.warning(
-                "Relay auth failed",
-                extra={"path": path, "method": request.method, "detail": exc.detail},
-            )
-            return JSONResponse(
-                status_code=exc.status_code,
-                content={"detail": exc.detail},
-                headers=getattr(exc, "headers", None) or {},
-            )
+        authorization = request.headers.get("authorization")
+        if authorization:
+            token = _extract_bearer_token(authorization)
+            if token is None:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Authorization header must be 'Bearer <token>'."},
+                )
+            if token not in allowed_tokens:
+                return JSONResponse(status_code=401, content={"detail": "Invalid relay key."})
+            return await call_next(request)
 
-        # Auth OK (or disabled)
-        return await call_next(request)
+        return JSONResponse(status_code=401, content={"detail": "Missing relay key."})
