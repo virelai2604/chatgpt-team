@@ -3,60 +3,54 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import HTTPException
-from starlette.datastructures import Headers
+from starlette.requests import Request
+
+from app.core.config import settings
 
 
-def _norm_header_name(name: str) -> str:
-    return (name or "").strip().lower()
+def _get_expected_key() -> str:
+    key = (settings.RELAY_KEY or "").strip()
+    if not key:
+        raise HTTPException(status_code=500, detail="Server missing RELAY_KEY configuration")
+    return key
 
 
-def get_auth_header_key(settings) -> str:
+def _extract_from_authorization(request: Request) -> Optional[str]:
+    auth = (request.headers.get("Authorization") or "").strip()
+    if not auth:
+        return None
+
+    # Enforce Bearer scheme so clients get an actionable message.
+    if not auth.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Authorization header must use Bearer scheme")
+
+    token = auth[7:].strip()
+    return token or None
+
+
+def _extract_from_custom_header(request: Request) -> Optional[str]:
+    header_name = (settings.RELAY_AUTH_HEADER or "X-Relay-Key").strip()
+    if not header_name:
+        header_name = "X-Relay-Key"
+    value = request.headers.get(header_name)
+    return value.strip() if value else None
+
+
+def check_relay_key(request: Request) -> None:
     """
-    Returns the configured relay auth header name (normalized).
-    Defaults to 'x-relay-key'.
+    Validates relay authentication, raising HTTPException(401/500) when invalid.
+
+    Accepted inputs:
+      - Custom header (settings.RELAY_AUTH_HEADER, default: X-Relay-Key)
+      - Authorization: Bearer <key>
     """
-    raw = getattr(settings, "RELAY_AUTH_HEADER", None) or getattr(settings, "relay_auth_header", None) or "x-relay-key"
-    return _norm_header_name(raw)
+    provided = _extract_from_custom_header(request)
+    if not provided:
+        provided = _extract_from_authorization(request)
 
-
-def _get_expected_key(settings) -> str:
-    return getattr(settings, "RELAY_KEY", None) or getattr(settings, "relay_key", None) or ""
-
-
-def check_relay_key(headers: Headers, settings) -> None:
-    """
-    Enforces relay auth when enabled.
-
-    Semantics (aligned to tests):
-    - If Authorization is present but not Bearer => 401 detail includes 'Bearer'
-    - If missing => 401 'Missing relay key'
-    - If provided but wrong => 401 'Invalid relay key'
-    """
-    enabled = bool(getattr(settings, "RELAY_AUTH_ENABLED", False) or getattr(settings, "relay_auth_enabled", False))
-    if not enabled:
-        return
-
-    expected = _get_expected_key(settings)
-
-    # If Authorization exists, treat it as an attempt and validate scheme first.
-    authz = headers.get("authorization")
-    if authz:
-        if not authz.lower().startswith("bearer "):
-            raise HTTPException(status_code=401, detail="Authorization header must use Bearer scheme")
-        token = authz.split(" ", 1)[1].strip()
-        if not expected or token != expected:
-            raise HTTPException(status_code=401, detail="Invalid relay key")
-        return
-
-    # Otherwise, fall back to configured header (default x-relay-key)
-    header_key = get_auth_header_key(settings)
-    if header_key == "authorization":
-        # No Authorization header provided at all
-        raise HTTPException(status_code=401, detail="Missing relay key")
-
-    provided = headers.get(header_key)
     if not provided:
         raise HTTPException(status_code=401, detail="Missing relay key")
 
-    if not expected or provided != expected:
+    expected = _get_expected_key()
+    if provided != expected:
         raise HTTPException(status_code=401, detail="Invalid relay key")
