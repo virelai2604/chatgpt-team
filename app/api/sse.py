@@ -1,98 +1,78 @@
-# app/api/sse.py
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Dict, Iterable, Optional, Union
+from typing import Any, Dict
 
-from fastapi import APIRouter, Body
-from fastapi.responses import StreamingResponse
+import httpx
+from fastapi import APIRouter, Request
+from starlette.responses import JSONResponse, Response, StreamingResponse
 
-from app.core.http_client import get_async_openai_client
-from app.utils.logger import get_logger
+from app.core.config import settings
+from app.core.http_client import get_async_httpx_client
+from app.api.forward_openai import _build_outbound_headers, _filter_response_headers, _join_upstream_url  # type: ignore
+from app.utils.logger import relay_log as logger
 
-logger = get_logger(__name__)
-
-router = APIRouter(prefix="/v1", tags=["openai-relay-streaming"])
-
-SSEByteSource = Union[Iterable[bytes], AsyncIterator[bytes]]
-
-
-def format_sse_event(
-    *,
-    event: str,
-    data: str,
-    id: Optional[str] = None,
-    retry: Optional[int] = None,
-) -> bytes:
-    lines = []
-    if id is not None:
-        lines.append(f"id: {id}")
-    if event:
-        lines.append(f"event: {event}")
-
-    if data == "":
-        lines.append("data:")
-    else:
-        for line in data.splitlines():
-            lines.append(f"data: {line}")
-
-    if retry is not None:
-        lines.append(f"retry: {retry}")
-
-    payload = "\n".join(lines) + "\n\n"
-    return payload.encode("utf-8")
+router = APIRouter(prefix="/v1", tags=["sse"])
 
 
-def sse_error_event(message: str, code: Optional[str] = None, *, id: Optional[str] = None) -> bytes:
-    payload = {"message": message}
-    if code:
-        payload["code"] = code
-    data_str = ";".join([f"{k}={v}" for k, v in payload.items()])
-    return format_sse_event(event="error", data=data_str, id=id)
+@router.post("/responses:stream", include_in_schema=False)
+async def responses_stream(request: Request) -> Response:
+    """
+    Compatibility endpoint used by your tests.
 
+    Behavior:
+      - Reads JSON body
+      - Forces stream=true
+      - Proxies to upstream POST /v1/responses
+      - Passes upstream SSE through verbatim (no reformatting)
+    """
+    try:
+        payload: Dict[str, Any] = {}
+        raw = await request.body()
+        if raw:
+            payload = json.loads(raw.decode("utf-8"))
 
-class StreamingSSE(StreamingResponse):
-    def __init__(self, content: SSEByteSource, status_code: int = 200, headers: Optional[dict] = None) -> None:
-        super().__init__(content=content, status_code=status_code, headers=headers, media_type="text/event-stream")
+        payload["stream"] = True
 
+        upstream_url = _join_upstream_url(settings.OPENAI_API_BASE, "/v1/responses", "")
+        headers = _build_outbound_headers(request.headers.items())
+        headers["Accept"] = "text/event-stream"
+        headers["Content-Type"] = "application/json"
 
-# Compatibility shim: some older modules imported create_sse_stream from app.api.sse
-def create_sse_stream(
-    content: SSEByteSource,
-    *,
-    status_code: int = 200,
-    headers: Optional[dict] = None,
-) -> StreamingSSE:
-    return StreamingSSE(content=content, status_code=status_code, headers=headers)
+        client = get_async_httpx_client(timeout=float(settings.PROXY_TIMEOUT_SECONDS))
+        req = client.build_request("POST", upstream_url, headers=headers, json=payload)
+        resp = await client.send(req, stream=True)
 
+        content_type = resp.headers.get("content-type", "text/event-stream")
+        filtered_headers = _filter_response_headers(resp.headers)
 
-async def _responses_event_stream(payload: Dict[str, Any]) -> AsyncIterator[bytes]:
-    client = get_async_openai_client()
-    logger.info("Streaming /v1/responses:stream with payload: %s", payload)
+        if not content_type.lower().startswith("text/event-stream"):
+            data = await resp.aread()
+            await resp.aclose()
+            return Response(
+                content=data,
+                status_code=resp.status_code,
+                headers=filtered_headers,
+                media_type=content_type,
+            )
 
-    p = dict(payload)
-    p.setdefault("stream", True)
+        logger.info("↔ upstream SSE POST /v1/responses (via /v1/responses:stream)")
 
-    stream = await client.responses.create(**p)  # stream=True above
+        async def _aiter():
+            async for chunk in resp.aiter_bytes():
+                yield chunk
+            await resp.aclose()
 
-    async for event in stream:
-        if hasattr(event, "model_dump_json"):
-            data_json = event.model_dump_json()
-        elif hasattr(event, "model_dump"):
-            data_json = json.dumps(event.model_dump(), default=str, separators=(",", ":"))
-        else:
-            try:
-                data_json = json.dumps(event, default=str, separators=(",", ":"))
-            except TypeError:
-                data_json = json.dumps(str(event))
+        return StreamingResponse(
+            _aiter(),
+            status_code=resp.status_code,
+            headers=filtered_headers,
+            media_type=content_type,
+        )
 
-        yield f"data: {data_json}\n\n".encode("utf-8")
-
-    yield b"data: [DONE]\n\n"
-
-
-@router.post("/responses:stream")
-async def responses_stream(
-    body: Dict[str, Any] = Body(..., description="OpenAI Responses.create payload for streaming"),
-) -> StreamingSSE:
-    return StreamingSSE(_responses_event_stream(body))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return JSONResponse(status_code=400, content={"detail": "Invalid JSON body", "error": str(exc)})
+    except httpx.HTTPError as exc:
+        return JSONResponse(status_code=424, content={"detail": "Upstream request failed", "error": str(exc)})
+    except Exception as exc:
+        return JSONResponse(status_code=424, content={"detail": "Relay wiring error", "error": str(exc)})

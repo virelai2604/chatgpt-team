@@ -1,167 +1,62 @@
 from __future__ import annotations
 
 import asyncio
-import contextvars
-from typing import Optional, Tuple, Any, Callable
+from typing import Dict, Tuple, Optional
 
 import httpx
 from openai import AsyncOpenAI
 
 from app.core.config import settings
 
-_httpx_client_var: contextvars.ContextVar[
-    Optional[Tuple[asyncio.AbstractEventLoop, httpx.AsyncClient]]
-] = contextvars.ContextVar("httpx_async_client", default=None)
 
-_openai_client_var: contextvars.ContextVar[
-    Optional[Tuple[asyncio.AbstractEventLoop, AsyncOpenAI]]
-] = contextvars.ContextVar("openai_async_client", default=None)
+# Cache clients per (event_loop_id, timeout_seconds) to avoid cross-loop usage.
+_httpx_clients: Dict[Tuple[int, float], httpx.AsyncClient] = {}
+_openai_clients: Dict[Tuple[int, float], AsyncOpenAI] = {}
 
 
-def _get_setting(*names: str, default=None):
-    for name in names:
-        if hasattr(settings, name):
-            val = getattr(settings, name)
-            if val is not None:
-                return val
-    return default
+def _loop_key() -> int:
+    return id(asyncio.get_running_loop())
 
 
-def _default_timeout_s() -> float:
-    # Support multiple historical config names.
-    return float(
-        _get_setting(
-            "RELAY_TIMEOUT",
-            "RELAY_TIMEOUT_S",
-            "OPENAI_TIMEOUT",
-            "OPENAI_TIMEOUT_S",
-            default=60.0,
-        )
-    )
+def _timeout_s(timeout_seconds: Optional[float]) -> float:
+    return float(timeout_seconds if timeout_seconds is not None else settings.PROXY_TIMEOUT_SECONDS)
 
 
-def get_async_httpx_client(timeout: Optional[float] = None) -> httpx.AsyncClient:
+def get_async_httpx_client(*, timeout_seconds: Optional[float] = None) -> httpx.AsyncClient:
     """
-    Canonical shared AsyncClient (per event loop).
-
-    This is the single HTTP connection pool used for all upstream calls.
+    Shared AsyncClient for outbound calls to upstream.
+    We do NOT set base_url here; callers should pass full URLs (safer).
     """
-    loop = asyncio.get_running_loop()
-    cached = _httpx_client_var.get()
-    if cached and cached[0] is loop:
-        return cached[1]
-
-    t = float(timeout) if timeout is not None else _default_timeout_s()
+    t = _timeout_s(timeout_seconds)
+    key = (_loop_key(), t)
+    if key in _httpx_clients:
+        return _httpx_clients[key]
 
     client = httpx.AsyncClient(
         timeout=httpx.Timeout(t),
-        limits=httpx.Limits(max_connections=200, max_keepalive_connections=50),
         follow_redirects=True,
+        headers={"User-Agent": "chatgpt-team-relay"},
     )
-    _httpx_client_var.set((loop, client))
+    _httpx_clients[key] = client
     return client
 
 
-def get_async_openai_client() -> AsyncOpenAI:
+def get_async_openai_client(*, timeout_seconds: Optional[float] = None) -> AsyncOpenAI:
     """
-    Canonical shared AsyncOpenAI client (per event loop).
-
-    Uses the canonical HTTPX pool from get_async_httpx_client().
+    OpenAI SDK client for upstream calls when needed.
+    Uses OPENAI_API_BASE (NOT OPENAI_BASE_URL).
     """
-    loop = asyncio.get_running_loop()
-    cached = _openai_client_var.get()
-    if cached and cached[0] is loop:
-        return cached[1]
+    t = _timeout_s(timeout_seconds)
+    key = (_loop_key(), t)
+    if key in _openai_clients:
+        return _openai_clients[key]
 
-    api_key = _get_setting("OPENAI_API_KEY", "openai_api_key")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not configured.")
-
-    base_url = _get_setting(
-        "OPENAI_BASE_URL",
-        "OPENAI_API_BASE",
-        "openai_base_url",
-        "openai_api_base",
-        default="https://api.openai.com/v1",
-    )
-
-    organization = _get_setting("OPENAI_ORG", "OPENAI_ORGANIZATION", "openai_organization")
-    project = _get_setting("OPENAI_PROJECT", "openai_project")
-
-    # Reuse our HTTPX pool for upstream calls.
-    http_client = get_async_httpx_client()
-
+    httpx_client = get_async_httpx_client(timeout_seconds=t)
     client = AsyncOpenAI(
-        api_key=api_key,
-        base_url=base_url,
-        organization=organization,
-        project=project,
-        http_client=http_client,
+        api_key=settings.OPENAI_API_KEY,
+        base_url=settings.openai_base_url,
+        http_client=httpx_client,
+        timeout=t,
     )
-
-    _openai_client_var.set((loop, client))
+    _openai_clients[key] = client
     return client
-
-
-async def _maybe_close(obj: Any) -> None:
-    """
-    Best-effort close for objects that may expose:
-      - aclose() (async)
-      - close() (sync or async)
-    """
-    if obj is None:
-        return
-
-    closer: Optional[Callable[[], Any]] = None
-    if hasattr(obj, "aclose") and callable(getattr(obj, "aclose")):
-        closer = getattr(obj, "aclose")
-    elif hasattr(obj, "close") and callable(getattr(obj, "close")):
-        closer = getattr(obj, "close")
-
-    if closer is None:
-        return
-
-    try:
-        res = closer()
-        if asyncio.iscoroutine(res):
-            await res
-    except Exception:
-        # Shutdown should be best-effort; avoid masking the real shutdown path.
-        return
-
-
-async def close_async_clients() -> None:
-    """
-    FastAPI shutdown hook.
-
-    Closes cached per-event-loop clients created by:
-      - get_async_httpx_client()
-      - get_async_openai_client()
-
-    Safe to call multiple times.
-    """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        # No running loop: nothing to close safely in this context.
-        return
-
-    cached_openai = _openai_client_var.get()
-    cached_httpx = _httpx_client_var.get()
-
-    # Close OpenAI client first (it references the HTTP client).
-    if cached_openai and cached_openai[0] is loop:
-        await _maybe_close(cached_openai[1])
-        _openai_client_var.set(None)
-
-    # Close HTTPX pool.
-    if cached_httpx and cached_httpx[0] is loop:
-        await _maybe_close(cached_httpx[1])
-        _httpx_client_var.set(None)
-
-
-__all__ = [
-    "get_async_httpx_client",
-    "get_async_openai_client",
-    "close_async_clients",
-]

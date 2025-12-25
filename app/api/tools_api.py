@@ -1,8 +1,8 @@
+# app/api/tools_api.py
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from typing import Any, Dict, List, Set
+import copy
+from typing import Any, Dict
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -12,37 +12,11 @@ from app.core.config import get_settings
 router = APIRouter()
 
 
-def _load_tools_manifest() -> List[Dict[str, Any]]:
-    """
-    Optional helper: if app/manifests/tools_manifest.json exists, include it in /manifest.
-    """
-    app_dir = Path(__file__).resolve().parents[1]
-    candidates = [
-        app_dir / "manifests" / "tools_manifest.json",
-        app_dir / "manifests" / "tools_manifest.tools.json",
-    ]
-    for p in candidates:
-        if p.exists() and p.is_file():
-            try:
-                with p.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-                return data if isinstance(data, list) else []
-            except Exception:
-                return []
-    return []
+def _build_manifest() -> Dict[str, Any]:
+    s = get_settings()
 
-
-def _manifest_endpoints() -> Dict[str, List[str]]:
-    """
-    Canonical manifest endpoint groups.
-
-    Baseline tests require:
-      - data.endpoints.responses includes /v1/responses
-      - data.endpoints.responses_compact includes /v1/responses/compact
-    """
-    return {
+    endpoints = {
         "health": ["/health", "/v1/health"],
-        "actions": ["/v1/actions/ping", "/v1/actions/health", "/v1/actions/schema"],
         "models": ["/v1/models", "/v1/models/{model}"],
         "responses": [
             "/v1/responses",
@@ -52,16 +26,9 @@ def _manifest_endpoints() -> Dict[str, List[str]]:
         ],
         "responses_compact": ["/v1/responses/compact"],
         "embeddings": ["/v1/embeddings"],
-        "images": [
-            "/v1/images/generations",
-            "/v1/images",
-            "/v1/images/edits",
-            "/v1/images/variations",
-        ],
-        "images_actions": [
-            "/v1/actions/images/edits",
-            "/v1/actions/images/variations",
-        ],
+        "images": ["/v1/images/generations", "/v1/images/edits", "/v1/images/variations"],
+        "images_actions": ["/v1/actions/images/edits", "/v1/actions/images/variations"],
+        "files": ["/v1/files", "/v1/files/{file_id}", "/v1/files/{file_id}/content"],
         "uploads": [
             "/v1/uploads",
             "/v1/uploads/{upload_id}",
@@ -69,101 +36,69 @@ def _manifest_endpoints() -> Dict[str, List[str]]:
             "/v1/uploads/{upload_id}/complete",
             "/v1/uploads/{upload_id}/cancel",
         ],
-        "files": [
-            "/v1/files",
-            "/v1/files/{file_id}",
-            "/v1/files/{file_id}/content",
-        ],
-        "batches": [
-            "/v1/batches",
-            "/v1/batches/{batch_id}",
-            "/v1/batches/{batch_id}/cancel",
-        ],
-        "realtime": ["/v1/realtime/sessions"],
-        "conversations": ["/v1/conversations", "/v1/conversations/{path}"],
-        "vector_stores": ["/v1/vector_stores", "/v1/vector_stores/{path}"],
+        "batches": ["/v1/batches", "/v1/batches/{batch_id}", "/v1/batches/{batch_id}/cancel"],
         "proxy": ["/v1/proxy"],
+        "realtime_http": ["/v1/realtime/sessions"],
+        "realtime_ws": ["/v1/realtime/ws"],
     }
 
-
-def build_manifest_response(base_url: str = "") -> Dict[str, Any]:
-    settings = get_settings()
-
-    manifest = {
-        "name": settings.RELAY_NAME,
-        "version": "1.0.0",
-        "description": "OpenAI-compatible relay with explicit subroutes and Actions-friendly wrappers.",
-        "tools": _load_tools_manifest(),
-        "endpoints": _manifest_endpoints(),
-        "meta": {
-            "app_mode": settings.APP_MODE,
-            "environment": settings.ENVIRONMENT,
-            "relay_auth_enabled": bool(settings.RELAY_AUTH_ENABLED),
-            "relay_auth_header": settings.RELAY_AUTH_HEADER,
-            "upstream_base_url": settings.UPSTREAM_BASE_URL,
-            "openapi_url": "/openapi.json",
-            "actions_openapi_url": "/openapi.actions.json",
-        },
+    meta = {
+        "relay_name": getattr(s, "RELAY_NAME", "chatgpt-team-relay"),
+        "auth_required": bool(getattr(s, "RELAY_AUTH_ENABLED", False)),
+        "auth_header": "X-Relay-Key",
+        "upstream_base_url": getattr(s, "UPSTREAM_BASE_URL", getattr(s, "OPENAI_API_BASE", "")),
+        "actions_openapi_url": "/openapi.actions.json",
+        "actions_openapi_groups": [
+            "health",
+            "models",
+            "responses",
+            "responses_compact",
+            "embeddings",
+            "images",
+            "images_actions",
+            "proxy",
+            "realtime_http",
+        ],
     }
 
+    # Provide both "old" and "new" shapes for compatibility:
     return {
         "object": "relay.manifest",
-        "data": manifest,
-        "meta": {"base_url": base_url},
+        "data": {"endpoints": endpoints, "meta": meta},
+        "endpoints": endpoints,
+        "meta": meta,
     }
 
 
 @router.get("/manifest", include_in_schema=False)
-async def manifest(request: Request) -> JSONResponse:
-    base_url = str(request.base_url).rstrip("/")
-    return JSONResponse(content=build_manifest_response(base_url=base_url))
-
-
 @router.get("/v1/manifest", include_in_schema=False)
-async def manifest_v1(request: Request) -> JSONResponse:
-    base_url = str(request.base_url).rstrip("/")
-    return JSONResponse(content=build_manifest_response(base_url=base_url))
-
-
-def _collect_allowed_paths(manifest: Dict[str, Any]) -> Set[str]:
-    allowed: Set[str] = set()
-    endpoints = manifest.get("endpoints") or {}
-    if isinstance(endpoints, dict):
-        for paths in endpoints.values():
-            if isinstance(paths, list):
-                for p in paths:
-                    if not isinstance(p, str):
-                        continue
-                    # Normalize placeholder used by some wildcard routes
-                    allowed.add(p.replace("{path}", "{path:path}"))
-    return allowed
-
-
-def _filtered_openapi_for_actions(request: Request) -> Dict[str, Any]:
-    """
-    Actions-focused OpenAPI document by filtering app.openapi()
-    down to the paths we advertise in /manifest.
-    """
-    base = request.app.openapi()
-    manifest = build_manifest_response(base_url=str(request.base_url).rstrip("/"))["data"]
-    allowed = _collect_allowed_paths(manifest)
-
-    base_paths = base.get("paths") or {}
-    base["paths"] = {k: v for k, v in base_paths.items() if k in allowed}
-
-    info = base.get("info") or {}
-    title = info.get("title") or "OpenAI Relay"
-    info["title"] = f"{title} (Actions)"
-    base["info"] = info
-
-    return base
+async def get_manifest() -> Dict[str, Any]:
+    return _build_manifest()
 
 
 @router.get("/openapi.actions.json", include_in_schema=False)
-async def openapi_actions_json(request: Request) -> JSONResponse:
-    return JSONResponse(content=_filtered_openapi_for_actions(request))
+async def openapi_actions(request: Request) -> JSONResponse:
+    """
+    Curated OpenAPI subset for ChatGPT Actions (REST; no WebSocket client).
+    """
+    full = request.app.openapi()
+    manifest = _build_manifest()
 
+    groups = (manifest.get("meta") or {}).get("actions_openapi_groups") or []
+    endpoints = manifest.get("endpoints") or {}
+    allowed_paths: set[str] = set()
 
-@router.get("/v1/openapi.actions.json", include_in_schema=False)
-async def openapi_actions_json_v1(request: Request) -> JSONResponse:
-    return JSONResponse(content=_filtered_openapi_for_actions(request))
+    for g in groups:
+        allowed_paths.update(endpoints.get(str(g), []) or [])
+
+    allowed_paths.update({"/health", "/v1/health"})
+
+    filtered = copy.deepcopy(full)
+    filtered["paths"] = {p: spec for p, spec in (full.get("paths") or {}).items() if p in allowed_paths}
+
+    info = filtered.get("info") or {}
+    title = str(info.get("title") or "OpenAPI")
+    info["title"] = f"{title} (Actions subset)"
+    filtered["info"] = info
+
+    return JSONResponse(filtered)

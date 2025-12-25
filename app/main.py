@@ -1,56 +1,45 @@
 from __future__ import annotations
 
-import logging
-
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes import router as api_router
 from app.api.sse import router as sse_router
 from app.api.tools_api import router as tools_router
 from app.core.config import get_settings
+from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
 from app.middleware.relay_auth import RelayAuthMiddleware
-from app.routes.register_routes import register_routes
-
-logger = logging.getLogger("relay")
+from app.middleware.validation import ValidationMiddleware
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="OpenAI-compatible Relay",
-        version="1.0.0",
-        docs_url=None,
-        redoc_url=None,
-        openapi_url="/openapi.json",
+        title=getattr(settings, "RELAY_NAME", "ChatGPT Team Relay"),
+        version="0.0.0",
     )
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ALLOW_ORIGINS,
-        allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
-        allow_methods=settings.CORS_ALLOW_METHODS,
-        allow_headers=settings.CORS_ALLOW_HEADERS,
+        allow_origins=settings.cors_allow_origins,
+        allow_credentials=settings.cors_allow_credentials,
+        allow_methods=settings.cors_allow_methods,
+        allow_headers=settings.cors_allow_headers,
     )
 
+    # Middlewares (order: last added runs first)
+    app.add_middleware(P4OrchestratorMiddleware)
+
+    # Always install RelayAuthMiddleware; it no-ops when RELAY_AUTH_ENABLED is false.
     app.add_middleware(RelayAuthMiddleware)
 
-    register_routes(app)
-    app.include_router(tools_router)
+    app.add_middleware(ValidationMiddleware)
+
+    # Routers
     app.include_router(sse_router)
-
-    @app.middleware("http")
-    async def _log_requests(request: Request, call_next):
-        response = await call_next(request)
-        try:
-            logger.info("%s %s -> %s", request.method, request.url.path, response.status_code)
-        except Exception:
-            pass
-        return response
-
-    @app.get("/", include_in_schema=False)
-    async def root():
-        return {"status": "ok", "service": "openai-relay"}
+    app.include_router(tools_router)
+    app.include_router(api_router)
 
     return app
 
