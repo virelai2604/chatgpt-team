@@ -1,183 +1,250 @@
 from __future__ import annotations
 
 import base64
-import binascii
-import ipaddress
-from typing import Dict, Optional, Tuple
+import json
+from typing import Any, Mapping, MutableMapping, Optional
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
 from starlette.responses import Response
 
-from app.api.forward_openai import build_upstream_url, forward_openai_request
-from app.core.config import settings
-from app.core.http_client import get_async_httpx_client
+from app.api.forward_openai import forward_openai_request
+from app.core.config import get_settings
 from app.utils.logger import relay_log as logger
 
 router = APIRouter(prefix="/v1", tags=["images"])
 
-# Hard safety limit for server-side URL/base64 ingestion (Actions wrapper endpoints).
-# This is NOT an OpenAI limit; it's a relay safety limit to avoid large downloads/memory spikes.
-_MAX_ACTION_INPUT_BYTES = 10 * 1024 * 1024  # 10 MiB
+settings = get_settings()
+
+# Conservative allowlist for GPT Action file URLs to reduce SSRF risk.
+# OpenAI-hosted file links commonly use oaiusercontent.com; keep this list short and editable.
+_ALLOWED_FILE_HOST_SUFFIXES: tuple[str, ...] = (
+    "oaiusercontent.com",
+    "openai.com",
+    "openaiusercontent.com",
+)
+
+_MAX_IMAGE_BYTES = 4 * 1024 * 1024  # 4 MB
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 
-def _bad_request(detail: str) -> None:
-    raise HTTPException(status_code=400, detail=detail)
+def _is_multipart(request: Request) -> bool:
+    content_type = request.headers.get("content-type", "")
+    return content_type.lower().startswith("multipart/form-data")
 
 
-def _validate_fetch_url(url: str) -> None:
-    """
-    Minimal SSRF guard for Actions wrapper endpoints.
+def _as_str_form_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float, str)):
+        return str(value)
+    # Lists/dicts: send JSON string so upstream can parse if supported.
+    return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
 
-    Assumptions:
-      - Actions provide HTTPS file URLs (common for ChatGPT file URL model).
-      - We explicitly refuse localhost / private IP literals.
-      - We do not perform DNS resolution here (to keep this lightweight).
-    """
-    parsed = urlparse(url)
-    if parsed.scheme not in ("https",):
-        _bad_request("Only https:// URLs are allowed for Actions image wrappers.")
 
-    host = (parsed.hostname or "").strip()
+def _validate_download_url(url: str) -> None:
+    try:
+        parsed = urlparse(url)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid URL: {exc}") from exc
+
+    if parsed.scheme not in {"https", "http"}:
+        raise HTTPException(status_code=400, detail="Only http/https URLs are supported")
+
+    host = (parsed.hostname or "").lower()
     if not host:
-        _bad_request("Invalid URL.")
+        raise HTTPException(status_code=400, detail="Invalid URL host")
 
-    host_l = host.lower()
-    if host_l in {"localhost"} or host_l.endswith(".local"):
-        _bad_request("Refusing to fetch from local hostnames.")
-
-    # If hostname is a literal IP address, block private/reserved ranges.
-    try:
-        ip = ipaddress.ip_address(host_l)
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
-            _bad_request("Refusing to fetch from private or local network addresses.")
-    except ValueError:
-        # Not a literal IP; could still resolve to one, but we avoid DNS resolution here.
-        pass
+    if not any(host == s or host.endswith("." + s) for s in _ALLOWED_FILE_HOST_SUFFIXES):
+        raise HTTPException(
+            status_code=400,
+            detail="Refusing to fetch file URL from an untrusted host",
+        )
 
 
-async def _fetch_bytes(url: str) -> Tuple[bytes, str]:
-    _validate_fetch_url(url)
-    client = get_async_httpx_client()
+async def _download_bytes(url: str) -> bytes:
+    _validate_download_url(url)
 
-    try:
-        r = await client.get(url, follow_redirects=True)
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch URL: {e}") from e
+    timeout = httpx.Timeout(20.0, connect=10.0)
+    limits = httpx.Limits(max_keepalive_connections=5, max_connections=10)
 
-    if r.status_code >= 400:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch URL (HTTP {r.status_code}).")
+    async with httpx.AsyncClient(timeout=timeout, limits=limits, follow_redirects=False) as client:
+        async with client.stream("GET", url, headers={"Accept": "application/octet-stream"}) as resp:
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"Failed to download file (HTTP {resp.status_code})")
 
-    blob = r.content
-    if len(blob) > _MAX_ACTION_INPUT_BYTES:
-        _bad_request(f"Fetched object too large ({len(blob)} bytes).")
-
-    content_type = (r.headers.get("content-type") or "application/octet-stream").split(";", 1)[0].strip()
-    return blob, content_type
-
-
-def _decode_base64(data_b64: str) -> bytes:
-    # Accept both raw base64 and data: URLs.
-    if data_b64.startswith("data:"):
-        try:
-            _, b64_part = data_b64.split(",", 1)
-        except ValueError:
-            _bad_request("Invalid data: URL for base64 payload.")
-        data_b64 = b64_part
-
-    try:
-        blob = base64.b64decode(data_b64, validate=True)
-    except (binascii.Error, ValueError) as e:
-        _bad_request(f"Invalid base64 payload: {e}")
-
-    if len(blob) > _MAX_ACTION_INPUT_BYTES:
-        _bad_request(f"Decoded object too large ({len(blob)} bytes).")
-
-    return blob
+            buf = bytearray()
+            async for chunk in resp.aiter_bytes():
+                buf.extend(chunk)
+                if len(buf) > _MAX_IMAGE_BYTES:
+                    raise HTTPException(status_code=400, detail="Image exceeds 4 MB limit")
+            return bytes(buf)
 
 
-async def _resolve_blob(*, url: Optional[str], b64: Optional[str], label: str) -> Tuple[bytes, str]:
+def _ensure_png(data: bytes, *, label: str = "image") -> None:
+    if not data.startswith(_PNG_MAGIC):
+        raise HTTPException(status_code=400, detail=f"Uploaded {label} must be a PNG")
+
+
+def _extract_openai_file_refs(body: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     """
-    Resolve a binary blob either from a URL fetch or a base64 payload.
-    Returns: (bytes, content_type)
+    Actions file input is delivered as:
+      openaiFileIdRefs: [{ id, name, mime_type, download_link }, ...]
     """
-    if bool(url) == bool(b64):
-        _bad_request(f"Provide exactly one of {label}_url or {label}_base64.")
-
-    if url:
-        blob, content_type = await _fetch_bytes(url)
-        return blob, content_type
-
-    assert b64 is not None
-    # Default to PNG when the client didn't send an explicit MIME type.
-    return _decode_base64(b64), "image/png"
-
-
-def _coerce_multipart_data(d: Dict[str, object]) -> Dict[str, str]:
-    """httpx multipart 'data=' fields must be string-ish."""
-    out: Dict[str, str] = {}
-    for k, v in d.items():
-        if v is None:
-            continue
-        out[k] = str(v)
-    return out
+    refs = body.get("openaiFileIdRefs")
+    if refs is None:
+        return []
+    if isinstance(refs, list):
+        out: list[Mapping[str, Any]] = []
+        for item in refs:
+            if isinstance(item, dict):
+                out.append(item)
+            else:
+                raise HTTPException(status_code=400, detail="openaiFileIdRefs must contain objects with download_link")
+        return out
+    raise HTTPException(status_code=400, detail="openaiFileIdRefs must be an array")
 
 
-def _pydantic_dump(model: BaseModel) -> Dict[str, object]:
-    # Pydantic v2 uses model_dump; v1 uses dict.
-    if hasattr(model, "model_dump"):
-        return model.model_dump(exclude_none=True)  # type: ignore[no-any-return]
-    return model.dict(exclude_none=True)  # type: ignore[no-any-return]
+def _split_action_body(body: MutableMapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Separate file-ish fields from ordinary params."""
+    file_fields: dict[str, Any] = {}
+    params: dict[str, Any] = {}
+    for k, v in body.items():
+        if k in {
+            "openaiFileIdRefs",
+            "image_url",
+            "mask_url",
+            "image_base64",
+            "image_b64",
+            "mask_base64",
+            "mask_b64",
+        }:
+            file_fields[k] = v
+        else:
+            params[k] = v
+    return file_fields, params
 
 
-def _upstream_headers(request: Request) -> Dict[str, str]:
-    """
-    Build upstream headers for server-to-server wrapper calls.
-    We intentionally do NOT forward relay auth headers (X-Relay-Key).
-    """
-    headers: Dict[str, str] = {
-        "Authorization": f"Bearer {settings.openai_api_key}",
-        "Accept": "application/json",
+async def _build_multipart_from_action_body(
+    *,
+    body: MutableMapping[str, Any],
+    allow_mask: bool,
+) -> tuple[dict[str, tuple[str, bytes, str]], dict[str, str]]:
+    file_fields, params = _split_action_body(body)
+
+    image_bytes: Optional[bytes] = None
+    image_name = "image.png"
+
+    mask_bytes: Optional[bytes] = None
+    mask_name = "mask.png"
+
+    refs = _extract_openai_file_refs(body)
+    if refs:
+        # Convention: first file is image; second file (optional) is mask.
+        first = refs[0]
+        url = first.get("download_link")
+        if not isinstance(url, str) or not url:
+            raise HTTPException(status_code=400, detail="openaiFileIdRefs[0].download_link is required")
+        image_bytes = await _download_bytes(url)
+        image_name = str(first.get("name") or image_name)
+
+        if allow_mask and len(refs) > 1:
+            second = refs[1]
+            murl = second.get("download_link")
+            if isinstance(murl, str) and murl:
+                mask_bytes = await _download_bytes(murl)
+                mask_name = str(second.get("name") or mask_name)
+
+    # Fallbacks if openaiFileIdRefs not provided
+    if image_bytes is None:
+        if isinstance(file_fields.get("image_url"), str) and file_fields["image_url"]:
+            image_bytes = await _download_bytes(file_fields["image_url"])
+        elif isinstance(file_fields.get("image_base64"), str) and file_fields["image_base64"]:
+            try:
+                image_bytes = base64.b64decode(file_fields["image_base64"], validate=True)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Invalid image_base64: {exc}") from exc
+        elif isinstance(file_fields.get("image_b64"), str) and file_fields["image_b64"]:
+            try:
+                image_bytes = base64.b64decode(file_fields["image_b64"], validate=True)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Invalid image_b64: {exc}") from exc
+
+    if image_bytes is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing image input. Provide openaiFileIdRefs[0], image_url, or image_base64.",
+        )
+
+    _ensure_png(image_bytes, label="image")
+
+    if allow_mask and mask_bytes is None:
+        if isinstance(file_fields.get("mask_url"), str) and file_fields["mask_url"]:
+            mask_bytes = await _download_bytes(file_fields["mask_url"])
+        elif isinstance(file_fields.get("mask_base64"), str) and file_fields["mask_base64"]:
+            try:
+                mask_bytes = base64.b64decode(file_fields["mask_base64"], validate=True)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Invalid mask_base64: {exc}") from exc
+        elif isinstance(file_fields.get("mask_b64"), str) and file_fields["mask_b64"]:
+            try:
+                mask_bytes = base64.b64decode(file_fields["mask_b64"], validate=True)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Invalid mask_b64: {exc}") from exc
+
+    if mask_bytes is not None:
+        _ensure_png(mask_bytes, label="mask")
+
+    files: dict[str, tuple[str, bytes, str]] = {
+        "image": (image_name, image_bytes, "image/png"),
     }
+    if allow_mask and mask_bytes is not None:
+        files["mask"] = (mask_name, mask_bytes, "image/png")
 
-    # Optional org/project overrides if your clients set them.
-    for h in ("OpenAI-Organization", "OpenAI-Project", "OpenAI-Beta"):
-        v = request.headers.get(h)
-        if v:
-            headers[h] = v
+    form: dict[str, str] = {}
+    for k, v in params.items():
+        form[k] = _as_str_form_value(v)
 
+    return files, form
+
+
+def _upstream_headers_for_images() -> dict[str, str]:
+    headers: dict[str, str] = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Accept": "application/json",
+        "Accept-Encoding": "identity",
+    }
+    if getattr(settings, "OPENAI_ORG", None):
+        headers["OpenAI-Organization"] = settings.OPENAI_ORG
+    if getattr(settings, "OPENAI_PROJECT", None):
+        headers["OpenAI-Project"] = settings.OPENAI_PROJECT
     return headers
 
 
-def _response_from_upstream(r: httpx.Response) -> Response:
-    media_type = (r.headers.get("content-type") or "application/octet-stream").split(";", 1)[0].strip()
+async def _post_images_multipart_to_upstream(
+    *,
+    endpoint: str,
+    files: dict[str, tuple[str, bytes, str]],
+    data: dict[str, str],
+) -> Response:
+    upstream_url = settings.OPENAI_API_BASE.rstrip("/") + endpoint
+    timeout = httpx.Timeout(60.0, connect=10.0)
+    limits = httpx.Limits(max_keepalive_connections=10, max_connections=20)
 
-    passthrough_headers: Dict[str, str] = {}
-    for h in ("x-request-id", "openai-request-id"):
-        v = r.headers.get(h)
-        if v:
-            passthrough_headers[h] = v
+    async with httpx.AsyncClient(timeout=timeout, limits=limits) as client:
+        resp = await client.post(
+            upstream_url,
+            headers=_upstream_headers_for_images(),
+            data=data,
+            files=files,
+        )
 
-    return Response(
-        content=r.content,
-        status_code=r.status_code,
-        headers=passthrough_headers,
-        media_type=media_type,
-    )
+    content_type = resp.headers.get("content-type", "application/json")
+    return Response(content=resp.content, status_code=resp.status_code, media_type=content_type)
 
-
-# ---------------------------------------------------------------------------
-# Standard OpenAI-compatible image routes (pass-through)
-# ---------------------------------------------------------------------------
 
 @router.post("/images", summary="Create image generation")
 @router.post("/images/generations", summary="Create image generation (alias)")
@@ -186,130 +253,32 @@ async def create_image(request: Request) -> Response:
     return await forward_openai_request(request)
 
 
-@router.post("/images/edits", summary="Edit an image (multipart)")
+@router.post("/images/edits", summary="Edit an image (multipart or Actions JSON)")
 async def edit_image(request: Request) -> Response:
     logger.info("→ [images] %s %s (edits)", request.method, request.url.path)
-    return await forward_openai_request(request)
+
+    if _is_multipart(request):
+        return await forward_openai_request(request)
+
+    # Actions-friendly JSON wrapper -> server-side multipart to upstream
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Body must be a JSON object")
+
+    files, form = await _build_multipart_from_action_body(body=body, allow_mask=True)
+    return await _post_images_multipart_to_upstream(endpoint="/images/edits", files=files, data=form)
 
 
-@router.post("/images/variations", summary="Create image variations (multipart)")
+@router.post("/images/variations", summary="Create image variations (multipart or Actions JSON)")
 async def variations_image(request: Request) -> Response:
     logger.info("→ [images] %s %s (variations)", request.method, request.url.path)
-    return await forward_openai_request(request)
 
+    if _is_multipart(request):
+        return await forward_openai_request(request)
 
-# ---------------------------------------------------------------------------
-# Actions-friendly wrappers (JSON in, relay builds multipart upstream)
-# ---------------------------------------------------------------------------
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Body must be a JSON object")
 
-class ActionImageEditRequest(BaseModel):
-    # Standard OpenAI fields
-    prompt: str = Field(..., description="Text prompt describing the desired edit.")
-    model: Optional[str] = Field(default=None, description="Image model (e.g., gpt-image-1, dall-e-2).")
-    n: Optional[int] = Field(default=None, ge=1, le=10)
-    size: Optional[str] = None
-    response_format: Optional[str] = None
-    user: Optional[str] = None
-
-    # Actions-friendly image inputs
-    image_url: Optional[str] = Field(default=None, description="HTTPS URL to the base image.")
-    image_base64: Optional[str] = Field(default=None, description="Base64 (or data: URL) for the base image.")
-    mask_url: Optional[str] = Field(default=None, description="HTTPS URL to the mask image (optional).")
-    mask_base64: Optional[str] = Field(default=None, description="Base64 (or data: URL) for the mask (optional).")
-
-    # Optional filenames (cosmetic)
-    image_filename: str = "image.png"
-    mask_filename: str = "mask.png"
-
-
-class ActionImageVariationRequest(BaseModel):
-    model: Optional[str] = None
-    n: Optional[int] = Field(default=None, ge=1, le=10)
-    size: Optional[str] = None
-    response_format: Optional[str] = None
-    user: Optional[str] = None
-
-    image_url: Optional[str] = None
-    image_base64: Optional[str] = None
-    image_filename: str = "image.png"
-
-
-@router.post(
-    "/actions/images/edits",
-    summary="Actions-friendly image edit (JSON url/base64 → multipart upstream)",
-)
-async def actions_image_edits(payload: ActionImageEditRequest, request: Request) -> Response:
-    logger.info("→ [actions/images] %s %s", request.method, request.url.path)
-
-    image_bytes, image_ct = await _resolve_blob(url=payload.image_url, b64=payload.image_base64, label="image")
-    if not image_ct.startswith("image/"):
-        _bad_request(f"image must be an image/* content-type (got {image_ct}).")
-
-    mask_bytes: Optional[bytes] = None
-    mask_ct: Optional[str] = None
-    if payload.mask_url or payload.mask_base64:
-        mask_bytes, mask_ct = await _resolve_blob(url=payload.mask_url, b64=payload.mask_base64, label="mask")
-        if not mask_ct.startswith("image/"):
-            _bad_request(f"mask must be an image/* content-type (got {mask_ct}).")
-
-    data_obj = _pydantic_dump(payload)
-
-    # Remove wrapper-only fields before sending upstream.
-    for k in (
-        "image_url",
-        "image_base64",
-        "mask_url",
-        "mask_base64",
-        "image_filename",
-        "mask_filename",
-    ):
-        data_obj.pop(k, None)
-
-    files: Dict[str, tuple[str, bytes, str]] = {
-        "image": (payload.image_filename, image_bytes, image_ct),
-    }
-    if mask_bytes is not None and mask_ct is not None:
-        files["mask"] = (payload.mask_filename, mask_bytes, mask_ct)
-
-    upstream_url = build_upstream_url("/v1/images/edits")
-    client = get_async_httpx_client()
-
-    r = await client.post(
-        upstream_url,
-        headers=_upstream_headers(request),
-        data=_coerce_multipart_data(data_obj),
-        files=files,
-    )
-    return _response_from_upstream(r)
-
-
-@router.post(
-    "/actions/images/variations",
-    summary="Actions-friendly image variations (JSON url/base64 → multipart upstream)",
-)
-async def actions_image_variations(payload: ActionImageVariationRequest, request: Request) -> Response:
-    logger.info("→ [actions/images] %s %s", request.method, request.url.path)
-
-    image_bytes, image_ct = await _resolve_blob(url=payload.image_url, b64=payload.image_base64, label="image")
-    if not image_ct.startswith("image/"):
-        _bad_request(f"image must be an image/* content-type (got {image_ct}).")
-
-    data_obj = _pydantic_dump(payload)
-
-    for k in ("image_url", "image_base64", "image_filename"):
-        data_obj.pop(k, None)
-
-    files: Dict[str, tuple[str, bytes, str]] = {
-        "image": (payload.image_filename, image_bytes, image_ct),
-    }
-
-    upstream_url = build_upstream_url("/v1/images/variations")
-    client = get_async_httpx_client()
-
-    r = await client.post(
-        upstream_url,
-        headers=_upstream_headers(request),
-        data=_coerce_multipart_data(data_obj),
-        files=files,
-    )
-    return _response_from_upstream(r)
+    files, form = await _build_multipart_from_action_body(body=body, allow_mask=False)
+    return await _post_images_multipart_to_upstream(endpoint="/images/variations", files=files, data=form)

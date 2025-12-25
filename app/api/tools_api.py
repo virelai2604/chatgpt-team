@@ -1,93 +1,90 @@
 from __future__ import annotations
 
-import copy
-from typing import Any
+from fastapi import APIRouter
+from starlette.responses import JSONResponse
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from app.core.config import get_settings
+from app.utils.logger import relay_log as logger
 
-from app.core.config import settings
+router = APIRouter(tags=["tools"], include_in_schema=False)
 
-# This router serves:
-#   - /manifest: a lightweight capability manifest for human/dev tooling
-#   - /openapi.actions.json: a curated OpenAPI subset suitable for ChatGPT Actions
+settings = get_settings()
 
-router = APIRouter()
 
-MANIFEST: dict[str, Any] = {
-    "object": "relay.manifest",
-    "data": [],
+def _safe_upstream_base_url() -> str:
+    """
+    Return the effective upstream base URL used by the relay.
+
+    Some forks used `UPSTREAM_BASE_URL`; the canonical setting in this repo is
+    `OPENAI_API_BASE`. Use getattr() to prevent import-time crashes.
+    """
+    return (
+        getattr(settings, "UPSTREAM_BASE_URL", None)
+        or getattr(settings, "OPENAI_API_BASE", None)
+        or "https://api.openai.com/v1"
+    )
+
+
+tool_manifest = {
+    "object": "tools.manifest",
+    "data": [
+        {
+            "name": "chatgpt-team-relay",
+            "description": "Local relay that proxies a safe subset of /v1 endpoints to OpenAI.",
+            "environment": getattr(settings, "environment", "unknown"),
+            "default_model": getattr(settings, "default_model", None),
+            "upstream_base_url": _safe_upstream_base_url(),
+        }
+    ],
     "endpoints": {
-        "health": ["/health", "/v1/health"],
-        "models": ["/v1/models", "/v1/models/{model}"],
-        "responses": ["/v1/responses", "/v1/responses/compact"],
+        # Local
+        "health": ["/", "/health", "/v1/health"],
+        "manifest": ["/manifest"],
+        # Action-safe (JSON request/response)
+        "models": ["/v1/models", "/v1/models/{id}"],
+        "responses": ["/v1/responses"],
+        "responses_compact": ["/v1/responses/compact"],
         "embeddings": ["/v1/embeddings"],
-        "images": ["/v1/images/generations"],
-        "images_actions": ["/v1/actions/images/variations", "/v1/actions/images/edits"],
-        "files": ["/v1/files", "/v1/files/{file_id}", "/v1/files/{file_id}/content"],
-        "uploads": [
-            "/v1/uploads",
-            "/v1/uploads/{upload_id}",
-            "/v1/uploads/{upload_id}/parts",
-            "/v1/uploads/{upload_id}/complete",
-            "/v1/uploads/{upload_id}/cancel",
+        # Images: relay supports BOTH multipart (normal clients) and JSON wrapper (Actions) for edits/variations
+        "images": [
+            "/v1/images",
+            "/v1/images/generations",
+            "/v1/images/edits",
+            "/v1/images/variations",
         ],
-        "batches": ["/v1/batches", "/v1/batches/{batch_id}"],
-        "proxy": ["/v1/proxy"],
+        # Generic proxy (relay-only; typically exclude from Actions schema)
+        "proxy": ["/v1/proxy/{path:path}"],
     },
     "meta": {
-        "relay_name": "chatgpt-team relay",
-        "auth_required": settings.RELAY_AUTH_ENABLED,
-        "auth_header": "X-Relay-Key",
-        "upstream_base_url": settings.UPSTREAM_BASE_URL,
-        "actions_openapi_url": "/openapi.actions.json",
-        "actions_openapi_groups": [
-            "health",
-            "models",
-            "responses",
-            "embeddings",
-            "images",
-            "images_actions",
-            "proxy",
+        "openai_api_base": getattr(settings, "OPENAI_API_BASE", None),
+        "proxy_allow_prefixes": list(getattr(settings, "proxy_allow_prefixes", [])),
+        "proxy_block_prefixes": list(getattr(settings, "proxy_block_prefixes", [])),
+        "blocked_v1_prefixes": [
+            # Multipart/binary/WS families should not be used from Actions directly.
+            "/v1/realtime",
+            "/v1/uploads",
+            "/v1/files",
+            "/v1/audio",
+            "/v1/images/edits",
+            "/v1/images/variations",
         ],
+        "actions_constraints": {
+            # Informational (see OpenAI Actions production notes)
+            "custom_headers_supported": False,
+            "requests_responses_text_only": True,
+        },
     },
 }
 
 
-@router.get("/manifest", include_in_schema=False)
-@router.get("/v1/manifest", include_in_schema=False)
-async def get_manifest() -> dict[str, Any]:
-    return MANIFEST
-
-
-@router.get("/openapi.actions.json", include_in_schema=False)
-async def openapi_actions(request: Request) -> JSONResponse:
-    """
-    Return an Actions-safe OpenAPI schema.
-
-    ChatGPT Actions are REST-style request/response calls (no WebSocket client) and
-    typically operate on JSON bodies. This endpoint filters the relay's full OpenAPI
-    schema down to an allowlist of Action-friendly paths (see MANIFEST["meta"]).
-    """
-    full = request.app.openapi()
-
-    groups = MANIFEST.get("meta", {}).get("actions_openapi_groups") or []
-    allowed_paths: set[str] = set()
-    for g in groups:
-        allowed_paths.update(MANIFEST.get("endpoints", {}).get(str(g), []))
-
-    allowed_paths.update({"/health", "/v1/health"})
-
-    filtered = copy.deepcopy(full)
-    filtered["paths"] = {
-        path: spec
-        for path, spec in (full.get("paths") or {}).items()
-        if path in allowed_paths
-    }
-
-    info = filtered.get("info") or {}
-    title = str(info.get("title") or "OpenAPI")
-    info["title"] = f"{title} (Actions subset)"
-    filtered["info"] = info
-
-    return JSONResponse(filtered)
+@router.get("/manifest", summary="Relay tools manifest", include_in_schema=False)
+async def manifest() -> JSONResponse:
+    logger.info("→ [tools] /manifest")
+    return JSONResponse(
+        {
+            "object": tool_manifest["object"],
+            "data": tool_manifest["data"],
+            "endpoints": tool_manifest["endpoints"],
+            "meta": tool_manifest["meta"],
+        }
+    )
