@@ -12,6 +12,8 @@
   📄 chatgpt_changes.md
   📄 chatgpt_sync.sh
   📄 generate_tree.py
+  📄 input.png
+  📄 input_256.png
   📄 openai_models_2025-11.csv
   📄 project-tree.md
   📄 pytest.ini
@@ -98,6 +100,9 @@
       📄 videos.db
   📁 docs
     📄 README.md
+  📁 path
+    📁 to
+      📄 input.png
   📁 schemas
     📄 __init__.py
     📄 openapi.yaml
@@ -121,6 +126,7 @@
     📄 conftest.py
     📄 test_extended_routes_smoke_integration.py
     📄 test_files_and_batches_integration.py
+    📄 test_images_variations_integration.py
     📄 test_local_e2e.py
     📄 test_relay_auth_guard.py
     📄 test_remaining_routes_smoke_integration.py

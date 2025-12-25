@@ -1,147 +1,93 @@
-# ==========================================================
-# app/api/tools_api.py — Tools Manifest Endpoints
-# ==========================================================
-"""
-Serves the relay's tools manifest at:
-  - GET /manifest
-  - GET /v1/manifest
-
-Intent:
-  - Option A (Actions-friendly): expose a small, JSON-only tool surface.
-  - Full route inventory lives in OpenAPI at /openapi.json.
-
-The integration tests expect:
-  data["endpoints"]["responses"] includes "/v1/responses"
-  data["endpoints"]["responses_compact"] includes "/v1/responses/compact"
-"""
-
 from __future__ import annotations
 
-import json
-import logging
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union, cast
+import copy
+from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
-from ..core.config import get_settings
+from app.core.config import settings
 
-logger = logging.getLogger(__name__)
+# This router serves:
+#   - /manifest: a lightweight capability manifest for human/dev tooling
+#   - /openapi.actions.json: a curated OpenAPI subset suitable for ChatGPT Actions
 
-router = APIRouter(tags=["manifest"])
+router = APIRouter()
 
-
-def _read_json(path: Path) -> Any:
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _extract_tools(payload: Any) -> List[Dict[str, Any]]:
-    """
-    Accept multiple on-disk shapes safely:
-      - {"tools": [...]}                       (legacy)
-      - {"data": [...], "object": "list", ...} (what /manifest returns)
-      - [...]                                   (raw list of tool dicts)
-    """
-    if isinstance(payload, list):
-        return cast(List[Dict[str, Any]], payload)
-
-    if isinstance(payload, dict):
-        tools = payload.get("tools")
-        if isinstance(tools, list):
-            return cast(List[Dict[str, Any]], tools)
-
-        data = payload.get("data")
-        if isinstance(data, list):
-            return cast(List[Dict[str, Any]], data)
-
-    return []
-
-
-def load_tools_manifest() -> List[Dict[str, Any]]:
-    """
-    Loads tools from:
-      1) settings.TOOLS_MANIFEST (if it's a list of tools)
-      2) settings.TOOLS_MANIFEST (if it's a path to JSON)
-      3) fallback: app/manifests/tools_manifest.json
-    """
-    settings = get_settings()
-    manifest_setting: Union[str, List[Dict[str, Any]], None] = getattr(settings, "TOOLS_MANIFEST", None)
-
-    # If someone injected the tools directly (already parsed)
-    if isinstance(manifest_setting, list):
-        return manifest_setting
-
-    # If it's a path string
-    if isinstance(manifest_setting, str) and manifest_setting.strip():
-        path = Path(manifest_setting)
-        if path.exists():
-            try:
-                return _extract_tools(_read_json(path))
-            except Exception as e:
-                logger.warning("Failed reading TOOLS_MANIFEST from %s: %s", path, e)
-
-    # Fallback to app/manifests/tools_manifest.json relative to this file
-    fallback_path = Path(__file__).resolve().parents[1] / "manifests" / "tools_manifest.json"
-    if fallback_path.exists():
-        try:
-            return _extract_tools(_read_json(fallback_path))
-        except Exception as e:
-            logger.warning("Failed reading fallback tools manifest from %s: %s", fallback_path, e)
-
-    return []
-
-
-def build_manifest_response(tools: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
-    settings = get_settings()
-    tools_list = tools if tools is not None else load_tools_manifest()
-
-    # Keep current behavior for tests and clients.
-    endpoints: Dict[str, List[str]] = {
-        # Option A: single Action-friendly proxy entrypoint.
-        "proxy": ["/v1/proxy"],
+MANIFEST: dict[str, Any] = {
+    "object": "relay.manifest",
+    "data": [],
+    "endpoints": {
+        "health": ["/health", "/v1/health"],
+        "models": ["/v1/models", "/v1/models/{model}"],
         "responses": ["/v1/responses", "/v1/responses/compact"],
-        "responses_compact": ["/v1/responses/compact"],
+        "embeddings": ["/v1/embeddings"],
+        "images": ["/v1/images/generations"],
+        "images_actions": ["/v1/actions/images/variations", "/v1/actions/images/edits"],
+        "files": ["/v1/files", "/v1/files/{file_id}", "/v1/files/{file_id}/content"],
+        "uploads": [
+            "/v1/uploads",
+            "/v1/uploads/{upload_id}",
+            "/v1/uploads/{upload_id}/parts",
+            "/v1/uploads/{upload_id}/complete",
+            "/v1/uploads/{upload_id}/cancel",
+        ],
+        "batches": ["/v1/batches", "/v1/batches/{batch_id}"],
+        "proxy": ["/v1/proxy"],
+    },
+    "meta": {
+        "relay_name": "chatgpt-team relay",
+        "auth_required": settings.RELAY_AUTH_ENABLED,
+        "auth_header": "X-Relay-Key",
+        "upstream_base_url": settings.UPSTREAM_BASE_URL,
+        "actions_openapi_url": "/openapi.actions.json",
+        "actions_openapi_groups": [
+            "health",
+            "models",
+            "responses",
+            "embeddings",
+            "images",
+            "images_actions",
+            "proxy",
+        ],
+    },
+}
+
+
+@router.get("/manifest", include_in_schema=False)
+@router.get("/v1/manifest", include_in_schema=False)
+async def get_manifest() -> dict[str, Any]:
+    return MANIFEST
+
+
+@router.get("/openapi.actions.json", include_in_schema=False)
+async def openapi_actions(request: Request) -> JSONResponse:
+    """
+    Return an Actions-safe OpenAPI schema.
+
+    ChatGPT Actions are REST-style request/response calls (no WebSocket client) and
+    typically operate on JSON bodies. This endpoint filters the relay's full OpenAPI
+    schema down to an allowlist of Action-friendly paths (see MANIFEST["meta"]).
+    """
+    full = request.app.openapi()
+
+    groups = MANIFEST.get("meta", {}).get("actions_openapi_groups") or []
+    allowed_paths: set[str] = set()
+    for g in groups:
+        allowed_paths.update(MANIFEST.get("endpoints", {}).get(str(g), []))
+
+    allowed_paths.update({"/health", "/v1/health"})
+
+    filtered = copy.deepcopy(full)
+    filtered["paths"] = {
+        path: spec
+        for path, spec in (full.get("paths") or {}).items()
+        if path in allowed_paths
     }
 
-    relay_name = (
-        getattr(settings, "relay_name", None)
-        or getattr(settings, "project_name", None)
-        or "ChatGPT Team Relay"
-    )
+    info = filtered.get("info") or {}
+    title = str(info.get("title") or "OpenAPI")
+    info["title"] = f"{title} (Actions subset)"
+    filtered["info"] = info
 
-    # IMPORTANT: We intentionally do not list multipart/binary families (e.g., /v1/uploads)
-    # in this tools manifest. Those routes may exist in the app (see /openapi.json) but are
-    # excluded from the Actions-safe tool surface by design.
-    meta: Dict[str, Any] = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "relay_name": relay_name,
-        "manifest_scope": "actions_safe",
-        "option": "A",
-        "openapi_url": "/openapi.json",
-        "endpoints_note": (
-            "This manifest is a curated, JSON-only tool surface. "
-            "Multipart/binary route families (e.g., Uploads) are intentionally excluded; "
-            "refer to /openapi.json for the full route inventory."
-        ),
-    }
-
-    return {
-        "object": "list",
-        "data": tools_list,
-        "endpoints": endpoints,
-        "meta": meta,
-    }
-
-
-@router.get("/manifest")
-async def get_manifest_root() -> Dict[str, Any]:
-    logger.info("Serving tools manifest (root alias)")
-    return build_manifest_response()
-
-
-@router.get("/v1/manifest")
-async def get_manifest_v1() -> Dict[str, Any]:
-    logger.info("Serving tools manifest (/v1)")
-    return build_manifest_response()
+    return JSONResponse(filtered)
