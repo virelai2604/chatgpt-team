@@ -1,83 +1,67 @@
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Set
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
-from app.utils.logger import relay_log as logger
 
 router = APIRouter()
 
 
-def _load_tools_manifest_data() -> list[dict[str, Any]]:
+def _load_tools_manifest() -> List[Dict[str, Any]]:
     """
-    Load the local tools manifest file (used by dev tooling / documentation).
-
-    The file can be either:
-      - {"tools": [...]} (preferred)
-      - {"data": [...]}  (legacy)
-      - [...]            (bare list)
+    Optional helper: if app/manifests/tools_manifest.json exists, include it in /manifest.
     """
-    settings = get_settings()
-    path = Path(settings.TOOLS_MANIFEST)
-
-    try:
-        raw = path.read_text(encoding="utf-8")
-        loaded = json.loads(raw)
-    except Exception:
-        return []
-
-    if isinstance(loaded, dict):
-        if isinstance(loaded.get("tools"), list):
-            return [x for x in loaded["tools"] if isinstance(x, dict)]
-        if isinstance(loaded.get("data"), list):
-            return [x for x in loaded["data"] if isinstance(x, dict)]
-        return []
-
-    if isinstance(loaded, list):
-        return [x for x in loaded if isinstance(x, dict)]
-
+    app_dir = Path(__file__).resolve().parents[1]
+    candidates = [
+        app_dir / "manifests" / "tools_manifest.json",
+        app_dir / "manifests" / "tools_manifest.tools.json",
+    ]
+    for p in candidates:
+        if p.exists() and p.is_file():
+            try:
+                with p.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data if isinstance(data, list) else []
+            except Exception:
+                return []
     return []
 
 
-def build_manifest_response() -> dict[str, Any]:
+def _manifest_endpoints() -> Dict[str, List[str]]:
     """
-    Lightweight capability manifest (human/dev tooling).
+    Canonical manifest endpoint groups.
 
-    This is *not* the ChatGPT Actions OpenAPI document. Use /openapi.actions.json for Actions.
+    Baseline tests require:
+      - data.endpoints.responses includes /v1/responses
+      - data.endpoints.responses_compact includes /v1/responses/compact
     """
-    settings = get_settings()
-    data = _load_tools_manifest_data()
-
-    endpoints: dict[str, list[str]] = {
+    return {
         "health": ["/health", "/v1/health"],
-        "manifest": ["/manifest", "/v1/manifest"],
+        "actions": ["/v1/actions/ping", "/v1/actions/health", "/v1/actions/schema"],
         "models": ["/v1/models", "/v1/models/{model}"],
         "responses": [
             "/v1/responses",
-            "/v1/responses/compact",
             "/v1/responses/{response_id}",
             "/v1/responses/{response_id}/cancel",
             "/v1/responses/{response_id}/input_items",
         ],
+        "responses_compact": ["/v1/responses/compact"],
         "embeddings": ["/v1/embeddings"],
         "images": [
-            "/v1/images",
             "/v1/images/generations",
+            "/v1/images",
             "/v1/images/edits",
             "/v1/images/variations",
         ],
-        # JSON-only aliases that are convenient for Actions (optional).
         "images_actions": [
             "/v1/actions/images/edits",
             "/v1/actions/images/variations",
         ],
-        "files": ["/v1/files", "/v1/files/{file_id}", "/v1/files/{file_id}/content"],
         "uploads": [
             "/v1/uploads",
             "/v1/uploads/{upload_id}",
@@ -85,116 +69,101 @@ def build_manifest_response() -> dict[str, Any]:
             "/v1/uploads/{upload_id}/complete",
             "/v1/uploads/{upload_id}/cancel",
         ],
-        "batches": ["/v1/batches", "/v1/batches/{batch_id}"],
-        # Actions can call the HTTP session-creation endpoint, but not WS upgrades.
+        "files": [
+            "/v1/files",
+            "/v1/files/{file_id}",
+            "/v1/files/{file_id}/content",
+        ],
+        "batches": [
+            "/v1/batches",
+            "/v1/batches/{batch_id}",
+            "/v1/batches/{batch_id}/cancel",
+        ],
         "realtime": ["/v1/realtime/sessions"],
-        # Escape hatch for dev tooling; consider omitting from Actions.
+        "conversations": ["/v1/conversations", "/v1/conversations/{path}"],
+        "vector_stores": ["/v1/vector_stores", "/v1/vector_stores/{path}"],
         "proxy": ["/v1/proxy"],
     }
 
-    return {
-        "object": "list",
-        "data": data,
-        "endpoints": endpoints,
+
+def build_manifest_response(base_url: str = "") -> Dict[str, Any]:
+    settings = get_settings()
+
+    manifest = {
+        "name": settings.RELAY_NAME,
+        "version": "1.0.0",
+        "description": "OpenAI-compatible relay with explicit subroutes and Actions-friendly wrappers.",
+        "tools": _load_tools_manifest(),
+        "endpoints": _manifest_endpoints(),
         "meta": {
-            "relay_name": settings.RELAY_NAME,
-            "environment": settings.ENVIRONMENT,
             "app_mode": settings.APP_MODE,
-            "auth_required": bool(settings.RELAY_AUTH_ENABLED and (settings.RELAY_KEY or settings.RELAY_AUTH_TOKEN)),
-            "auth_header": "X-Relay-Key",
+            "environment": settings.ENVIRONMENT,
+            "relay_auth_enabled": bool(settings.RELAY_AUTH_ENABLED),
+            "relay_auth_header": settings.RELAY_AUTH_HEADER,
             "upstream_base_url": settings.UPSTREAM_BASE_URL,
-            "default_model": settings.DEFAULT_MODEL,
+            "openapi_url": "/openapi.json",
             "actions_openapi_url": "/openapi.actions.json",
-            # Which endpoint groups are included in the Actions-safe OpenAPI subset.
-            "actions_openapi_groups": [
-                "health",
-                "models",
-                "responses",
-                "embeddings",
-                "images",
-                "realtime",
-                # "proxy",  # Optional; include only if you want Actions to reach /v1/proxy.
-            ],
         },
     }
 
-
-# ---- Actions-safe OpenAPI subset ----
-
-def _actions_allowed_paths(manifest: dict[str, Any]) -> set[str]:
-    groups = manifest.get("meta", {}).get("actions_openapi_groups") or []
-    endpoints = manifest.get("endpoints", {}) or {}
-
-    allowed: set[str] = set()
-    for g in groups:
-        allowed.update(endpoints.get(str(g), []))
-
-    # Always include core health + manifest discovery.
-    allowed.update({"/health", "/v1/health", "/manifest", "/v1/manifest"})
-
-    return allowed
-
-
-def _strip_multipart_from_actions_schema(openapi: dict[str, Any]) -> dict[str, Any]:
-    """
-    ChatGPT Actions cannot send multipart/form-data. Remove multipart from requestBody
-    definitions in the Actions subset to prevent the model from selecting that content type.
-    """
-    paths = openapi.get("paths") or {}
-    for _path, ops in paths.items():
-        if not isinstance(ops, dict):
-            continue
-        for _method, spec in ops.items():
-            if not isinstance(spec, dict):
-                continue
-            rb = spec.get("requestBody")
-            if not isinstance(rb, dict):
-                continue
-            content = rb.get("content")
-            if not isinstance(content, dict):
-                continue
-            if "multipart/form-data" in content:
-                del content["multipart/form-data"]
-    return openapi
+    return {
+        "object": "relay.manifest",
+        "data": manifest,
+        "meta": {"base_url": base_url},
+    }
 
 
 @router.get("/manifest", include_in_schema=False)
+async def manifest(request: Request) -> JSONResponse:
+    base_url = str(request.base_url).rstrip("/")
+    return JSONResponse(content=build_manifest_response(base_url=base_url))
+
+
 @router.get("/v1/manifest", include_in_schema=False)
-async def get_manifest() -> dict[str, Any]:
-    return build_manifest_response()
+async def manifest_v1(request: Request) -> JSONResponse:
+    base_url = str(request.base_url).rstrip("/")
+    return JSONResponse(content=build_manifest_response(base_url=base_url))
+
+
+def _collect_allowed_paths(manifest: Dict[str, Any]) -> Set[str]:
+    allowed: Set[str] = set()
+    endpoints = manifest.get("endpoints") or {}
+    if isinstance(endpoints, dict):
+        for paths in endpoints.values():
+            if isinstance(paths, list):
+                for p in paths:
+                    if not isinstance(p, str):
+                        continue
+                    # Normalize placeholder used by some wildcard routes
+                    allowed.add(p.replace("{path}", "{path:path}"))
+    return allowed
+
+
+def _filtered_openapi_for_actions(request: Request) -> Dict[str, Any]:
+    """
+    Actions-focused OpenAPI document by filtering app.openapi()
+    down to the paths we advertise in /manifest.
+    """
+    base = request.app.openapi()
+    manifest = build_manifest_response(base_url=str(request.base_url).rstrip("/"))["data"]
+    allowed = _collect_allowed_paths(manifest)
+
+    base_paths = base.get("paths") or {}
+    base["paths"] = {k: v for k, v in base_paths.items() if k in allowed}
+
+    info = base.get("info") or {}
+    title = info.get("title") or "OpenAI Relay"
+    info["title"] = f"{title} (Actions)"
+    base["info"] = info
+
+    return base
 
 
 @router.get("/openapi.actions.json", include_in_schema=False)
-async def openapi_actions(request: Request) -> JSONResponse:
-    """
-    Return an Actions-safe OpenAPI schema.
+async def openapi_actions_json(request: Request) -> JSONResponse:
+    return JSONResponse(content=_filtered_openapi_for_actions(request))
 
-    ChatGPT Actions are REST-style request/response calls (no SSE, no WebSocket client)
-    and typically operate on JSON bodies. This endpoint filters the relay's full OpenAPI
-    schema down to an allowlist of Action-friendly paths.
-    """
-    manifest = build_manifest_response()
-    allowed_paths = _actions_allowed_paths(manifest)
 
-    full = request.app.openapi()
-
-    filtered = copy.deepcopy(full)
-    filtered["paths"] = {
-        path: spec
-        for path, spec in (full.get("paths") or {}).items()
-        if path in allowed_paths
-    }
-
-    # Ensure the base URL is present for Actions tooling.
-    base_url = str(request.base_url).rstrip("/")
-    filtered["servers"] = [{"url": base_url}]
-
-    info = filtered.get("info") or {}
-    title = str(info.get("title") or "OpenAPI")
-    info["title"] = f"{title} (Actions subset)"
-    filtered["info"] = info
-
-    filtered = _strip_multipart_from_actions_schema(filtered)
-
-    logger.info("→ [tools_api] served /openapi.actions.json with %d paths", len(filtered.get("paths") or {}))
-    return JSONResponse(filtered)
+@router.get("/v1/openapi.actions.json", include_in_schema=False)
+async def openapi_actions_json_v1(request: Request) -> JSONResponse:
+    return JSONResponse(content=_filtered_openapi_for_actions(request))

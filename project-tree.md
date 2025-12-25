@@ -124,6 +124,7 @@
     📄 __init__.py
     📄 client.py
     📄 conftest.py
+    📄 relay_client_example.py
     📄 test_extended_routes_smoke_integration.py
     📄 test_files_and_batches_integration.py
     📄 test_images_variations_integration.py

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter, Body, Request
-from fastapi.responses import JSONResponse, Response
-from starlette.responses import StreamingResponse
+from fastapi.responses import JSONResponse
+from starlette.responses import Response, StreamingResponse
 
 from app.api.forward_openai import forward_openai_method_path, forward_openai_request
+from app.core.config import get_settings
 
 router = APIRouter(prefix="/v1", tags=["responses"])
 
@@ -15,13 +17,8 @@ router = APIRouter(prefix="/v1", tags=["responses"])
 @router.post("/responses")
 async def create_response(request: Request) -> Response:
     """
-    Forward /v1/responses to OpenAI.
-
-    - Non-stream: returns JSON response as-is
-    - Stream (SSE): forward_openai_request will detect upstream text/event-stream and return a StreamingResponse
-
-    This avoids the historical bug where a StreamingResponse was wrapped inside another StreamingResponse
-    (TypeError: 'StreamingSSE' object is not iterable).
+    Pass-through proxy to OpenAI Responses API.
+    Supports non-streaming JSON and streaming (SSE) when `stream: true`.
     """
     return await forward_openai_request(request)
 
@@ -32,32 +29,37 @@ async def create_response_compact(
     body: Dict[str, Any] = Body(...),
 ) -> Response:
     """
-    Custom helper endpoint used by local tests/tools.
+    Relay-only wrapper:
+      - normalizes input into a list
+      - ensures default model if missing
+      - sets metadata.compact=true
+      - forwards to POST /v1/responses upstream
+      - wraps upstream JSON:
 
-    Behavior:
-      - Forces a non-streaming OpenAI /v1/responses call
-      - Injects metadata.compact as a *string* (OpenAI metadata values must be strings)
-      - Wraps the upstream response into:
-          {
-            "object": "response.compaction",
-            "original": <OpenAI response payload>
-          }
+        {
+          "object": "response.compaction",
+          "data": <upstream JSON>,
+          "meta": { "model": "...", "compact": true, "timestamp": "..." }
+        }
     """
-    payload: Dict[str, Any] = dict(body) if isinstance(body, dict) else {}
+    settings = get_settings()
 
-    # Ensure this helper endpoint is non-streaming.
-    payload.pop("stream", None)
+    payload: Dict[str, Any] = dict(body or {})
+    payload.pop("stream", None)  # compact is always non-streaming
 
-    # OpenAI metadata values must be strings; normalize metadata and force "compact".
+    if "input" in payload and not isinstance(payload["input"], list):
+        payload["input"] = [payload["input"]]
+
+    if not payload.get("model"):
+        payload["model"] = settings.DEFAULT_MODEL
+
     metadata = payload.get("metadata")
     if not isinstance(metadata, dict):
         metadata = {}
     else:
-        # shallow copy to avoid mutating caller-owned dict
         metadata = dict(metadata)
 
-    # Normalize metadata values to strings (defensive; OpenAI expects string values).
-    normalized_metadata: Dict[str, str] = {str(k): str(v) for k, v in metadata.items()}
+    normalized_metadata = {str(k): str(v) for k, v in metadata.items()}
     normalized_metadata["compact"] = "true"
     payload["metadata"] = normalized_metadata
 
@@ -68,43 +70,42 @@ async def create_response_compact(
         inbound_headers=request.headers,
     )
 
-    # If upstream errored, preserve the error contract exactly.
-    if getattr(upstream, "status_code", 200) >= 400:
-        return upstream
-
-    # If somehow streamed, just pass-through (unexpected for this helper).
-    if isinstance(upstream, StreamingResponse):
+    if upstream.status_code >= 400 or isinstance(upstream, StreamingResponse):
         return upstream
 
     raw = getattr(upstream, "body", b"") or b""
     try:
-        original = json.loads(raw.decode("utf-8")) if raw else None
+        upstream_json = json.loads(raw.decode("utf-8")) if raw else {}
     except Exception:
-        # If parsing fails, pass-through the upstream response.
         return upstream
 
-    compaction = {
+    wrapper = {
         "object": "response.compaction",
-        "original": original,
+        "data": upstream_json,
+        "meta": {
+            "model": payload.get("model"),
+            "compact": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
     }
-    return JSONResponse(content=compaction, status_code=upstream.status_code)
+    return JSONResponse(content=wrapper, status_code=upstream.status_code)
 
 
-@router.get("/responses/{response_id}")
-async def retrieve_response(request: Request, response_id: str) -> Response:
-    return await forward_openai_request(request)
-
-
-@router.delete("/responses/{response_id}")
-async def delete_response(request: Request, response_id: str) -> Response:
+@router.get("/responses/{response_id}/input_items")
+async def list_response_input_items(response_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 
 
 @router.post("/responses/{response_id}/cancel")
-async def cancel_response(request: Request, response_id: str) -> Response:
+async def cancel_response(response_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 
 
-@router.get("/responses/{response_id}/input_items")
-async def list_response_input_items(request: Request, response_id: str) -> Response:
+@router.get("/responses/{response_id}")
+async def retrieve_response(response_id: str, request: Request) -> Response:
+    return await forward_openai_request(request)
+
+
+@router.delete("/responses/{response_id}")
+async def delete_response(response_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
