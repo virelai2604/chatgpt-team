@@ -1,55 +1,68 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
 
 from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger
 
 router = APIRouter(prefix="/v1", tags=["uploads"])
 
 
-async def _forward_with_transient_retry(
-    request: Request,
-    *,
-    max_retries: int = 2,
-    base_delay_s: float = 0.25,
-) -> Response:
-    """
-    Best-effort mitigation for occasional upstream 5xx from OpenAI.
-    This is especially useful for integration gates that exercise /v1/uploads.
+@router.post("/uploads", summary="Create upload")
+async def create_upload(request: Request) -> Response:
+    logger.info("→ [uploads] POST %s", request.url.path)
+    return await forward_openai_request(request)
 
-    - Retries only on 5xx
-    - Exponential backoff: base_delay * 2^attempt
-    """
-    resp: Response = await forward_openai_request(request)
-    attempt = 0
 
-    while attempt < max_retries and getattr(resp, "status_code", 200) >= 500:
-        await asyncio.sleep(base_delay_s * (2**attempt))
-        resp = await forward_openai_request(request)
-        attempt += 1
+@router.get("/uploads/{upload_id}", summary="Get upload")
+async def get_upload(upload_id: str, request: Request) -> Response:
+    logger.info("→ [uploads] GET %s", request.url.path)
+    return await forward_openai_request(request)
+
+
+@router.post("/uploads/{upload_id}/parts", summary="Add upload part")
+async def add_upload_part(upload_id: str, request: Request) -> Response:
+    logger.info("→ [uploads] POST %s", request.url.path)
+    return await forward_openai_request(request)
+
+
+@router.post("/uploads/{upload_id}/complete", summary="Complete upload")
+async def complete_upload(upload_id: str, request: Request) -> Response:
+    """
+    Complete an upload. The upstream endpoint has occasionally returned transient 5xx errors
+    immediately after parts are uploaded. We apply a small retry/backoff to improve reliability.
+    """
+    logger.info("→ [uploads] POST %s", request.url.path)
+
+    resp = await forward_openai_request(request)
+
+    # Retry only on 5xx.
+    if resp.status_code >= 500:
+        for delay in (0.25, 0.75):
+            await asyncio.sleep(delay)
+            logger.info("↻ [uploads] retry complete after %.2fs", delay)
+            resp = await forward_openai_request(request)
+            if resp.status_code < 500:
+                break
 
     return resp
 
 
-@router.post("/uploads")
-async def create_upload(request: Request) -> Response:
-    return await _forward_with_transient_retry(request)
-
-
-@router.post("/uploads/{upload_id}/parts")
-async def create_upload_part(request: Request, upload_id: str) -> Response:
+@router.post("/uploads/{upload_id}/cancel", summary="Cancel upload")
+async def cancel_upload(upload_id: str, request: Request) -> Response:
+    logger.info("→ [uploads] POST %s", request.url.path)
     return await forward_openai_request(request)
 
 
-@router.post("/uploads/{upload_id}/complete")
-async def complete_upload(request: Request, upload_id: str) -> Response:
-    return await forward_openai_request(request)
-
-
-@router.post("/uploads/{upload_id}/cancel")
-async def cancel_upload(request: Request, upload_id: str) -> Response:
+# Passthrough for any future /uploads subroutes not explicitly defined above.
+@router.api_route(
+    "/uploads/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    include_in_schema=False,
+)
+async def uploads_passthrough(path: str, request: Request) -> Response:
+    logger.info("→ [uploads] passthrough %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
