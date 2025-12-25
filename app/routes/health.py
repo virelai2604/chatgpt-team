@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -9,55 +10,43 @@ from app.core.config import settings
 
 router = APIRouter(tags=["health"])
 
+_START_TIME = time.time()
+
 
 def _health_payload() -> Dict[str, Any]:
-    """
-    Health contract used by:
-      - GET /
-      - GET /health
-      - GET /v1/health
-
-    Tests expect:
-      - object == "health"
-      - status == "ok"
-      - environment, default_model, timestamp keys
-      - relay/openai/meta are dicts
-    """
-    now = datetime.now(timezone.utc).isoformat()
-
-    environment = getattr(settings, "ENVIRONMENT", None) or getattr(settings, "APP_MODE", None) or "unknown"
-    default_model = getattr(settings, "DEFAULT_MODEL", None) or "unknown"
+    now = datetime.now(timezone.utc)
 
     return {
         "object": "health",
         "status": "ok",
-        "environment": environment,
-        "default_model": default_model,
-        "timestamp": now,
+        "environment": settings.ENVIRONMENT,
+        "default_model": settings.DEFAULT_MODEL,
+        "timestamp": now.isoformat(),
+        # Nested structures expected by tests
         "relay": {
-            "app_mode": getattr(settings, "APP_MODE", None),
+            "name": settings.RELAY_NAME,
+            "app_mode": settings.APP_MODE,
             "auth_enabled": bool(getattr(settings, "RELAY_AUTH_ENABLED", False)),
-            "auth_header": getattr(settings, "RELAY_AUTH_HEADER", None),
-            "relay_key_configured": bool(getattr(settings, "RELAY_KEY", None)),
         },
         "openai": {
-            "base_url": getattr(settings, "OPENAI_BASE_URL", None),
-            "api_key_configured": bool(getattr(settings, "OPENAI_API_KEY", None)),
+            "base_url": settings.OPENAI_BASE_URL,
         },
-        "meta": {},
+        "meta": {
+            "uptime_seconds": round(time.time() - _START_TIME, 3),
+        },
     }
 
 
-@router.get("/", include_in_schema=False)
-async def root() -> Dict[str, Any]:
+@router.get("/", summary="Health check")
+async def root_ping() -> Dict[str, Any]:
     return _health_payload()
 
 
-@router.get("/health")
+@router.get("/health", summary="Health check")
 async def health() -> Dict[str, Any]:
     return _health_payload()
 
 
-@router.get("/v1/health")
+@router.get("/v1/health", summary="Health check")
 async def v1_health() -> Dict[str, Any]:
     return _health_payload()
