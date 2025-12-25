@@ -8,6 +8,7 @@ from app.api.tools_api import router as tools_router
 from app.core.config import get_settings
 from app.middleware.relay_auth import RelayAuthMiddleware
 from app.routes.register_routes import register_routes
+from app.utils.error_handler import register_exception_handlers
 from app.utils.logger import relay_log as logger
 
 
@@ -19,7 +20,7 @@ def create_app() -> FastAPI:
         version="0.1.0",
     )
 
-    # CORS
+    # CORS (primarily helpful for local browser tooling).
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ALLOW_ORIGINS,
@@ -37,10 +38,12 @@ def create_app() -> FastAPI:
     else:
         logger.info("Relay auth disabled (RELAY_AUTH_ENABLED=false or RELAY_KEY missing).")
 
-    # Register all route modules
+    register_exception_handlers(app)
+
+    # Register all route modules (explicit parity surface + /v1/proxy last).
     register_routes(app)
 
-    # Tool manifest / helper endpoints
+    # Tool manifest / Actions OpenAPI helper endpoints
     app.include_router(tools_router)
 
     # SSE streaming endpoints (non-Actions surface)

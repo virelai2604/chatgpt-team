@@ -11,150 +11,190 @@ from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.utils.logger import relay_log as logger
 
-router = APIRouter(tags=["manifest"])
+router = APIRouter()
 
 
-def get_tools_manifest() -> dict[str, Any]:
-    """Load the tools manifest JSON shipped with the relay.
-
-    This is intentionally file-backed (not hard-coded) so the manifest can be edited
-    without changing Python code.
+def _load_tools_manifest_data() -> list[dict[str, Any]]:
     """
-    manifest_path = Path(__file__).resolve().parent.parent / "manifests" / "tools_manifest.json"
+    Load the local tools manifest file (used by dev tooling / documentation).
+
+    The file can be either:
+      - {"tools": [...]} (preferred)
+      - {"data": [...]}  (legacy)
+      - [...]            (bare list)
+    """
+    settings = get_settings()
+    path = Path(settings.TOOLS_MANIFEST)
+
     try:
-        with manifest_path.open("r", encoding="utf-8") as f:
-            return json.load(f)
+        raw = path.read_text(encoding="utf-8")
+        loaded = json.loads(raw)
     except Exception:
-        logger.exception("Failed to load tools manifest: %s", manifest_path)
-        return {}
+        return []
 
+    if isinstance(loaded, dict):
+        if isinstance(loaded.get("tools"), list):
+            return [x for x in loaded["tools"] if isinstance(x, dict)]
+        if isinstance(loaded.get("data"), list):
+            return [x for x in loaded["data"] if isinstance(x, dict)]
+        return []
 
-def _normalize_upstream_base_url(base: str) -> str:
-    """Return an upstream base URL suitable for documentation/metadata.
+    if isinstance(loaded, list):
+        return [x for x in loaded if isinstance(x, dict)]
 
-    Ensures the returned string ends with /v1 (without double-slashes).
-    """
-    base = (base or "").rstrip("/")
-    if not base:
-        return "https://api.openai.com/v1"
-    if base.endswith("/v1"):
-        return base
-    return f"{base}/v1"
+    return []
 
 
 def build_manifest_response() -> dict[str, Any]:
-    s = get_settings()
-    tools_manifest = get_tools_manifest()
+    """
+    Lightweight capability manifest (human/dev tooling).
+
+    This is *not* the ChatGPT Actions OpenAPI document. Use /openapi.actions.json for Actions.
+    """
+    settings = get_settings()
+    data = _load_tools_manifest_data()
 
     endpoints: dict[str, list[str]] = {
-        # Canonical surface: Responses
-        "responses": ["/v1/responses"],
-        "responses_compact": ["/v1/responses/compact"],
-        # Common aux surfaces
-        "models": ["/v1/models"],
+        "health": ["/health", "/v1/health"],
+        "manifest": ["/manifest", "/v1/manifest"],
+        "models": ["/v1/models", "/v1/models/{model}"],
+        "responses": [
+            "/v1/responses",
+            "/v1/responses/compact",
+            "/v1/responses/{response_id}",
+            "/v1/responses/{response_id}/cancel",
+            "/v1/responses/{response_id}/input_items",
+        ],
         "embeddings": ["/v1/embeddings"],
-        "images": ["/v1/images/generations"],
-        # Multipart endpoints (NOT Actions-friendly; keep for non-Actions clients)
-        "images_edits_multipart": ["/v1/images/edits"],
-        "images_variations_multipart": ["/v1/images/variations"],
-        # Actions-friendly wrappers (JSON body with URL/base64)
-        "images_actions": ["/v1/actions/images/edits", "/v1/actions/images/variations"],
-        # Realtime: HTTP session creation only (WS upgrades are intentionally non-Actions)
+        "images": [
+            "/v1/images",
+            "/v1/images/generations",
+            "/v1/images/edits",
+            "/v1/images/variations",
+        ],
+        # JSON-only aliases that are convenient for Actions (optional).
+        "images_actions": [
+            "/v1/actions/images/edits",
+            "/v1/actions/images/variations",
+        ],
+        "files": ["/v1/files", "/v1/files/{file_id}", "/v1/files/{file_id}/content"],
+        "uploads": [
+            "/v1/uploads",
+            "/v1/uploads/{upload_id}",
+            "/v1/uploads/{upload_id}/parts",
+            "/v1/uploads/{upload_id}/complete",
+            "/v1/uploads/{upload_id}/cancel",
+        ],
+        "batches": ["/v1/batches", "/v1/batches/{batch_id}"],
+        # Actions can call the HTTP session-creation endpoint, but not WS upgrades.
         "realtime": ["/v1/realtime/sessions"],
-        # Escape hatch (server-side allowlist + blocklist). Not exposed in actions schema by default.
+        # Escape hatch for dev tooling; consider omitting from Actions.
         "proxy": ["/v1/proxy"],
     }
 
-    actions_openapi_url = "/openapi.actions.json"
-    actions_openapi_groups = [
-        "health",
-        "models",
-        "responses",
-        "embeddings",
-        "images",
-        "images_actions",
-    ]
-
     return {
-        "object": "relay.manifest",
-        "data": tools_manifest,
+        "object": "list",
+        "data": data,
         "endpoints": endpoints,
         "meta": {
-            "relay_name": "chatgpt-team-relay",
-            "environment": getattr(s, "APP_ENVIRONMENT", "local"),
-            "auth_required": bool(getattr(s, "RELAY_AUTH_ENABLED", True)),
-            "upstream_base_url": _normalize_upstream_base_url(getattr(s, "openai_base_url", "")),
-            "actions_openapi_url": actions_openapi_url,
-            "actions_openapi_groups": actions_openapi_groups,
+            "relay_name": settings.RELAY_NAME,
+            "environment": settings.ENVIRONMENT,
+            "app_mode": settings.APP_MODE,
+            "auth_required": bool(settings.RELAY_AUTH_ENABLED and (settings.RELAY_KEY or settings.RELAY_AUTH_TOKEN)),
+            "auth_header": "X-Relay-Key",
+            "upstream_base_url": settings.UPSTREAM_BASE_URL,
+            "default_model": settings.DEFAULT_MODEL,
+            "actions_openapi_url": "/openapi.actions.json",
+            # Which endpoint groups are included in the Actions-safe OpenAPI subset.
+            "actions_openapi_groups": [
+                "health",
+                "models",
+                "responses",
+                "embeddings",
+                "images",
+                "realtime",
+                # "proxy",  # Optional; include only if you want Actions to reach /v1/proxy.
+            ],
         },
     }
 
 
+# ---- Actions-safe OpenAPI subset ----
+
+def _actions_allowed_paths(manifest: dict[str, Any]) -> set[str]:
+    groups = manifest.get("meta", {}).get("actions_openapi_groups") or []
+    endpoints = manifest.get("endpoints", {}) or {}
+
+    allowed: set[str] = set()
+    for g in groups:
+        allowed.update(endpoints.get(str(g), []))
+
+    # Always include core health + manifest discovery.
+    allowed.update({"/health", "/v1/health", "/manifest", "/v1/manifest"})
+
+    return allowed
+
+
+def _strip_multipart_from_actions_schema(openapi: dict[str, Any]) -> dict[str, Any]:
+    """
+    ChatGPT Actions cannot send multipart/form-data. Remove multipart from requestBody
+    definitions in the Actions subset to prevent the model from selecting that content type.
+    """
+    paths = openapi.get("paths") or {}
+    for _path, ops in paths.items():
+        if not isinstance(ops, dict):
+            continue
+        for _method, spec in ops.items():
+            if not isinstance(spec, dict):
+                continue
+            rb = spec.get("requestBody")
+            if not isinstance(rb, dict):
+                continue
+            content = rb.get("content")
+            if not isinstance(content, dict):
+                continue
+            if "multipart/form-data" in content:
+                del content["multipart/form-data"]
+    return openapi
+
+
 @router.get("/manifest", include_in_schema=False)
-async def get_manifest() -> dict[str, Any]:
-    """Return a relay manifest used by tooling and smoke tests."""
-    return build_manifest_response()
-
-
 @router.get("/v1/manifest", include_in_schema=False)
-async def get_manifest_v1() -> dict[str, Any]:
-    """Legacy alias for /manifest."""
+async def get_manifest() -> dict[str, Any]:
     return build_manifest_response()
-
-
-# ---- Actions: curated OpenAPI schema (HTTP-only, JSON-first) ----
-
-_ACTIONS_ALLOWED_PATHS: set[str] = {
-    # Health
-    "/health",
-    "/v1/health",
-    # Models
-    "/v1/models",
-    "/v1/models/{model}",
-    # Canonical Responses surface
-    "/v1/responses",
-    "/v1/responses/compact",
-    "/v1/responses/{response_id}",
-    "/v1/responses/{response_id}/cancel",
-    "/v1/responses/{response_id}/input_items",
-    # Embeddings
-    "/v1/embeddings",
-    # Images (JSON)
-    "/v1/images",
-    "/v1/images/generations",
-    # Images Actions wrappers (JSON)
-    "/v1/actions/images/edits",
-    "/v1/actions/images/variations",
-    # Minimal Actions metadata endpoints (optional)
-    "/v1/actions/ping",
-    "/v1/actions/relay_info",
-}
 
 
 @router.get("/openapi.actions.json", include_in_schema=False)
-async def get_openapi_actions(request: Request) -> JSONResponse:
-    """Return an Actions-safe OpenAPI schema.
-
-    Rationale:
-      - ChatGPT Actions are HTTP-only (no WebSocket upgrades).
-      - Streaming SSE endpoints are excluded.
-      - Multipart file-upload endpoints are excluded; use /v1/actions/images/* wrappers instead.
+async def openapi_actions(request: Request) -> JSONResponse:
     """
-    full_schema = request.app.openapi()
-    schema = copy.deepcopy(full_schema)
+    Return an Actions-safe OpenAPI schema.
 
-    paths = schema.get("paths", {})
-    schema["paths"] = {p: spec for (p, spec) in paths.items() if p in _ACTIONS_ALLOWED_PATHS}
+    ChatGPT Actions are REST-style request/response calls (no SSE, no WebSocket client)
+    and typically operate on JSON bodies. This endpoint filters the relay's full OpenAPI
+    schema down to an allowlist of Action-friendly paths.
+    """
+    manifest = build_manifest_response()
+    allowed_paths = _actions_allowed_paths(manifest)
 
-    # Make the schema standalone and Actions-friendly
-    info = schema.get("info", {}) or {}
-    info["title"] = info.get("title", "chatgpt-team-relay") + " (Actions)"
-    info.setdefault(
-        "description",
-        "Curated OpenAPI schema for ChatGPT Actions: HTTP-only and JSON-first.",
-    )
-    schema["info"] = info
+    full = request.app.openapi()
 
-    schema["servers"] = [{"url": str(request.base_url).rstrip("/")}]
+    filtered = copy.deepcopy(full)
+    filtered["paths"] = {
+        path: spec
+        for path, spec in (full.get("paths") or {}).items()
+        if path in allowed_paths
+    }
 
-    return JSONResponse(schema)
+    # Ensure the base URL is present for Actions tooling.
+    base_url = str(request.base_url).rstrip("/")
+    filtered["servers"] = [{"url": base_url}]
+
+    info = filtered.get("info") or {}
+    title = str(info.get("title") or "OpenAPI")
+    info["title"] = f"{title} (Actions subset)"
+    filtered["info"] = info
+
+    filtered = _strip_multipart_from_actions_schema(filtered)
+
+    logger.info("→ [tools_api] served /openapi.actions.json with %d paths", len(filtered.get("paths") or {}))
+    return JSONResponse(filtered)
