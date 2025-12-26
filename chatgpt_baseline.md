@@ -1,13 +1,13 @@
 # ChatGPT Sync
 Repo: chatgpt-team
 Base: origin/main
-Base commit (merge-base): 105b3f771b76421c4b9d791faa820281365dedca
+Base commit (merge-base): 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 Dirs: app tests static schemas src scripts/src
 Root files: project-tree.md pyproject.toml chatgpt_sync.sh AGENTS.md __init__.py generate_tree.py
 Mode: baseline
-Generated: 2025-12-26T08:11:08+07:00
+Generated: 2025-12-26T10:10:59+07:00
 
-## TREE (repo root at 105b3f771b76421c4b9d791faa820281365dedca)
+## TREE (repo root at 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a)
 ```
  - .env.example.env
  - .gitattributes
@@ -40,7 +40,7 @@ Generated: 2025-12-26T08:11:08+07:00
  - tests
 ```
 
-## TREE (app/ at 105b3f771b76421c4b9d791faa820281365dedca)
+## TREE (app/ at 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a)
 ```
  - app/__init__.py
  - app/api/__init__.py
@@ -86,7 +86,7 @@ Generated: 2025-12-26T08:11:08+07:00
  - app/utils/logger.py
 ```
 
-## TREE (tests/ at 105b3f771b76421c4b9d791faa820281365dedca)
+## TREE (tests/ at 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a)
 ```
  - tests/__init__.py
  - tests/client.py
@@ -101,29 +101,29 @@ Generated: 2025-12-26T08:11:08+07:00
  - tests/test_success_gates_integration.py
 ```
 
-## TREE (static/ at 105b3f771b76421c4b9d791faa820281365dedca)
+## TREE (static/ at 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a)
 ```
  - static/.well-known/__init__.py
  - static/.well-known/ai-plugin.json
 ```
 
-## TREE (schemas/ at 105b3f771b76421c4b9d791faa820281365dedca)
+## TREE (schemas/ at 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a)
 ```
  - schemas/__init__.py
  - schemas/openapi.yaml
 ```
 
-## TREE (src/ at 105b3f771b76421c4b9d791faa820281365dedca)
+## TREE (src/ at 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a)
 ```
 ```
 
-## TREE (scripts/src/ at 105b3f771b76421c4b9d791faa820281365dedca)
+## TREE (scripts/src/ at 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a)
 ```
 ```
 
 ## BASELINE (ROOT FILES)
 
-## FILE: project-tree.md @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: project-tree.md @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
   📄 .env.env
   📄 .env.example.env
@@ -263,7 +263,7 @@ Generated: 2025-12-26T08:11:08+07:00
     📄 test_remaining_routes_smoke_integration.py
     📄 test_success_gates_integration.py```
 
-## FILE: pyproject.toml @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: pyproject.toml @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -326,7 +326,7 @@ exclude = ["tests*", "docs*", "render*"]
 app = ["manifests/*.json"]
 ```
 
-## FILE: chatgpt_sync.sh @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: chatgpt_sync.sh @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 #!/usr/bin/env bash
 set -euo pipefail
@@ -765,7 +765,7 @@ mv "$tmp_out" "$OUT_FILE"
 echo "Wrote: ${REPO_ROOT}/${OUT_FILE}"
 ```
 
-## FILE: AGENTS.md @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: AGENTS.md @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # Repository Guidelines – ChatGPT Team Relay (Codex Max / Custom Action Focus)
 
@@ -910,11 +910,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## FILE: __init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: __init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 ```
 
-## FILE: generate_tree.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: generate_tree.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 #!/usr/bin/env python3
 """
@@ -988,325 +988,304 @@ if __name__ == "__main__":
 
 ## BASELINE (app/)
 
-## FILE: app/__init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/__init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 ```
 
-## FILE: app/api/__init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/api/__init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 ```
 
-## FILE: app/api/forward_openai.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/api/forward_openai.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
+# app/api/forward_openai.py
+
 from __future__ import annotations
 
-import gzip
 import json
-import zlib
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Tuple, Union
 
+import httpx
 from fastapi import HTTPException, Request
-from starlette.background import BackgroundTask
 from starlette.responses import Response, StreamingResponse
 
-from app.core.config import get_settings
-from app.core.http_client import get_async_httpx_client, get_async_openai_client
-
-
-HOP_BY_HOP_HEADERS = {
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailer",
-    "transfer-encoding",
-    "upgrade",
-    "host",
-    "content-length",
-}
-
-
-def _get_timeout_seconds(settings) -> float:
-    # Support either PROXY_TIMEOUT_SECONDS or proxy_timeout_seconds naming.
-    for name in ("PROXY_TIMEOUT_SECONDS", "proxy_timeout_seconds"):
-        if hasattr(settings, name):
-            try:
-                return float(getattr(settings, name))
-            except Exception:
-                continue
-    return 90.0
-
-
-def _get_setting(settings, name: str) -> Optional[Any]:
-    if hasattr(settings, name):
-        return getattr(settings, name)
-    lower = name.lower()
-    if hasattr(settings, lower):
-        return getattr(settings, lower)
-    return None
+from app.core.settings import get_settings
+from app.http_client import get_async_httpx_client
+from app.utils.logger import relay_log as logger
 
 
 def _openai_base_url(settings) -> str:
+    base = (settings.OPENAI_BASE_URL or "https://api.openai.com").strip()
+    return base.rstrip("/")
+
+
+def _join_url(base: str, path: str) -> str:
     """
-    Upstream base for relay forwarding.
-
-    IMPORTANT: Do NOT use OPENAI_BASE_URL here. That env var is commonly used by
-    clients to point to a proxy/relay, and using it server-side risks self-calls.
+    Join base and path without double slashes.
+    Keeps path absolute.
     """
-    base = _get_setting(settings, "OPENAI_API_BASE") or _get_setting(settings, "openai_api_base") or _get_setting(settings, "openai_base_url")
-    base = str(base or "").strip()
-    return base or "https://api.openai.com/v1"
-
-
-def _join_upstream_url(base: str, path: str) -> str:
     base = base.rstrip("/")
-    path = "/" + path.lstrip("/")
-    # Avoid /v1/v1 duplication if base already ends with /v1 and path starts with /v1
-    if base.endswith("/v1") and path.startswith("/v1/"):
-        base = base[: -len("/v1")]
-    return base + path
+    if not path.startswith("/"):
+        path = "/" + path
+    return f"{base}{path}"
 
 
-def build_upstream_url(upstream_path: str, *, request: Optional[Request] = None) -> str:
-    settings = get_settings()
-    url = _join_upstream_url(_openai_base_url(settings), upstream_path)
-    if request and request.url.query:
-        url = url + "?" + request.url.query
+def build_upstream_url(
+    request: Request,
+    *,
+    base_url: str,
+    path_override: Optional[str] = None,
+    query_override: Optional[str] = None,
+) -> str:
+    """
+    Construct the upstream URL using either:
+      - the inbound request path/query (default), or
+      - explicit overrides (used by method_path helper)
+    """
+    upstream_path = path_override or request.url.path
+    upstream_query = query_override if query_override is not None else request.url.query
+
+    url = _join_url(base_url, upstream_path)
+    if upstream_query:
+        url = f"{url}?{upstream_query}"
     return url
 
 
-def _openai_api_key(settings) -> str:
-    key = (_get_setting(settings, "OPENAI_API_KEY") or _get_setting(settings, "openai_api_key") or "").strip()
-    if not key:
-        # Wiring smoke tests should not become a relay 500 due to missing config.
-        raise HTTPException(status_code=400, detail="Server missing OPENAI_API_KEY")
-    return key
-
-
-def _decode_content(body: bytes, content_encoding: Optional[str]) -> bytes:
-    if not body:
-        return body
-    if not content_encoding:
-        return body
-    enc = content_encoding.strip().lower()
-    if enc == "gzip":
-        return gzip.decompress(body)
-    if enc == "deflate":
-        try:
-            return zlib.decompress(body)
-        except zlib.error:
-            return zlib.decompress(body, -zlib.MAX_WBITS)
-    return body
-
-
-def build_outbound_headers(
-    inbound_headers: Optional[Dict[str, str]] = None,
-    *,
-    content_type: Optional[str] = None,
-    forward_accept: bool = True,
-    extra_headers: Optional[Dict[str, str]] = None,
-) -> Dict[str, str]:
+def _filter_outbound_headers(inbound: Mapping[str, str]) -> Dict[str, str]:
     """
-    Build upstream headers.
-
-    - Removes hop-by-hop headers
-    - Replaces Authorization with OpenAI Bearer auth
-    - Forces identity encoding to avoid relay-side decompression complexity
+    Forward only safe headers upstream. Do not forward hop-by-hop headers.
     """
-    settings = get_settings()
-    api_key = _openai_api_key(settings)
+    drop = {
+        "host",
+        "content-length",
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+    }
 
     out: Dict[str, str] = {}
-
-    if inbound_headers:
-        for k, v in inbound_headers.items():
-            lk = k.lower()
-            if lk in HOP_BY_HOP_HEADERS:
-                continue
-            if lk == "authorization":
-                continue
-            if lk == "accept" and not forward_accept:
-                continue
-            if lk == "accept-encoding":
-                continue
-            out[k] = v
-
-    out["Authorization"] = f"Bearer {api_key}"
-    out["Accept-Encoding"] = "identity"
-
-    if content_type:
-        out["Content-Type"] = content_type
-
-    # Optional org/project headers (supported by OpenAI).
-    if getattr(settings, "OPENAI_ORG", ""):
-        out["OpenAI-Organization"] = settings.OPENAI_ORG
-    if getattr(settings, "OPENAI_PROJECT", ""):
-        out["OpenAI-Project"] = settings.OPENAI_PROJECT
-
-    if extra_headers:
-        out.update(extra_headers)
-
-    return out
-
-
-def filter_upstream_headers(upstream_headers: Dict[str, str]) -> Dict[str, str]:
-    out: Dict[str, str] = {}
-    for k, v in upstream_headers.items():
+    for k, v in inbound.items():
         lk = k.lower()
-        if lk in HOP_BY_HOP_HEADERS:
-            continue
-        if lk == "content-encoding":
-            # We force identity upstream; if a gateway still adds encoding, we decode below.
-            continue
-        if lk == "content-length":
-            # Let Starlette compute it for decoded content.
+        if lk in drop:
             continue
         out[k] = v
     return out
 
 
-async def forward_openai_request(
-    request: Request,
+def build_outbound_headers(
+    request: Optional[Request],
     *,
-    stream: bool = False,
-    override_path: Optional[str] = None,
-    override_method: Optional[str] = None,
-    body: Optional[bytes] = None,
-    extra_headers: Optional[Dict[str, str]] = None,
-) -> Response:
+    content_type: Optional[str] = None,
+    extra_headers: Optional[Mapping[str, str]] = None,
+    inbound_headers: Optional[Mapping[str, str]] = None,
+) -> Dict[str, str]:
     """
-    Forward the incoming request to OpenAI upstream.
-
-    Used by most route modules that simply proxy /v1/* endpoints.
+    Build headers to send to upstream, including Authorization.
+    `inbound_headers` is supported for call sites that don't have a full Request.
     """
     settings = get_settings()
-    timeout_s = _get_timeout_seconds(settings)
+    if not settings.OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY is not set")
 
-    method = (override_method or request.method).upper()
-    upstream_path = override_path or request.url.path
-    url = build_upstream_url(upstream_path, request=request)
+    base_inbound: Mapping[str, str] = {}
+    if request is not None:
+        base_inbound = request.headers
+    elif inbound_headers is not None:
+        base_inbound = inbound_headers
 
-    if body is None:
+    headers = _filter_outbound_headers(base_inbound)
+    headers["Authorization"] = f"Bearer {settings.OPENAI_API_KEY}"
+
+    if content_type:
+        headers["Content-Type"] = content_type
+
+    if extra_headers:
+        for k, v in extra_headers.items():
+            headers[k] = v
+
+    return headers
+
+
+def _filter_upstream_response_headers(upstream_headers: Mapping[str, str]) -> Dict[str, str]:
+    """
+    Filter hop-by-hop headers from upstream response before returning to client.
+    """
+    drop = {
+        "content-encoding",
+        "transfer-encoding",
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "upgrade",
+    }
+    out: Dict[str, str] = {}
+    for k, v in upstream_headers.items():
+        if k.lower() in drop:
+            continue
+        out[k] = v
+    return out
+
+
+async def forward_openai_request(request: Request) -> Response:
+    """
+    Generic passthrough:
+      - forwards method, path, and querystring
+      - forwards body (json/multipart/binary)
+      - streams response if upstream is streaming
+    """
+    settings = get_settings()
+    client = get_async_httpx_client()
+
+    base = _openai_base_url(settings)
+    url = build_upstream_url(request, base_url=base)
+
+    content_type = request.headers.get("content-type")
+    headers = build_outbound_headers(request, content_type=content_type)
+
+    # Determine if this is likely streaming from the client side (Accept: text/event-stream)
+    accept = (request.headers.get("accept") or "").lower()
+    wants_stream = "text/event-stream" in accept
+
+    try:
         body = await request.body()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read request body: {e}") from e
 
-    headers = build_outbound_headers(
-        dict(request.headers),
-        content_type=request.headers.get("content-type"),
-        forward_accept=True,
-        extra_headers=extra_headers,
-    )
+    logger.info("→ upstream %s %s", request.method, url)
 
-    client = get_async_httpx_client(timeout_seconds=timeout_s)
-    if stream:
-        req = client.build_request(method, url, headers=headers, content=body)
-        upstream = await client.send(req, stream=True)
+    # If upstream is streaming SSE, we should stream back as well.
+    # We do not attempt to parse SSE; we forward bytes.
+    if wants_stream:
+        try:
+            upstream = await client.stream(
+                request.method,
+                url,
+                headers=headers,
+                content=body if body else None,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=424, detail={"detail": "Relay wiring error", "error": str(e)}) from e
+
+        async def _aiter_bytes() -> Iterable[bytes]:
+            async with upstream:
+                async for chunk in upstream.aiter_bytes():
+                    yield chunk
+
+        resp_headers = _filter_upstream_response_headers(upstream.headers)
+        media_type = upstream.headers.get("content-type")
         return StreamingResponse(
-            upstream.aiter_raw(),
+            _aiter_bytes(),
             status_code=upstream.status_code,
-            headers=filter_upstream_headers(dict(upstream.headers)),
-            background=BackgroundTask(upstream.aclose),
+            headers=resp_headers,
+            media_type=media_type,
         )
 
-    upstream = await client.request(method, url, headers=headers, content=body)
-    decoded = _decode_content(upstream.content, upstream.headers.get("content-encoding"))
+    # Non-streaming response
+    try:
+        r = await client.request(
+            request.method,
+            url,
+            headers=headers,
+            content=body if body else None,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=424, detail={"detail": "Relay wiring error", "error": str(e)}) from e
+
+    resp_headers = _filter_upstream_response_headers(r.headers)
+    media_type = r.headers.get("content-type")
+
     return Response(
-        content=decoded,
-        status_code=upstream.status_code,
-        headers=filter_upstream_headers(dict(upstream.headers)),
-        media_type=upstream.headers.get("content-type"),
+        content=r.content,
+        status_code=r.status_code,
+        headers=resp_headers,
+        media_type=media_type,
     )
 
 
 async def forward_openai_method_path(
-    method: str,
-    upstream_path: str,
-    request: Request,
-    *,
-    json_body: Optional[Any] = None,
-    content: Optional[bytes] = None,
-    extra_headers: Optional[Dict[str, str]] = None,
-    stream: bool = False,
-) -> Response:
+    *args: Any,
+    **kwargs: Any,
+) -> Union[Dict[str, Any], Any]:
     """
-    Forward an explicit (method, path) to upstream. Used by the JSON proxy route.
+    Helper for routes that want to call an explicit upstream method/path with JSON.
+
+    Supported call styles:
+
+      forward_openai_method_path(method, path, request=request, json_body=..., extra_headers=...)
+      forward_openai_method_path(method, path, inbound_headers=..., json_body=..., extra_headers=...)
+
+    Returns parsed JSON (dict/list) or raises HTTPException.
     """
+    if len(args) < 2:
+        raise TypeError("forward_openai_method_path(method, path, ...) requires at least 2 positional args")
+
+    method = str(args[0]).upper()
+    upstream_path = str(args[1])
+
+    request: Optional[Request] = kwargs.get("request")
+    inbound_headers: Optional[Mapping[str, str]] = kwargs.get("inbound_headers")
+    json_body: Optional[Any] = kwargs.get("json_body")
+    query: Optional[Mapping[str, Any]] = kwargs.get("query")
+    extra_headers: Optional[Mapping[str, str]] = kwargs.get("extra_headers")
+
     settings = get_settings()
-    timeout_s = _get_timeout_seconds(settings)
-    url = build_upstream_url(upstream_path, request=request)
+    client = get_async_httpx_client()
+    base = _openai_base_url(settings)
+
+    query_str = ""
+    if query:
+        # stable query ordering not required for correctness here
+        query_pairs = []
+        for k, v in query.items():
+            if v is None:
+                continue
+            query_pairs.append(f"{k}={v}")
+        query_str = "&".join(query_pairs)
+
+    url = _join_url(base, upstream_path)
+    if query_str:
+        url = f"{url}?{query_str}"
 
     headers = build_outbound_headers(
-        dict(request.headers),
-        content_type="application/json" if json_body is not None else request.headers.get("content-type"),
-        forward_accept=True,
+        request,
+        content_type="application/json",
         extra_headers=extra_headers,
+        inbound_headers=inbound_headers,
     )
 
-    body: bytes
-    if content is not None:
-        body = content
-    elif json_body is not None:
-        body = json.dumps(json_body).encode("utf-8")
-    else:
-        body = await request.body()
-
-    client = get_async_httpx_client(timeout_seconds=timeout_s)
-    if stream:
-        req = client.build_request(method.upper(), url, headers=headers, content=body)
-        upstream = await client.send(req, stream=True)
-        return StreamingResponse(
-            upstream.aiter_raw(),
-            status_code=upstream.status_code,
-            headers=filter_upstream_headers(dict(upstream.headers)),
-            background=BackgroundTask(upstream.aclose),
+    try:
+        r = await client.request(
+            method,
+            url,
+            headers=headers,
+            content=json.dumps(json_body).encode("utf-8") if json_body is not None else None,
         )
+    except Exception as e:
+        raise HTTPException(status_code=424, detail={"detail": "Relay wiring error", "error": str(e)}) from e
 
-    upstream = await client.request(method.upper(), url, headers=headers, content=body)
-    decoded = _decode_content(upstream.content, upstream.headers.get("content-encoding"))
-    return Response(
-        content=decoded,
-        status_code=upstream.status_code,
-        headers=filter_upstream_headers(dict(upstream.headers)),
-        media_type=upstream.headers.get("content-type"),
-    )
+    # Pass through upstream errors as-is (do not raise 5xx from relay)
+    try:
+        data = r.json()
+    except Exception:
+        # If upstream isn't JSON, return a structured error
+        raise HTTPException(status_code=r.status_code, detail=r.text)
 
+    if r.status_code >= 400:
+        # Preserve upstream payload and status code
+        raise HTTPException(status_code=r.status_code, detail=data)
 
-# ---- Compatibility shims (older imports) ----
-def _build_outbound_headers(header_items: Iterable[Tuple[str, str]]) -> Dict[str, str]:
-    return build_outbound_headers(dict(header_items))
-
-
-def _filter_response_headers(upstream_headers: Dict[str, str]) -> Dict[str, str]:
-    return filter_upstream_headers(upstream_headers)
-
-
-def _join_upstream_url_compat(base: str, path: str) -> str:
-    return _join_upstream_url(base, path)
-
-
-# Some modules import _join_upstream_url directly.
-_join_upstream_url = _join_upstream_url_compat  # type: ignore
-
-
-# ---- SDK helpers (used by a few legacy routes) ----
-# NOTE: Some route snapshots use the OpenAI Python SDK directly (instead of pure httpx forwarding)
-# to get typed responses with `model_dump()`. Keep these helpers for compatibility.
-
-async def forward_embeddings_create(body: Dict[str, Any]):
-    settings = get_settings()
-    _openai_api_key(settings)  # validate (avoid 500s)
-    client = get_async_openai_client(timeout_seconds=_get_timeout_seconds(settings))
-    return await client.embeddings.create(**body)
-
-
-async def forward_responses_create(body: Dict[str, Any]):
-    settings = get_settings()
-    _openai_api_key(settings)  # validate (avoid 500s)
-    client = get_async_openai_client(timeout_seconds=_get_timeout_seconds(settings))
-    return await client.responses.create(**body)
+    return data
 ```
 
-## FILE: app/api/routes.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/api/routes.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # app/api/routes.py
 
@@ -1328,7 +1307,7 @@ register_routes(router)
 logger.info("API router initialized with shared route families")
 ```
 
-## FILE: app/api/sse.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/api/sse.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -1410,7 +1389,7 @@ async def responses_stream(request: Request) -> Response:
         return JSONResponse(status_code=424, content={"detail": "Relay wiring error", "error": str(exc)})
 ```
 
-## FILE: app/api/tools_api.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/api/tools_api.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # app/api/tools_api.py
 from __future__ import annotations
@@ -1518,11 +1497,11 @@ async def openapi_actions(request: Request) -> JSONResponse:
     return JSONResponse(filtered)
 ```
 
-## FILE: app/core/__init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/core/__init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 ```
 
-## FILE: app/core/config.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/core/config.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -1914,7 +1893,7 @@ def get_settings() -> Settings:
 settings: Settings = get_settings()
 ```
 
-## FILE: app/core/http_client.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/core/http_client.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -1985,7 +1964,7 @@ def get_async_openai_client(
     return client
 ```
 
-## FILE: app/core/logging.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/core/logging.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 """
 Logging configuration module for the ChatGPT Team Relay.
@@ -2035,7 +2014,7 @@ def configure_logging(settings: Any) -> None:
     get_logger("relay")
 ```
 
-## FILE: app/http_client.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/http_client.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 """
 Compatibility shim for legacy imports.
@@ -2063,7 +2042,7 @@ __all__ = [
 ]
 ```
 
-## FILE: app/main.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/main.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -2131,7 +2110,7 @@ def create_app() -> FastAPI:
 app = create_app()
 ```
 
-## FILE: app/manifests/__init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/manifests/__init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # ==========================================================
 # app/manifests/__init__.py — Ground Truth Manifest Loader
@@ -2178,7 +2157,7 @@ except Exception as e:
     raise RuntimeError(f"Failed to load tools manifest: {_manifest_path} — {e}")
 ```
 
-## FILE: app/manifests/tools_manifest.json @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/manifests/tools_manifest.json @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 {
   "object": "list",
@@ -2469,11 +2448,11 @@ except Exception as e:
 }
 ```
 
-## FILE: app/middleware/__init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/middleware/__init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 ```
 
-## FILE: app/middleware/p4_orchestrator.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/middleware/p4_orchestrator.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # app/middleware/p4_orchestrator.py
 import uuid
@@ -2507,7 +2486,7 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         return response
 ```
 
-## FILE: app/middleware/relay_auth.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/middleware/relay_auth.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -2579,7 +2558,7 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/middleware/validation.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/middleware/validation.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -2680,14 +2659,14 @@ class ValidationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/models/__init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/models/__init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from .error import ErrorDetail, ErrorResponse
 
 __all__ = ["ErrorDetail", "ErrorResponse"]
 ```
 
-## FILE: app/models/error.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/models/error.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -2726,7 +2705,7 @@ class ErrorResponse(BaseModel):
         )
 ```
 
-## FILE: app/routes/__init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/__init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # app/routes/__init__.py
 
@@ -2735,7 +2714,7 @@ from .register_routes import register_routes
 __all__ = ["register_routes"]
 ```
 
-## FILE: app/routes/actions.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/actions.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # app/routes/actions.py
 
@@ -2886,7 +2865,7 @@ async def actions_relay_info_v1() -> dict:
     return nested
 ```
 
-## FILE: app/routes/batches.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/batches.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -2924,7 +2903,7 @@ async def cancel_batch(batch_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/containers.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/containers.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -3020,7 +2999,7 @@ async def containers_file_content_head(request: Request, container_id: str, file
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/conversations.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/conversations.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -3089,7 +3068,7 @@ async def conversations_subpaths_options(path: str, request: Request) -> Respons
     return await _forward(request)
 ```
 
-## FILE: app/routes/embeddings.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/embeddings.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -3111,98 +3090,71 @@ async def create_embedding(request: Request) -> JSONResponse:
     return JSONResponse(content=payload)
 ```
 
-## FILE: app/routes/files.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/files.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
+from starlette.responses import Response
 
-from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
+from app.api.forward_openai import forward_openai_method_path, forward_openai_request
 
 router = APIRouter(prefix="/v1", tags=["files"])
 
 
+async def _is_user_data_file(file_id: str, request: Request) -> bool:
+    """
+    Best-effort guardrail:
+    - If we can confirm purpose == 'user_data', block content download.
+    - If we cannot confirm (metadata fetch fails), do not introduce new 5xx.
+    """
+    try:
+        meta = await forward_openai_method_path(
+            "GET",
+            f"/v1/files/{file_id}",
+            inbound_headers=request.headers,
+        )
+    except HTTPException:
+        return False
+    except Exception:
+        return False
+
+    return isinstance(meta, dict) and str(meta.get("purpose", "")).strip().lower() == "user_data"
+
+
 @router.get("/files")
 async def list_files(request: Request) -> Response:
-    """
-    GET /v1/files
-    Upstream: list files
-    """
-    logger.info("→ [files] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.post("/files")
 async def create_file(request: Request) -> Response:
-    """
-    POST /v1/files
-    Upstream expects multipart/form-data (file + purpose).
-    We forward as-is.
-    """
-    logger.info("→ [files] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.get("/files/{file_id}")
 async def retrieve_file(file_id: str, request: Request) -> Response:
-    """
-    GET /v1/files/{file_id}
-    Upstream: retrieve file metadata
-    """
-    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
     return await forward_openai_request(request)
 
 
 @router.delete("/files/{file_id}")
 async def delete_file(file_id: str, request: Request) -> Response:
-    """
-    DELETE /v1/files/{file_id}
-    Upstream: delete file
-    """
-    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
     return await forward_openai_request(request)
 
 
 @router.get("/files/{file_id}/content")
-async def retrieve_file_content_get(file_id: str, request: Request) -> Response:
-    """
-    GET /v1/files/{file_id}/content
-    Upstream: retrieve file content (binary)
-    """
-    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
-    return await forward_openai_request(request)
-
-
-@router.head("/files/{file_id}/content", include_in_schema=False)
-async def retrieve_file_content_head(file_id: str, request: Request) -> Response:
-    """
-    HEAD /v1/files/{file_id}/content
-
-    HEAD is useful for clients, but it is not required for Actions/docs.
-    We exclude it from OpenAPI to avoid duplicate operationId warnings.
-    """
-    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
-    return await forward_openai_request(request)
-
-
-@router.api_route(
-    "/files/{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-    include_in_schema=False,
-)
-async def files_passthrough(path: str, request: Request) -> Response:
-    """
-    Catch-all passthrough for future /v1/files/* endpoints.
-
-    Kept out of OpenAPI to avoid operationId collisions and to keep
-    the schema Actions-friendly.
-    """
-    logger.info("→ [files/*] %s %s (subpath=%s)", request.method, request.url.path, path)
+async def retrieve_file_content(file_id: str, request: Request) -> Response:
+    if await _is_user_data_file(file_id, request):
+        # Tests accept 400 or 403, but 403 is semantically correct here.
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Not allowed to download files with purpose 'user_data' via this relay."},
+        )
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/health.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/health.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -3269,7 +3221,7 @@ async def v1_health() -> Dict[str, Any]:
     return _health_payload()
 ```
 
-## FILE: app/routes/images.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/images.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # app/api/images.py
 from __future__ import annotations
@@ -3621,7 +3573,7 @@ async def actions_edits(payload: ImagesEditsJSON) -> Response:
     return await _post_multipart_to_upstream(endpoint_path="/v1/images/edits", files=files, data=form)
 ```
 
-## FILE: app/routes/models.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/models.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # app/routes/models.py
 
@@ -3680,7 +3632,7 @@ async def retrieve_model(model_id: str) -> dict:
     }
 ```
 
-## FILE: app/routes/proxy.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/proxy.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -3932,7 +3884,7 @@ async def proxy(call: ProxyRequest, request: Request) -> Response:
     )
 ```
 
-## FILE: app/routes/realtime.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/realtime.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # app/routes/realtime.py
 
@@ -4128,7 +4080,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
         await websocket.close()
 ```
 
-## FILE: app/routes/register_routes.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/register_routes.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # app/routes/register_routes.py
 
@@ -4204,7 +4156,7 @@ def register_all_routes(app: _RouterLike) -> None:
     register_routes(app)
 ```
 
-## FILE: app/routes/responses.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/responses.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -4319,97 +4271,44 @@ async def delete_response(response_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/uploads.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/uploads.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
+# app/routes/uploads.py
+
 from __future__ import annotations
 
-import asyncio
-import json
-from typing import Optional
+from fastapi import APIRouter, Request, Response
 
-from fastapi import APIRouter, Request
-from fastapi.responses import Response
-
-from app.api.forward_openai import forward_openai_method_path, forward_openai_request
+from app.api.forward_openai import forward_openai_request
+from app.utils.logger import relay_log as logger
 
 router = APIRouter(prefix="/v1", tags=["uploads"])
 
 
-def _safe_json_from_response(resp: Response) -> Optional[dict]:
+@router.post("/uploads")
+async def create_upload(request: Request) -> Response:
     """
-    Best-effort JSON parse for a Starlette/FastAPI Response created with `content=bytes`.
+    POST /v1/uploads
+    Passthrough to upstream.
     """
-    try:
-        body = getattr(resp, "body", None)
-        if not body:
-            return None
-        if isinstance(body, (bytes, bytearray)):
-            return json.loads(bytes(body).decode("utf-8"))
-        if isinstance(body, str):
-            return json.loads(body)
-    except Exception:
-        return None
-    return None
-
-
-async def _forward_complete_with_retries(request: Request, upload_id: str) -> Response:
-    """
-    Upload completion has occasionally surfaced transient upstream 5xx errors.
-    Since completion is effectively idempotent for a given upload_id, we retry a few times,
-    and finally fall back to GET /uploads/{upload_id} if completion appears to have succeeded.
-    """
-    delays = [0.0, 0.25, 0.75, 1.5]  # seconds (bounded; keeps tests reasonable)
-    last: Optional[Response] = None
-
-    for delay in delays:
-        if delay:
-            await asyncio.sleep(delay)
-
-        resp = await forward_openai_request(request)
-        last = resp
-
-        # Any non-5xx we return immediately (includes 2xx, 4xx, etc).
-        if resp.status_code < 500:
-            return resp
-
-    # Fallback: check the upload status (sometimes upstream completed but the response was 5xx).
-    check = await forward_openai_method_path(
-        method="GET",
-        path=f"/v1/uploads/{upload_id}",
-        inbound_headers=request.headers,
-    )
-
-    if check.status_code == 200:
-        data = _safe_json_from_response(check)
-        if isinstance(data, dict):
-            status = data.get("status")
-            file_obj = data.get("file")
-            file_id = file_obj.get("id") if isinstance(file_obj, dict) else None
-            if status == "completed" and isinstance(file_id, str) and file_id.startswith("file-"):
-                return check
-
-    # Give up and return the last completion attempt.
-    return last or check
-
-
-# Explicit complete endpoint with retries/fallback.
-@router.post("/uploads/{upload_id}/complete", summary="Complete an upload (with retries)")
-async def uploads_complete(upload_id: str, request: Request) -> Response:
-    return await _forward_complete_with_retries(request, upload_id)
-
-
-# The rest of the uploads API is raw passthrough.
-@router.api_route("/uploads", methods=["POST"], summary="Create an upload")
-async def uploads_create(request: Request) -> Response:
     return await forward_openai_request(request)
 
 
-@router.api_route("/uploads/{path:path}", methods=["GET", "POST", "DELETE"], summary="Uploads passthrough")
-async def uploads_passthrough(request: Request) -> Response:
+@router.api_route(
+    "/uploads/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    include_in_schema=False,
+)
+async def uploads_passthrough(path: str, request: Request) -> Response:
+    """
+    Catch-all passthrough for future /v1/uploads/* endpoints.
+    Kept out of OpenAPI to avoid duplicate operationId noise.
+    """
+    logger.info("→ [uploads/*] %s %s (subpath=%s)", request.method, request.url.path, path)
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/vector_stores.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/vector_stores.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -4490,7 +4389,7 @@ async def vector_stores_subpaths_alias(path: str, request: Request) -> Response:
     return await _forward(request)
 ```
 
-## FILE: app/routes/videos.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/routes/videos.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -4579,11 +4478,11 @@ async def videos_passthrough(path: str, request: Request):
     return await forward_openai_request(request)
 ```
 
-## FILE: app/utils/__init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/utils/__init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 ```
 
-## FILE: app/utils/authy.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/utils/authy.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -4653,7 +4552,7 @@ def check_relay_key(*, authorization: str | None, x_relay_key: str | None) -> No
     raise HTTPException(status_code=401, detail="Invalid relay key")
 ```
 
-## FILE: app/utils/error_handler.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/utils/error_handler.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # app/utils/error_handler.py
 
@@ -4797,7 +4696,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 ```
 
-## FILE: app/utils/http_client.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/utils/http_client.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -4806,7 +4705,7 @@ from app.core.http_client import get_async_httpx_client
 __all__ = ["get_async_httpx_client"]
 ```
 
-## FILE: app/utils/logger.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: app/utils/logger.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -4947,11 +4846,11 @@ def exception(msg: str, *args, **kwargs) -> None:
 
 ## BASELINE (tests/)
 
-## FILE: tests/__init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: tests/__init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 ```
 
-## FILE: tests/client.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: tests/client.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # tests/client.py
 
@@ -4988,7 +4887,7 @@ def _build_client() -> TestClient:
 client: TestClient = _build_client()
 ```
 
-## FILE: tests/conftest.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: tests/conftest.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -5123,7 +5022,7 @@ async def async_client() -> AsyncIterator[httpx.AsyncClient]:
         yield c
 ```
 
-## FILE: tests/relay_client_example.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: tests/relay_client_example.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # relay_client_example.py
 from __future__ import annotations
@@ -5198,7 +5097,7 @@ if __name__ == "__main__":
         raise
 ```
 
-## FILE: tests/test_extended_routes_smoke_integration.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: tests/test_extended_routes_smoke_integration.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 """Extended route smoke tests (integration).
 
@@ -5458,7 +5357,7 @@ def test_realtime_sessions_create_no_5xx() -> None:
     assert r.status_code < 500, f"realtime sessions returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_files_and_batches_integration.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: tests/test_files_and_batches_integration.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 """
 tests/test_files_and_batches_integration.py
@@ -5740,7 +5639,7 @@ async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient) -> N
     assert r.content, "output file content was empty"
 ```
 
-## FILE: tests/test_images_variations_integration.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: tests/test_images_variations_integration.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 import binascii
 import os
@@ -5824,7 +5723,7 @@ def test_images_variations_wiring_no_5xx(tmp_path) -> None:
     assert r.status_code < 500, r.text
 ```
 
-## FILE: tests/test_local_e2e.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: tests/test_local_e2e.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # tests/test_local_e2e.py
 from __future__ import annotations
@@ -6008,7 +5907,7 @@ async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncC
     assert "/v1/responses/compact" in data["endpoints"]["responses_compact"]
 ```
 
-## FILE: tests/test_relay_auth_guard.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: tests/test_relay_auth_guard.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 # tests/test_relay_auth_guard.py
 """Relay auth middleware guardrails.
@@ -6091,7 +5990,7 @@ def test_relay_auth_requires_valid_key_for_v1_paths(monkeypatch: pytest.MonkeyPa
         assert body.get("object") == "list"
 ```
 
-## FILE: tests/test_remaining_routes_smoke_integration.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: tests/test_remaining_routes_smoke_integration.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 from __future__ import annotations
 
@@ -6140,7 +6039,7 @@ def test_remaining_route_families_smoke_no_5xx() -> None:
         assert r.status_code < 500, f"{method} {path} returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_success_gates_integration.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: tests/test_success_gates_integration.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 """
 Success gates for the relay (integration).
@@ -6401,11 +6300,11 @@ def test_gate_d_containers_and_videos_content_endpoints_no_relay_5xx() -> None:
 
 ## BASELINE (static/)
 
-## FILE: static/.well-known/__init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: static/.well-known/__init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 ```
 
-## FILE: static/.well-known/ai-plugin.json @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: static/.well-known/ai-plugin.json @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 {
   "schema_version": "v1",
@@ -6434,11 +6333,11 @@ def test_gate_d_containers_and_videos_content_endpoints_no_relay_5xx() -> None:
 
 ## BASELINE (schemas/)
 
-## FILE: schemas/__init__.py @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: schemas/__init__.py @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 ```
 
-## FILE: schemas/openapi.yaml @ 105b3f771b76421c4b9d791faa820281365dedca
+## FILE: schemas/openapi.yaml @ 605fcd8df79cf6a662b1cbfd02d3b6bb3def4b0a
 ```
 openapi: 3.1.0
 info:

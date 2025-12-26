@@ -1,78 +1,76 @@
 from __future__ import annotations
 
-import json
-from typing import Any, Dict
+from typing import Any
 
-import httpx
 from fastapi import APIRouter, Request
-from starlette.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response
 
-from app.core.config import settings
-from app.core.http_client import get_async_httpx_client
-from app.api.forward_openai import _build_outbound_headers, _filter_response_headers, _join_upstream_url  # type: ignore
-from app.utils.logger import relay_log as logger
+from app.api.forward_openai import forward_openai_method_path
 
 router = APIRouter(prefix="/v1", tags=["sse"])
 
 
-@router.post("/responses:stream", include_in_schema=False)
+@router.post("/responses:stream")
 async def responses_stream(request: Request) -> Response:
     """
-    Compatibility endpoint used by your tests.
+    Convenience wrapper that forces streaming for /v1/responses.
 
-    Behavior:
-      - Reads JSON body
-      - Forces stream=true
-      - Proxies to upstream POST /v1/responses
-      - Passes upstream SSE through verbatim (no reformatting)
+    Expected: JSON in, SSE out (text/event-stream).
     """
     try:
-        payload: Dict[str, Any] = {}
-        raw = await request.body()
-        if raw:
-            payload = json.loads(raw.decode("utf-8"))
+        payload: Any = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": {"message": "Invalid JSON body"}})
 
-        payload["stream"] = True
+    if not isinstance(payload, dict):
+        return JSONResponse(status_code=400, content={"error": {"message": "JSON body must be an object"}})
 
-        upstream_url = _join_upstream_url(settings.OPENAI_API_BASE, "/v1/responses", "")
-        headers = _build_outbound_headers(request.headers.items())
-        headers["Accept"] = "text/event-stream"
-        headers["Content-Type"] = "application/json"
+    forced = dict(payload)
+    forced["stream"] = True
 
-        client = get_async_httpx_client(timeout=float(settings.PROXY_TIMEOUT_SECONDS))
-        req = client.build_request("POST", upstream_url, headers=headers, json=payload)
-        resp = await client.send(req, stream=True)
+    return await forward_openai_method_path(
+        method="POST",
+        path="/v1/responses",
+        request=None,
+        inbound_headers=request.headers,
+        json_body=forced,
+        stream=True,
+    )
+from __future__ import annotations
 
-        content_type = resp.headers.get("content-type", "text/event-stream")
-        filtered_headers = _filter_response_headers(resp.headers)
+from typing import Any
 
-        if not content_type.lower().startswith("text/event-stream"):
-            data = await resp.aread()
-            await resp.aclose()
-            return Response(
-                content=data,
-                status_code=resp.status_code,
-                headers=filtered_headers,
-                media_type=content_type,
-            )
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse, Response
 
-        logger.info("↔ upstream SSE POST /v1/responses (via /v1/responses:stream)")
+from app.api.forward_openai import forward_openai_method_path
 
-        async def _aiter():
-            async for chunk in resp.aiter_bytes():
-                yield chunk
-            await resp.aclose()
+router = APIRouter(prefix="/v1", tags=["sse"])
 
-        return StreamingResponse(
-            _aiter(),
-            status_code=resp.status_code,
-            headers=filtered_headers,
-            media_type=content_type,
-        )
 
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        return JSONResponse(status_code=400, content={"detail": "Invalid JSON body", "error": str(exc)})
-    except httpx.HTTPError as exc:
-        return JSONResponse(status_code=424, content={"detail": "Upstream request failed", "error": str(exc)})
-    except Exception as exc:
-        return JSONResponse(status_code=424, content={"detail": "Relay wiring error", "error": str(exc)})
+@router.post("/responses:stream")
+async def responses_stream(request: Request) -> Response:
+    """
+    Convenience wrapper that forces streaming for /v1/responses.
+
+    Expected: JSON in, SSE out (text/event-stream).
+    """
+    try:
+        payload: Any = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": {"message": "Invalid JSON body"}})
+
+    if not isinstance(payload, dict):
+        return JSONResponse(status_code=400, content={"error": {"message": "JSON body must be an object"}})
+
+    forced = dict(payload)
+    forced["stream"] = True
+
+    return await forward_openai_method_path(
+        method="POST",
+        path="/v1/responses",
+        request=None,
+        inbound_headers=request.headers,
+        json_body=forced,
+        stream=True,
+    )
