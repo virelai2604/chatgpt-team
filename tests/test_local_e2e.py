@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from app.core.config import settings
+from app.main import app as fastapi_app
 
 # All tests in this module are async
 pytestmark = pytest.mark.asyncio
@@ -178,3 +179,17 @@ async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncC
     data = resp.json()
     assert "/v1/responses" in data["endpoints"]["responses"]
     assert "/v1/responses/compact" in data["endpoints"]["responses_compact"]
+
+
+def test_actions_images_routes_registered() -> None:
+    paths = {route.path for route in fastapi_app.routes if hasattr(route, "path")}
+    assert "/v1/actions/images/variations" in paths
+    assert "/v1/actions/images/edits" in paths
+
+
+@pytest.mark.integration
+async def test_actions_images_endpoints_callable(async_client: httpx.AsyncClient) -> None:
+    for path in ("/v1/actions/images/variations", "/v1/actions/images/edits"):
+        resp = await async_client.post(path, json={})
+        assert resp.status_code == 400
+        assert "Missing image input" in resp.text
