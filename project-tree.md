@@ -13,7 +13,6 @@
   📄 chatgpt_sync.sh
   📄 generate_tree.py
   📄 input.png
-  📄 input_256.png
   📄 openai_models_2025-11.csv
   📄 project-tree.md
   📄 pytest.ini
@@ -109,8 +108,12 @@
   📁 scripts
     📄 batch_download_test.sh
     📄 content_endpoints_smoke.sh
+    📄 images_variations_smoke.sh
+    📄 make_sample_png.py
+    📄 make_test_png.py
     📄 openapi_operationid_check.sh
     📄 run_success_gates.sh
+    📄 smoke_images_variations.sh
     📄 sse_smoke_test.sh
     📄 test_local.sh
     📄 test_render.sh
