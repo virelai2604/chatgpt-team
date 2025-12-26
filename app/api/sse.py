@@ -1,76 +1,52 @@
 from __future__ import annotations
 
-from typing import Any
+import json
+from typing import Any, AsyncIterator, Dict
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
+from starlette.responses import StreamingResponse
 
-from app.api.forward_openai import forward_openai_method_path
+from app.core.http_client import get_async_openai_client
+from app.core.config import get_settings
 
 router = APIRouter(prefix="/v1", tags=["sse"])
 
 
-@router.post("/responses:stream")
-async def responses_stream(request: Request) -> Response:
+def _sse_pack(data: Dict[str, Any]) -> bytes:
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
+
+
+async def _responses_event_stream(payload: Dict[str, Any]) -> AsyncIterator[bytes]:
     """
-    Convenience wrapper that forces streaming for /v1/responses.
+    Streams OpenAI Responses events as SSE.
 
-    Expected: JSON in, SSE out (text/event-stream).
+    Ensures the client sees standard "data: {...}\\n\\n" frames and terminates with [DONE].
     """
-    try:
-        payload: Any = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": {"message": "Invalid JSON body"}})
+    client = get_async_openai_client()
+    # Force streaming
+    payload = dict(payload)
+    payload["stream"] = True
 
-    if not isinstance(payload, dict):
-        return JSONResponse(status_code=400, content={"error": {"message": "JSON body must be an object"}})
+    stream = await client.responses.create(**payload)  # type: ignore[arg-type]
+    async for event in stream:
+        # event is a pydantic model in openai-python; model_dump() is preferred
+        if hasattr(event, "model_dump"):
+            data = event.model_dump()
+        else:
+            data = {"type": getattr(event, "type", "unknown"), "event": str(event)}
+        yield _sse_pack(data)
 
-    forced = dict(payload)
-    forced["stream"] = True
-
-    return await forward_openai_method_path(
-        method="POST",
-        path="/v1/responses",
-        request=None,
-        inbound_headers=request.headers,
-        json_body=forced,
-        stream=True,
-    )
-from __future__ import annotations
-
-from typing import Any
-
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
-
-from app.api.forward_openai import forward_openai_method_path
-
-router = APIRouter(prefix="/v1", tags=["sse"])
+    yield b"data: [DONE]\n\n"
 
 
 @router.post("/responses:stream")
-async def responses_stream(request: Request) -> Response:
-    """
-    Convenience wrapper that forces streaming for /v1/responses.
+async def responses_stream(request: Request) -> StreamingResponse:
+    settings = get_settings()
+    payload = await request.json()
+    payload.setdefault("model", settings.DEFAULT_MODEL)
 
-    Expected: JSON in, SSE out (text/event-stream).
-    """
-    try:
-        payload: Any = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": {"message": "Invalid JSON body"}})
-
-    if not isinstance(payload, dict):
-        return JSONResponse(status_code=400, content={"error": {"message": "JSON body must be an object"}})
-
-    forced = dict(payload)
-    forced["stream"] = True
-
-    return await forward_openai_method_path(
-        method="POST",
-        path="/v1/responses",
-        request=None,
-        inbound_headers=request.headers,
-        json_body=forced,
-        stream=True,
+    return StreamingResponse(
+        _responses_event_stream(payload),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
     )

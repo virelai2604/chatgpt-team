@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, Request
-from fastapi.responses import JSONResponse
-from starlette.responses import Response, StreamingResponse
+from fastapi import APIRouter, Request
+from pydantic import BaseModel, Field
 
 from app.api.forward_openai import forward_openai_method_path, forward_openai_request
 from app.core.config import get_settings
@@ -15,97 +12,47 @@ router = APIRouter(prefix="/v1", tags=["responses"])
 
 
 @router.post("/responses")
-async def create_response(request: Request) -> Response:
-    """
-    Pass-through proxy to OpenAI Responses API.
-    Supports non-streaming JSON and streaming (SSE) when `stream: true`.
-    """
+async def create_response(request: Request):
     return await forward_openai_request(request)
+
+
+class ResponsesCompactRequest(BaseModel):
+    """
+    Action-friendly /responses wrapper.
+
+    - Accepts a simplified schema commonly used by ChatGPT custom actions.
+    - Produces a standard Responses API call to /v1/responses.
+    """
+
+    model: Optional[str] = Field(default=None)
+    input: Any = Field(...)
+    instructions: Optional[str] = Field(default=None)
+    max_output_tokens: Optional[int] = Field(default=None)
+    temperature: Optional[float] = Field(default=None)
+    top_p: Optional[float] = Field(default=None)
 
 
 @router.post("/responses/compact")
-async def create_response_compact(
-    request: Request,
-    body: Dict[str, Any] = Body(...),
-) -> Response:
-    """
-    Relay-only wrapper:
-      - normalizes input into a list
-      - ensures default model if missing
-      - sets metadata.compact=true
-      - forwards to POST /v1/responses upstream
-      - wraps upstream JSON:
-
-        {
-          "object": "response.compaction",
-          "data": <upstream JSON>,
-          "meta": { "model": "...", "compact": true, "timestamp": "..." }
-        }
-    """
+async def responses_compact(payload: ResponsesCompactRequest, request: Request):
     settings = get_settings()
 
-    payload: Dict[str, Any] = dict(body or {})
-    payload.pop("stream", None)  # compact is always non-streaming
+    req: Dict[str, Any] = {
+        "model": payload.model or settings.DEFAULT_MODEL,
+        "input": payload.input,
+    }
+    if payload.instructions is not None:
+        req["instructions"] = payload.instructions
+    if payload.max_output_tokens is not None:
+        req["max_output_tokens"] = payload.max_output_tokens
+    if payload.temperature is not None:
+        req["temperature"] = payload.temperature
+    if payload.top_p is not None:
+        req["top_p"] = payload.top_p
 
-    if "input" in payload and not isinstance(payload["input"], list):
-        payload["input"] = [payload["input"]]
-
-    if not payload.get("model"):
-        payload["model"] = settings.DEFAULT_MODEL
-
-    metadata = payload.get("metadata")
-    if not isinstance(metadata, dict):
-        metadata = {}
-    else:
-        metadata = dict(metadata)
-
-    normalized_metadata = {str(k): str(v) for k, v in metadata.items()}
-    normalized_metadata["compact"] = "true"
-    payload["metadata"] = normalized_metadata
-
-    upstream = await forward_openai_method_path(
+    return await forward_openai_method_path(
         "POST",
         "/v1/responses",
-        json_body=payload,
+        json_body=req,
         inbound_headers=request.headers,
+        request=request,
     )
-
-    if upstream.status_code >= 400 or isinstance(upstream, StreamingResponse):
-        return upstream
-
-    raw = getattr(upstream, "body", b"") or b""
-    try:
-        upstream_json = json.loads(raw.decode("utf-8")) if raw else {}
-    except Exception:
-        return upstream
-
-    wrapper = {
-        "object": "response.compaction",
-        "data": upstream_json,
-        "meta": {
-            "model": payload.get("model"),
-            "compact": True,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-    }
-    return JSONResponse(content=wrapper, status_code=upstream.status_code)
-
-
-@router.get("/responses/{response_id}/input_items")
-async def list_response_input_items(response_id: str, request: Request) -> Response:
-    return await forward_openai_request(request)
-
-
-@router.post("/responses/{response_id}/cancel")
-async def cancel_response(response_id: str, request: Request) -> Response:
-    return await forward_openai_request(request)
-
-
-@router.get("/responses/{response_id}")
-async def retrieve_response(response_id: str, request: Request) -> Response:
-    return await forward_openai_request(request)
-
-
-@router.delete("/responses/{response_id}")
-async def delete_response(response_id: str, request: Request) -> Response:
-    return await forward_openai_request(request)

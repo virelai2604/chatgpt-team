@@ -1,12 +1,12 @@
+from __future__ import annotations
+
 """
 Compatibility shim.
 
-Some modules historically imported settings/get_settings from app.core.settings.
-The canonical implementation lives in app.core.config.
+Some older modules referenced `app.core.settings`. The project centralizes settings in
+`app.core.config`. This module re-exports the same symbols to avoid import breakage.
 """
 
-from __future__ import annotations
+from .config import Settings, get_settings, settings
 
-from app.core.config import get_settings, settings
-
-__all__ = ["get_settings", "settings"]
+__all__ = ["Settings", "get_settings", "settings"]
