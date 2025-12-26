@@ -161,7 +161,7 @@ async def _post_multipart_to_upstream(
     data: Dict[str, str],
 ) -> Response:
     s = get_settings()
-     upstream_url = build_upstream_url(endpoint_path)
+    upstream_url = build_upstream_url(endpoint_path)
 
     timeout = httpx.Timeout(60.0, connect=10.0)
     limits = httpx.Limits(max_keepalive_connections=10, max_connections=20)
