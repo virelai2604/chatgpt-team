@@ -3,65 +3,41 @@ from __future__ import annotations
 from typing import Optional
 
 import httpx
-from openai import AsyncOpenAI
 
-from app.core.config import settings
+from app.core.settings import get_settings
 
-
-# Cache a small number of clients so tests (and callers) can vary timeouts
-# without constantly rebuilding connection pools.
-_httpx_clients: dict[float, httpx.AsyncClient] = {}
-_openai_clients: dict[float, AsyncOpenAI] = {}
+_async_httpx_client: Optional[httpx.AsyncClient] = None
 
 
-def get_async_httpx_client(
-    *,
-    timeout_seconds: Optional[float] = None,
-    timeout: Optional[float] = None,
-) -> httpx.AsyncClient:
+def get_async_httpx_client(*, timeout_seconds: float | None = None, timeout: float | None = None) -> httpx.AsyncClient:
     """
-    Shared httpx.AsyncClient for outbound relay calls.
+    Return a shared httpx.AsyncClient.
 
-    Back-compat: accepts either `timeout_seconds=` (preferred) or `timeout=`.
+    Compatibility:
+      - Some routes call get_async_httpx_client(timeout=...)
+      - Other routes call get_async_httpx_client(timeout_seconds=...)
+
+    We accept both and set the client timeout only at first construction.
+    Per-request timeouts should be passed to client.request(..., timeout=...).
     """
-    eff = timeout_seconds if timeout_seconds is not None else timeout
-    if eff is None:
-        eff = float(getattr(settings, "PROXY_TIMEOUT_SECONDS", 90.0))
-    eff_f = float(eff)
+    global _async_httpx_client
 
-    client = _httpx_clients.get(eff_f)
-    if client is None:
-        # Do not set base_url here; forwarders construct absolute URLs explicitly.
-        client = httpx.AsyncClient(timeout=eff_f)
-        _httpx_clients[eff_f] = client
-    return client
+    # Prefer timeout_seconds; fall back to timeout; then Settings; then a safe default.
+    settings = get_settings()
+    initial_timeout = (
+        timeout_seconds
+        if timeout_seconds is not None
+        else timeout
+        if timeout is not None
+        else getattr(settings, "timeout_seconds", None)
+        if getattr(settings, "timeout_seconds", None) is not None
+        else 60.0
+    )
 
-
-def get_async_openai_client(
-    *,
-    timeout_seconds: Optional[float] = None,
-    timeout: Optional[float] = None,
-) -> AsyncOpenAI:
-    """
-    AsyncOpenAI client for server-side helper calls (legacy snapshots).
-
-    Most of the relay forwards requests via httpx, but a few routes use the OpenAI
-    Python SDK for typed responses (e.g., embeddings). This shim keeps imports stable.
-    """
-    eff = timeout_seconds if timeout_seconds is not None else timeout
-    if eff is None:
-        eff = float(getattr(settings, "PROXY_TIMEOUT_SECONDS", 90.0))
-    eff_f = float(eff)
-
-    client = _openai_clients.get(eff_f)
-    if client is None:
-        base_url = (
-            getattr(settings, "openai_base_url", None)
-            or getattr(settings, "OPENAI_API_BASE", None)
-            or "https://api.openai.com/v1"
+    if _async_httpx_client is None:
+        _async_httpx_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(float(initial_timeout)),
+            follow_redirects=False,
         )
-        api_key = getattr(settings, "OPENAI_API_KEY", "") or getattr(settings, "openai_api_key", "")
-        http_client = get_async_httpx_client(timeout_seconds=eff_f)
-        client = AsyncOpenAI(api_key=api_key, base_url=str(base_url), http_client=http_client)
-        _openai_clients[eff_f] = client
-    return client
+
+    return _async_httpx_client

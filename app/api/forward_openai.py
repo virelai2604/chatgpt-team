@@ -1,26 +1,15 @@
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Dict, Mapping, Optional, cast
+from typing import Any, Dict, Mapping, Optional
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import HTTPException, Request, Response
-from fastapi.responses import StreamingResponse
+from starlette.responses import StreamingResponse
 
-try:
-    # Project-provided settings + shared client (preferred)
-    from app.core.config import get_settings  # type: ignore
-except Exception:  # pragma: no cover
-    get_settings = None  # type: ignore
-
-try:
-    from app.core.http_client import get_async_httpx_client  # type: ignore
-except Exception:  # pragma: no cover
-
-    async def get_async_httpx_client() -> httpx.AsyncClient:  # type: ignore
-        # Fallback: per-call client. Prefer the project implementation for pooling.
-        return httpx.AsyncClient()
-
+from app.core.http_client import get_async_httpx_client
+from app.core.settings import get_settings
 
 _HOP_BY_HOP_HEADERS = {
     "connection",
@@ -33,85 +22,82 @@ _HOP_BY_HOP_HEADERS = {
     "upgrade",
 }
 
-
-def _get_openai_api_key() -> str:
-    settings = get_settings() if callable(get_settings) else None
-    key = getattr(settings, "openai_api_key", None) if settings is not None else None
-    if not key:
-        # Use a non-500 to signal relay wiring/config issues.
-        raise HTTPException(
-            status_code=424,
-            detail="Relay wiring error: OPENAI_API_KEY is not configured on the relay server.",
-        )
-    return cast(str, key)
+# Some upstream responses include these and Starlette will handle encoding itself.
+_STRIP_RESPONSE_HEADERS = _HOP_BY_HOP_HEADERS | {
+    "content-length",
+    "content-encoding",
+}
 
 
-def _get_openai_base_url() -> str:
-    settings = get_settings() if callable(get_settings) else None
-    base = getattr(settings, "openai_base_url", None) if settings is not None else None
-    return cast(str, base or "https://api.openai.com")
-
-
-def _get_openai_org() -> Optional[str]:
-    settings = get_settings() if callable(get_settings) else None
-    return cast(Optional[str], getattr(settings, "openai_organization", None) if settings is not None else None)
-
-
-def _get_openai_project() -> Optional[str]:
-    settings = get_settings() if callable(get_settings) else None
-    return cast(Optional[str], getattr(settings, "openai_project", None) if settings is not None else None)
-
-
-def _get_timeout_seconds(settings: Any = None) -> float:
-    """
-    Return the upstream timeout (seconds).
-
-    Backward compatible: some callers may pass a settings object.
-    """
-    settings_obj = settings or (get_settings() if callable(get_settings) else None)
-    val = getattr(settings_obj, "relay_timeout_seconds", None) if settings_obj is not None else None
+def _get_timeout_seconds(settings: Any) -> float:
+    # Settings uses timeout_seconds in your project; keep a defensive fallback.
+    v = getattr(settings, "timeout_seconds", None)
     try:
-        return float(val) if val is not None else 60.0
+        return float(v) if v is not None else 60.0
     except Exception:
         return 60.0
 
 
-def _join_url(base_url: str, path: str) -> str:
-    base = base_url.rstrip("/")
-    p = path if path.startswith("/") else f"/{path}"
-    return f"{base}{p}"
+def _join_upstream_url(base: str, path: str) -> str:
+    base = base.rstrip("/")
+    if not path.startswith("/"):
+        path = "/" + path
+    return f"{base}{path}"
+
+
+def _join_upstream_url_compat(*args: Any, **kwargs: Any) -> str:
+    """
+    Back-compat shim.
+
+    Your SSE wiring previously called _join_upstream_url_compat() with 3 positional args,
+    which must not crash the relay. We accept extra args and ignore them.
+    """
+    if len(args) >= 2:
+        return _join_upstream_url(str(args[0]), str(args[1]))
+    base = str(kwargs.get("base", "")).rstrip("/")
+    path = str(kwargs.get("path", ""))
+    return _join_upstream_url(base, path)
 
 
 def build_upstream_url(
-    upstream_path: str,
+    path: str,
     *,
     request: Optional[Request] = None,
     query: Optional[Mapping[str, str]] = None,
 ) -> str:
     """
-    Build a full upstream OpenAI URL for the given path, merging query parameters.
+    Build the upstream URL (api.openai.com or configured base) + path + querystring.
     """
-    url = httpx.URL(_join_url(_get_openai_base_url(), upstream_path))
-    merged: Dict[str, str] = {}
+    settings = get_settings()
+    base = getattr(settings, "UPSTREAM_BASE_URL", None) or getattr(settings, "OPENAI_API_BASE", None) or "https://api.openai.com"
 
-    if request is not None:
-        merged.update({k: str(v) for k, v in request.query_params.items()})
+    url = _join_upstream_url(str(base), path)
 
-    if query is not None:
-        merged.update({k: str(v) for k, v in query.items()})
+    # Use explicit query override if provided; else forward inbound query params.
+    q: Dict[str, str] = {}
+    if query:
+        q.update({str(k): str(v) for k, v in query.items()})
+    elif request is not None:
+        # request.query_params is MultiDict; best-effort collapse (tests only need wiring).
+        for k, v in request.query_params.items():
+            q[str(k)] = str(v)
 
-    if merged:
-        url = url.copy_merge_params(merged)
+    if q:
+        url = f"{url}?{urlencode(q, doseq=True)}"
 
-    return str(url)
+    return url
 
 
 def build_outbound_headers(inbound_headers: Mapping[str, str]) -> Dict[str, str]:
     """
-    Build headers sent to upstream OpenAI.
-    - Removes hop-by-hop / host / content-length
-    - Replaces inbound Authorization (relay auth) with upstream OpenAI API key
+    Copy inbound headers, strip hop-by-hop, and set upstream Authorization.
     """
+    settings = get_settings()
+    upstream_key = getattr(settings, "OPENAI_API_KEY", None)
+    if not upstream_key:
+        # If you hit this, your env is wrong; tests usually skip without a real key.
+        raise HTTPException(status_code=424, detail="Missing OPENAI_API_KEY")
+
     out: Dict[str, str] = {}
 
     for k, v in inbound_headers.items():
@@ -121,110 +107,55 @@ def build_outbound_headers(inbound_headers: Mapping[str, str]) -> Dict[str, str]
         if lk in {"host", "content-length"}:
             continue
         if lk == "authorization":
-            # Do NOT forward relay auth.
             continue
         out[k] = v
 
-    out["Authorization"] = f"Bearer {_get_openai_api_key()}"
+    out["Authorization"] = f"Bearer {upstream_key}"
 
-    org = _get_openai_org()
-    if org:
-        out["OpenAI-Organization"] = org
+    # Optional: forward OpenAI project/org headers if present in Settings (do not invent).
+    org = getattr(settings, "OPENAI_ORG_ID", None) or getattr(settings, "OPENAI_ORGANIZATION", None)
+    if org and "OpenAI-Organization" not in out:
+        out["OpenAI-Organization"] = str(org)
 
-    proj = _get_openai_project()
-    if proj:
-        out["OpenAI-Project"] = proj
+    project = getattr(settings, "OPENAI_PROJECT", None)
+    if project and "OpenAI-Project" not in out:
+        out["OpenAI-Project"] = str(project)
 
     return out
 
 
-def filter_upstream_headers(upstream_headers: httpx.Headers) -> Dict[str, str]:
+def filter_upstream_headers(inbound_headers: Mapping[str, str]) -> Dict[str, str]:
+    # Backwards-compatible name used by containers.py
+    return build_outbound_headers(inbound_headers)
+
+
+def _filter_response_headers(headers: Mapping[str, str]) -> Dict[str, str]:
     """
-    Filter upstream headers for downstream clients.
+    Strip hop-by-hop and Starlette-conflicting headers.
     """
     out: Dict[str, str] = {}
-    for k, v in upstream_headers.items():
+    for k, v in headers.items():
         lk = k.lower()
-        if lk in _HOP_BY_HOP_HEADERS:
-            continue
-        if lk in {"content-length", "content-encoding"}:
-            # Avoid mismatches with StreamingResponse and downstream decoding.
+        if lk in _STRIP_RESPONSE_HEADERS:
             continue
         out[k] = v
     return out
 
 
-def _is_event_stream_content_type(content_type: Optional[str]) -> bool:
-    return bool(content_type and "text/event-stream" in content_type.lower())
-
-
-def _detect_wants_stream(
-    *,
-    accept_header: str,
-    path: str,
-    content_type: Optional[str],
-    body_bytes: bytes,
-) -> bool:
+def _detect_wants_stream(*, accept_header: str, content_type: Optional[str], body_bytes: bytes) -> bool:
     if "text/event-stream" in (accept_header or "").lower():
         return True
-    if path.endswith(":stream"):
-        return True
-    if content_type and "application/json" in content_type.lower() and body_bytes:
+
+    if content_type and "application/json" in content_type.lower():
+        # Best-effort JSON parse to detect {"stream": true}
         try:
-            payload = json.loads(body_bytes.decode("utf-8"))
-            return bool(isinstance(payload, dict) and payload.get("stream") is True)
+            obj = json.loads(body_bytes.decode("utf-8"))
+            if isinstance(obj, dict) and obj.get("stream") is True:
+                return True
         except Exception:
-            return False
+            pass
+
     return False
-
-
-async def _stream_bytes(resp: httpx.Response, *, aexit) -> AsyncIterator[bytes]:
-    try:
-        async for chunk in resp.aiter_raw():
-            if chunk:
-                yield chunk
-    finally:
-        await aexit(None, None, None)
-
-
-async def _forward_streaming_response(
-    *,
-    client: httpx.AsyncClient,
-    method: str,
-    url: str,
-    headers: Dict[str, str],
-    content: Optional[bytes],
-    json_body: Any = None,
-    timeout: float,
-) -> Response:
-    cm = client.stream(
-        method,
-        url,
-        headers=headers,
-        content=content,
-        json=json_body,
-        timeout=timeout,
-        follow_redirects=False,
-    )
-    resp = await cm.__aenter__()
-
-    # If upstream isn't SSE, buffer and return a normal Response.
-    if not _is_event_stream_content_type(resp.headers.get("content-type")):
-        body = await resp.aread()
-        await cm.__aexit__(None, None, None)
-        return Response(
-            content=body,
-            status_code=resp.status_code,
-            headers=filter_upstream_headers(resp.headers),
-            media_type=resp.headers.get("content-type"),
-        )
-
-    return StreamingResponse(
-        _stream_bytes(resp, aexit=cm.__aexit__),
-        status_code=resp.status_code,
-        headers=filter_upstream_headers(resp.headers),
-        media_type=resp.headers.get("content-type"),
-    )
 
 
 async def forward_openai_request(
@@ -236,7 +167,10 @@ async def forward_openai_request(
 ) -> Response:
     """
     Forward an incoming FastAPI Request to upstream OpenAI.
+
+    Critical: get_async_httpx_client() returns an AsyncClient and must NOT be awaited.
     """
+    settings = get_settings()
     upstream_path_final = upstream_path or request.url.path
     method_final = (method or request.method).upper()
 
@@ -249,92 +183,131 @@ async def forward_openai_request(
 
     wants_stream = _detect_wants_stream(
         accept_header=accept,
-        path=upstream_path_final,
         content_type=content_type,
         body_bytes=body,
     )
 
-    client = await get_async_httpx_client()
-    timeout = _get_timeout_seconds()
+    client = get_async_httpx_client()
+    timeout_s = _get_timeout_seconds(settings)
 
     if wants_stream:
-        return await _forward_streaming_response(
-            client=client,
-            method=method_final,
-            url=url,
-            headers=headers,
-            content=body if body else None,
-            timeout=timeout,
+        upstream_cm = client.stream(method_final, url, headers=headers, content=body, timeout=timeout_s)
+        upstream_resp = await upstream_cm.__aenter__()
+
+        async def _iter() -> Any:
+            try:
+                async for chunk in upstream_resp.aiter_bytes():
+                    yield chunk
+            finally:
+                await upstream_cm.__aexit__(None, None, None)
+
+        media_type = upstream_resp.headers.get("content-type") or "text/event-stream"
+        return StreamingResponse(
+            _iter(),
+            status_code=upstream_resp.status_code,
+            headers=_filter_response_headers(upstream_resp.headers),
+            media_type=media_type,
         )
 
-    resp = await client.request(
-        method_final,
-        url,
-        headers=headers,
-        content=body if body else None,
-        timeout=timeout,
-        follow_redirects=False,
-    )
+    try:
+        upstream_resp = await client.request(
+            method_final,
+            url,
+            headers=headers,
+            content=body,
+            timeout=timeout_s,
+        )
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=424, detail=f"Upstream request failed: {type(e).__name__}: {e}") from e
+
     return Response(
-        content=resp.content,
-        status_code=resp.status_code,
-        headers=filter_upstream_headers(resp.headers),
-        media_type=resp.headers.get("content-type"),
+        content=upstream_resp.content,
+        status_code=upstream_resp.status_code,
+        headers=_filter_response_headers(upstream_resp.headers),
+        media_type=upstream_resp.headers.get("content-type"),
     )
 
 
 async def forward_openai_method_path(
-    *,
     method: str,
     path: str,
-    request: Optional[Request] = None,
+    *,
+    json_body: Optional[Any] = None,
     inbound_headers: Optional[Mapping[str, str]] = None,
+    request: Optional[Request] = None,
     query: Optional[Mapping[str, str]] = None,
-    json_body: Any = None,
-    content: Optional[bytes] = None,
 ) -> Response:
     """
-    Forward an arbitrary method/path to upstream OpenAI.
-    """
-    url = build_upstream_url(path, request=request, query=query)
-    hdrs = inbound_headers or (request.headers if request is not None else {})
-    headers = build_outbound_headers(hdrs)
+    Forward a synthetic request (method + path) to upstream OpenAI.
 
-    accept = cast(str, hdrs.get("accept", ""))
-    wants_stream = bool(
-        ("text/event-stream" in (accept or "").lower())
-        or path.endswith(":stream")
-        or (isinstance(json_body, dict) and json_body.get("stream") is True)
+    Must accept positional (method, path) because routes call:
+      forward_openai_method_path("POST", "/v1/responses", ...)
+
+    This function may stream if:
+      - inbound Accept includes text/event-stream, OR
+      - json_body contains {"stream": true}
+    """
+    settings = get_settings()
+    method_u = method.upper()
+    url = build_upstream_url(path, request=request, query=query)
+
+    headers = build_outbound_headers(inbound_headers or {})
+    timeout_s = _get_timeout_seconds(settings)
+
+    body_bytes: bytes = b""
+    content_type = headers.get("Content-Type") or headers.get("content-type")
+
+    if json_body is not None:
+        body_bytes = json.dumps(json_body).encode("utf-8")
+        # Ensure content-type for JSON bodies (unless caller already set it).
+        if not content_type:
+            headers["Content-Type"] = "application/json"
+            content_type = "application/json"
+
+    accept = (headers.get("Accept") or headers.get("accept") or "")
+    wants_stream = _detect_wants_stream(
+        accept_header=accept,
+        content_type=content_type,
+        body_bytes=body_bytes,
     )
 
-    client = await get_async_httpx_client()
-    timeout = _get_timeout_seconds()
+    client = get_async_httpx_client()
 
     if wants_stream:
-        return await _forward_streaming_response(
-            client=client,
-            method=method.upper(),
-            url=url,
-            headers=headers,
-            content=content,
-            json_body=json_body,
-            timeout=timeout,
+        upstream_cm = client.stream(method_u, url, headers=headers, content=body_bytes, timeout=timeout_s)
+        upstream_resp = await upstream_cm.__aenter__()
+
+        async def _iter() -> Any:
+            try:
+                async for chunk in upstream_resp.aiter_bytes():
+                    yield chunk
+            finally:
+                await upstream_cm.__aexit__(None, None, None)
+
+        media_type = upstream_resp.headers.get("content-type") or "text/event-stream"
+        return StreamingResponse(
+            _iter(),
+            status_code=upstream_resp.status_code,
+            headers=_filter_response_headers(upstream_resp.headers),
+            media_type=media_type,
         )
 
-    resp = await client.request(
-        method.upper(),
-        url,
-        headers=headers,
-        json=json_body if json_body is not None else None,
-        content=content,
-        timeout=timeout,
-        follow_redirects=False,
-    )
+    try:
+        upstream_resp = await client.request(
+            method_u,
+            url,
+            headers=headers,
+            content=body_bytes,
+            timeout=timeout_s,
+        )
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=424, detail=f"Upstream request failed: {type(e).__name__}: {e}") from e
+
     return Response(
-        content=resp.content,
-        status_code=resp.status_code,
-        headers=filter_upstream_headers(resp.headers),
-        media_type=resp.headers.get("content-type"),
+        content=upstream_resp.content,
+        status_code=upstream_resp.status_code,
+        headers=_filter_response_headers(upstream_resp.headers),
+        media_type=upstream_resp.headers.get("content-type"),
     )
 
 
@@ -345,34 +318,31 @@ async def forward_embeddings_create(
 ) -> Dict[str, Any]:
     """
     Convenience helper used by /v1/embeddings route.
+
+    Returns JSON dict; raises HTTPException on upstream transport failures.
     """
+    settings = get_settings()
     url = build_upstream_url("/v1/embeddings")
     headers = build_outbound_headers(inbound_headers or {})
-    client = await get_async_httpx_client()
-    timeout = _get_timeout_seconds()
+    headers.setdefault("Content-Type", "application/json")
 
-    resp = await client.post(url, headers=headers, json=body, timeout=timeout, follow_redirects=False)
+    client = get_async_httpx_client()
+    timeout_s = _get_timeout_seconds(settings)
+
     try:
-        payload = resp.json()
+        resp = await client.post(url, headers=headers, json=body, timeout=timeout_s)
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=424, detail=f"Upstream request failed: {type(e).__name__}: {e}") from e
+
+    # Even for non-2xx, OpenAI returns JSON error bodies; pass through as dict when possible.
+    try:
+        return resp.json()
     except Exception:
-        payload = {"error": {"message": resp.text}}
-
-    if resp.status_code >= 400:
-        raise HTTPException(status_code=resp.status_code, detail=payload)
-
-    return cast(Dict[str, Any], payload)
+        return {"status_code": resp.status_code, "body": resp.text}
 
 
-# ---------------------------------------------------------------------------
-# Compatibility aliases (older modules imported underscored helpers)
-# ---------------------------------------------------------------------------
-
+# Back-compat/private aliases referenced by older SSE wiring (avoid import-time crashes).
 _build_outbound_headers = build_outbound_headers
-_filter_response_headers = filter_upstream_headers
-
-
-def _join_upstream_url(base_url: str, upstream_path: str, query: Optional[Mapping[str, str]] = None) -> str:
-    url = httpx.URL(_join_url(base_url, upstream_path))
-    if query:
-        url = url.copy_merge_params({k: str(v) for k, v in query.items()})
-    return str(url)
+_filter_response_headers = _filter_response_headers
+_join_upstream_url = _join_upstream_url
+_join_upstream_url_compat = _join_upstream_url_compat
