@@ -1,26 +1,26 @@
-from __future__ import annotations
+# tests/conftest.py
+
+import os
 
 import httpx
-import pytest_asyncio
+import pytest
+from httpx import ASGITransport
 
-from app.main import app as fastapi_app
+# IMPORTANT:
+# Ensure auth is disabled for in-process ASGITransport tests unless the runner
+# explicitly enables it. This must happen before importing app.main.
+os.environ.setdefault("RELAY_AUTH_ENABLED", "false")
+
+from app.main import app  # noqa: E402  (import after env var set is intentional)
+
+BASE_URL = os.environ.get("RELAY_TEST_BASE_URL", "http://testserver")
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 async def async_client() -> httpx.AsyncClient:
-    """
-    Async HTTP client bound to the in-process FastAPI app.
-
-    tests/test_local_e2e.py expects an `async_client` fixture.
-    """
-    transport = httpx.ASGITransport(app=fastapi_app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
-
-
-@pytest_asyncio.fixture
-async def client(async_client: httpx.AsyncClient) -> httpx.AsyncClient:
-    """
-    Backwards-compatible alias. Some tests use `client`.
-    """
-    yield async_client
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url=BASE_URL,
+        timeout=30.0,
+    ) as client:
+        yield client
