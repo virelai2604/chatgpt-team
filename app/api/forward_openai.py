@@ -127,6 +127,8 @@ def build_outbound_headers(
             continue
         if lk in {"host", "content-length"}:
             continue
+              if lk == "accept-encoding":
+            continue
         if lk == "authorization":
             continue
         out[k] = v
@@ -141,8 +143,7 @@ def build_outbound_headers(
         if accept_header:
             out["Accept"] = accept_header
 
-    if "Accept-Encoding" not in out and "accept-encoding" not in out:
-        out["Accept-Encoding"] = "identity"
+    out["Accept-Encoding"] = "identity"
 
     # Optional: forward OpenAI project/org headers if present in Settings (do not invent).
     org = getattr(settings, "OPENAI_ORG_ID", None) or getattr(settings, "OPENAI_ORGANIZATION", None)
