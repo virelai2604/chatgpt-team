@@ -15,9 +15,35 @@ RELAY_BASE_URL="${RELAY_BASE_URL:-${RELAY_BASE:-http://localhost:8000}}"
 RELAY_TOKEN="${RELAY_TOKEN:-dummy}"
 UPLOAD_PURPOSE="${UPLOAD_PURPOSE:-batch}"
 
+if [ -z "${OPENAI_API_KEY:-}" ]; then
+  echo "ERROR: OPENAI_API_KEY is not set. Upstream calls will fail." >&2
+  exit 64
+fi
+
 TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
+
+require_json_response() {
+  local body_file="$1"
+  local header_file="$2"
+  local context="$3"
+
+  if ! grep -qi '^content-type: application/json' "$header_file"; then
+    echo "ERROR: ${context} returned non-JSON response." >&2
+    echo "Content-Type: $(grep -i '^content-type:' "$header_file" | head -n 1 | cut -d' ' -f2-)" >&2
+    echo "Body:" >&2
+    cat "$body_file" >&2 || true
+    exit 65
+  fi
+
+  if ! jq . "$body_file" >/dev/null 2>&1; then
+    echo "ERROR: ${context} returned invalid JSON." >&2
+    echo "Body:" >&2
+    cat "$body_file" >&2 || true
+    exit 66
+  fi
+}
 
 echo -n "ping" > "${TMP_DIR}/ping.txt"
 BYTES="$(wc -c < "${TMP_DIR}/ping.txt" | tr -d ' ')"
@@ -27,7 +53,11 @@ curl -sS -X POST "${RELAY_BASE_URL}/v1/uploads" \
   -H "Authorization: Bearer ${RELAY_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{\"purpose\":\"${UPLOAD_PURPOSE}\",\"filename\":\"upload_ping.txt\",\"bytes\":${BYTES},\"mime_type\":\"text/plain\"}" \
-  | tee "${TMP_DIR}/upload.json" | jq .
+  -D "${TMP_DIR}/upload.h" \
+  -o "${TMP_DIR}/upload.json"
+
+require_json_response "${TMP_DIR}/upload.json" "${TMP_DIR}/upload.h" "create upload"
+jq . < "${TMP_DIR}/upload.json"
 
 UPLOAD_ID="$(jq -r '.id' < "${TMP_DIR}/upload.json")"
 if [ -z "${UPLOAD_ID}" ] || [ "${UPLOAD_ID}" = "null" ]; then
@@ -39,7 +69,11 @@ echo "== Add part =="
 curl -sS -X POST "${RELAY_BASE_URL}/v1/uploads/${UPLOAD_ID}/parts" \
   -H "Authorization: Bearer ${RELAY_TOKEN}" \
   -F "data=@${TMP_DIR}/ping.txt;type=application/octet-stream" \
-  | tee "${TMP_DIR}/part.json" | jq .
+  -D "${TMP_DIR}/part.h" \
+  -o "${TMP_DIR}/part.json"
+
+require_json_response "${TMP_DIR}/part.json" "${TMP_DIR}/part.h" "add upload part"
+jq . < "${TMP_DIR}/part.json"
 
 PART_ID="$(jq -r '.id' < "${TMP_DIR}/part.json")"
 if [ -z "${PART_ID}" ] || [ "${PART_ID}" = "null" ]; then
@@ -52,7 +86,11 @@ curl -sS -X POST "${RELAY_BASE_URL}/v1/uploads/${UPLOAD_ID}/complete" \
   -H "Authorization: Bearer ${RELAY_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{\"part_ids\":[\"${PART_ID}\"]}" \
-  | tee "${TMP_DIR}/complete.json" | jq .
+  -D "${TMP_DIR}/complete.h" \
+  -o "${TMP_DIR}/complete.json"
+
+require_json_response "${TMP_DIR}/complete.json" "${TMP_DIR}/complete.h" "complete upload"
+jq . < "${TMP_DIR}/complete.json"
 
 FILE_ID="$(jq -r '.file.id // .file_id // .file // empty' < "${TMP_DIR}/complete.json")"
 if [ -z "${FILE_ID}" ] || [ "${FILE_ID}" = "null" ]; then
@@ -87,7 +125,11 @@ curl -sS -X POST "${RELAY_BASE_URL}/v1/uploads" \
   -H "Authorization: Bearer ${RELAY_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{\"purpose\":\"${UPLOAD_PURPOSE}\",\"filename\":\"cancel_me.txt\",\"bytes\":${BYTES},\"mime_type\":\"text/plain\"}" \
-  | tee "${TMP_DIR}/upload_cancel.json" | jq .
+  -D "${TMP_DIR}/upload_cancel.h" \
+  -o "${TMP_DIR}/upload_cancel.json"
+
+require_json_response "${TMP_DIR}/upload_cancel.json" "${TMP_DIR}/upload_cancel.h" "create cancel upload"
+jq . < "${TMP_DIR}/upload_cancel.json"
 
 UPLOAD_CANCEL_ID="$(jq -r '.id' < "${TMP_DIR}/upload_cancel.json")"
 if [ -z "${UPLOAD_CANCEL_ID}" ] || [ "${UPLOAD_CANCEL_ID}" = "null" ]; then
@@ -98,7 +140,11 @@ fi
 echo "== Cancel upload =="
 curl -sS -X POST "${RELAY_BASE_URL}/v1/uploads/${UPLOAD_CANCEL_ID}/cancel" \
   -H "Authorization: Bearer ${RELAY_TOKEN}" \
-  | tee "${TMP_DIR}/cancel.json" | jq .
+  -D "${TMP_DIR}/cancel.h" \
+  -o "${TMP_DIR}/cancel.json"
+
+require_json_response "${TMP_DIR}/cancel.json" "${TMP_DIR}/cancel.h" "cancel upload"
+jq . < "${TMP_DIR}/cancel.json"
 
 status="$(jq -r '.status' < "${TMP_DIR}/cancel.json")"
 if [ "${status}" != "cancelled" ]; then

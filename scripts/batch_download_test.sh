@@ -21,9 +21,35 @@ DEFAULT_MODEL="${DEFAULT_MODEL:-gpt-5.1}"
 MAX_WAIT="${BATCH_MAX_WAIT_SECONDS:-900}"
 POLL="${BATCH_POLL_INTERVAL_SECONDS:-3}"
 
+if [ -z "${OPENAI_API_KEY:-}" ]; then
+  echo "ERROR: OPENAI_API_KEY is not set. Upstream calls will fail." >&2
+  exit 64
+fi
+
 TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
+
+require_json_response() {
+  local body_file="$1"
+  local header_file="$2"
+  local context="$3"
+
+  if ! grep -qi '^content-type: application/json' "$header_file"; then
+    echo "ERROR: ${context} returned non-JSON response." >&2
+    echo "Content-Type: $(grep -i '^content-type:' "$header_file" | head -n 1 | cut -d' ' -f2-)" >&2
+    echo "Body:" >&2
+    cat "$body_file" >&2 || true
+    exit 65
+  fi
+
+  if ! jq . "$body_file" >/dev/null 2>&1; then
+    echo "ERROR: ${context} returned invalid JSON." >&2
+    echo "Body:" >&2
+    cat "$body_file" >&2 || true
+    exit 66
+  fi
+}
 
 echo "== Creating batch input JSONL =="
 cat > "${TMP_DIR}/batch_input.jsonl" <<JSONL
@@ -35,7 +61,11 @@ curl -sS -X POST "${RELAY_BASE_URL}/v1/files" \
   -H "Authorization: Bearer ${RELAY_TOKEN}" \
   -F "purpose=batch" \
   -F "file=@${TMP_DIR}/batch_input.jsonl;type=application/jsonl" \
-  | tee "${TMP_DIR}/batch_file.json" | jq .
+  -D "${TMP_DIR}/batch_file.h" \
+  -o "${TMP_DIR}/batch_file.json"
+
+require_json_response "${TMP_DIR}/batch_file.json" "${TMP_DIR}/batch_file.h" "upload batch input"
+jq . < "${TMP_DIR}/batch_file.json"
 
 BATCH_INPUT_FILE_ID="$(jq -r '.id' <"${TMP_DIR}/batch_file.json")"
 echo "BATCH_INPUT_FILE_ID=${BATCH_INPUT_FILE_ID}"
@@ -45,7 +75,11 @@ curl -sS -X POST "${RELAY_BASE_URL}/v1/batches" \
   -H "Authorization: Bearer ${RELAY_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{\"input_file_id\":\"${BATCH_INPUT_FILE_ID}\",\"endpoint\":\"/v1/responses\",\"completion_window\":\"24h\"}" \
-  | tee "${TMP_DIR}/batch.json" | jq .
+  -D "${TMP_DIR}/batch.h" \
+  -o "${TMP_DIR}/batch.json"
+
+require_json_response "${TMP_DIR}/batch.json" "${TMP_DIR}/batch.h" "create batch"
+jq . < "${TMP_DIR}/batch.json"
 
 BATCH_ID="$(jq -r '.id' <"${TMP_DIR}/batch.json")"
 echo "BATCH_ID=${BATCH_ID}"
@@ -60,10 +94,17 @@ last_error_id=""
 last_resp=""
 
 while [ "$(date +%s)" -lt "${deadline}" ]; do
-  last_resp="$(curl -sS "${RELAY_BASE_URL}/v1/batches/${BATCH_ID}" -H "Authorization: Bearer ${RELAY_TOKEN}")"
-  status="$(echo "$last_resp" | jq -r '.status')"
-  out_id="$(echo "$last_resp" | jq -r '.output_file_id')"
-  err_id="$(echo "$last_resp" | jq -r '.error_file_id')"
+  curl -sS "${RELAY_BASE_URL}/v1/batches/${BATCH_ID}" \
+    -H "Authorization: Bearer ${RELAY_TOKEN}" \
+    -D "${TMP_DIR}/batch_status.h" \
+    -o "${TMP_DIR}/batch_status.json"
+
+  require_json_response "${TMP_DIR}/batch_status.json" "${TMP_DIR}/batch_status.h" "poll batch status"
+
+  last_resp="$(cat "${TMP_DIR}/batch_status.json")"
+  status="$(jq -r '.status' < "${TMP_DIR}/batch_status.json")"
+  out_id="$(jq -r '.output_file_id' < "${TMP_DIR}/batch_status.json")"
+  err_id="$(jq -r '.error_file_id' < "${TMP_DIR}/batch_status.json")"
 
   last_status="$status"
   last_output_id="$out_id"

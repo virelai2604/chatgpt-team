@@ -13,10 +13,14 @@ from app.main import app as fastapi_app
 pytestmark = pytest.mark.asyncio
 
 
+def _is_dummy_openai_key(key: str) -> bool:
+    normalized = key.strip().lower()
+    return normalized == "dummy" or normalized.startswith("dummy")
+
+
 def _skip_if_no_openai_key() -> None:
     key = (settings.OPENAI_API_KEY or "").strip()
-    normalized = key.lower()
-    if not key or normalized == "dummy" or normalized.startswith("dummy"):
+    if not key or _is_dummy_openai_key(key):
         pytest.skip("OPENAI_API_KEY is not set; skipping upstream-dependent local E2E tests.")
 
 
@@ -84,7 +88,7 @@ async def test_responses_streaming_sse_basic(async_client: httpx.AsyncClient) ->
       - The SSE stream includes at least one `response.output_text.delta`
       - The SSE stream ends with `response.completed`
     """
-     _skip_if_no_openai_key()
+    _skip_if_no_openai_key()
 
     payload = {
         "model": settings.DEFAULT_MODEL,
