@@ -1,87 +1,60 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
+from starlette.responses import Response
 
-from app.api.forward_openai import forward_openai_request
-from app.utils.logger import relay_log as logger
+from app.api.forward_openai import forward_openai_method_path, forward_openai_request
 
 router = APIRouter(prefix="/v1", tags=["files"])
 
 
+async def _is_user_data_file(file_id: str, request: Request) -> bool:
+    """
+    Best-effort guardrail:
+    - If we can confirm purpose == 'user_data', block content download.
+    - If we cannot confirm (metadata fetch fails), do not introduce new 5xx.
+    """
+    try:
+        meta = await forward_openai_method_path(
+            "GET",
+            f"/v1/files/{file_id}",
+            inbound_headers=request.headers,
+        )
+    except HTTPException:
+        return False
+    except Exception:
+        return False
+
+    return isinstance(meta, dict) and str(meta.get("purpose", "")).strip().lower() == "user_data"
+
+
 @router.get("/files")
 async def list_files(request: Request) -> Response:
-    """
-    GET /v1/files
-    Upstream: list files
-    """
-    logger.info("→ [files] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.post("/files")
 async def create_file(request: Request) -> Response:
-    """
-    POST /v1/files
-    Upstream expects multipart/form-data (file + purpose).
-    We forward as-is.
-    """
-    logger.info("→ [files] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.get("/files/{file_id}")
 async def retrieve_file(file_id: str, request: Request) -> Response:
-    """
-    GET /v1/files/{file_id}
-    Upstream: retrieve file metadata
-    """
-    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
     return await forward_openai_request(request)
 
 
 @router.delete("/files/{file_id}")
 async def delete_file(file_id: str, request: Request) -> Response:
-    """
-    DELETE /v1/files/{file_id}
-    Upstream: delete file
-    """
-    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
     return await forward_openai_request(request)
 
 
 @router.get("/files/{file_id}/content")
-async def retrieve_file_content_get(file_id: str, request: Request) -> Response:
-    """
-    GET /v1/files/{file_id}/content
-    Upstream: retrieve file content (binary)
-    """
-    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
-    return await forward_openai_request(request)
-
-
-@router.head("/files/{file_id}/content", include_in_schema=False)
-async def retrieve_file_content_head(file_id: str, request: Request) -> Response:
-    """
-    HEAD /v1/files/{file_id}/content
-
-    HEAD is useful for clients, but it is not required for Actions/docs.
-    We exclude it from OpenAPI to avoid duplicate operationId warnings.
-    """
-    logger.info("→ [files] %s %s (file_id=%s)", request.method, request.url.path, file_id)
-    return await forward_openai_request(request)
-
-
-@router.api_route(
-    "/files/{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-    include_in_schema=False,
-)
-async def files_passthrough(path: str, request: Request) -> Response:
-    """
-    Catch-all passthrough for future /v1/files/* endpoints.
-
-    Kept out of OpenAPI to avoid operationId collisions and to keep
-    the schema Actions-friendly.
-    """
-    logger.info("→ [files/*] %s %s (subpath=%s)", request.method, request.url.path, path)
+async def retrieve_file_content(file_id: str, request: Request) -> Response:
+    if await _is_user_data_file(file_id, request):
+        # Tests accept 400 or 403, but 403 is semantically correct here.
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Not allowed to download files with purpose 'user_data' via this relay."},
+        )
     return await forward_openai_request(request)
