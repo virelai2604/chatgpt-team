@@ -71,13 +71,19 @@ def build_upstream_url(
     *,
     request: Optional[Request] = None,
     query: Optional[Mapping[str, str]] = None,
+    base_url: Optional[str] = None,
 ) -> str:
     """
     Build the upstream URL (api.openai.com or configured base) + path + querystring.
     """
     settings = get_settings()
-    base = getattr(settings, "UPSTREAM_BASE_URL", None) or getattr(settings, "OPENAI_API_BASE", None) or "https://api.openai.com"
-
+    base = (
+        base_url
+        or getattr(settings, "UPSTREAM_BASE_URL", None)
+        or getattr(settings, "OPENAI_API_BASE", None)
+        or "https://api.openai.com"
+    )
+    
     normalized_base = _normalize_upstream_base(str(base), path)
     url = _join_upstream_url(normalized_base, path)
 
@@ -97,7 +103,13 @@ def build_upstream_url(
     return url
 
 
-def build_outbound_headers(inbound_headers: Mapping[str, str]) -> Dict[str, str]:
+def build_outbound_headers(
+    inbound_headers: Mapping[str, str],
+    *,
+    content_type: Optional[str] = None,
+    forward_accept: bool = False,
+    path_hint: Optional[str] = None,
+) -> Dict[str, str]:
     """
     Copy inbound headers, strip hop-by-hop, and set upstream Authorization.
     """
@@ -120,6 +132,17 @@ def build_outbound_headers(inbound_headers: Mapping[str, str]) -> Dict[str, str]
         out[k] = v
 
     out["Authorization"] = f"Bearer {upstream_key}"
+
+    if content_type:
+        out["Content-Type"] = str(content_type)
+
+    if forward_accept and "Accept" not in out and "accept" not in out:
+        accept_header = inbound_headers.get("accept") or inbound_headers.get("Accept")
+        if accept_header:
+            out["Accept"] = accept_header
+
+    if "Accept-Encoding" not in out and "accept-encoding" not in out:
+        out["Accept-Encoding"] = "identity"
 
     # Optional: forward OpenAI project/org headers if present in Settings (do not invent).
     org = getattr(settings, "OPENAI_ORG_ID", None) or getattr(settings, "OPENAI_ORGANIZATION", None)

@@ -50,7 +50,8 @@ DEFAULT_TIMEOUT_S = _env_float("RELAY_TEST_TIMEOUT_S", 60.0)
 
 
 def _has_openai_key() -> bool:
-    return bool(os.getenv(INTEGRATION_ENV_VAR))
+    raw = (os.getenv(INTEGRATION_ENV_VAR) or "").strip().lower()
+    return raw in {"1", "true", "yes"}
 
 
 def _auth_headers(extra: Dict[str, str] | None = None) -> Dict[str, str]:

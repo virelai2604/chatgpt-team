@@ -13,6 +13,13 @@ from app.main import app as fastapi_app
 pytestmark = pytest.mark.asyncio
 
 
+def _skip_if_no_openai_key() -> None:
+    key = (settings.OPENAI_API_KEY or "").strip()
+    normalized = key.lower()
+    if not key or normalized == "dummy" or normalized.startswith("dummy"):
+        pytest.skip("OPENAI_API_KEY is not set; skipping upstream-dependent local E2E tests.")
+
+
 @pytest.mark.integration
 async def test_health_endpoints_ok(async_client: httpx.AsyncClient) -> None:
     paths = ["/", "/health", "/v1/health"]
@@ -37,6 +44,8 @@ async def test_health_endpoints_ok(async_client: httpx.AsyncClient) -> None:
 
 @pytest.mark.integration
 async def test_responses_non_streaming_basic(async_client: httpx.AsyncClient) -> None:
+    _skip_if_no_openai_key()
+
     payload = {
         "model": settings.DEFAULT_MODEL,
         "input": "Say hello from the local relay.",
@@ -75,6 +84,8 @@ async def test_responses_streaming_sse_basic(async_client: httpx.AsyncClient) ->
       - The SSE stream includes at least one `response.output_text.delta`
       - The SSE stream ends with `response.completed`
     """
+     _skip_if_no_openai_key()
+
     payload = {
         "model": settings.DEFAULT_MODEL,
         "input": "Stream a short message.",
@@ -102,6 +113,8 @@ async def test_embeddings_basic(async_client: httpx.AsyncClient) -> None:
     Simple check that the relay can forward /v1/embeddings and the shape matches
     OpenAI's embeddings API.
     """
+    _skip_if_no_openai_key()
+
     payload = {
         "model": "text-embedding-3-small",
         "input": "Testing embeddings via the local relay.",
@@ -158,6 +171,8 @@ async def test_models_retrieve_default_model(async_client: httpx.AsyncClient) ->
 
 @pytest.mark.integration
 async def test_responses_compact_basic(async_client: httpx.AsyncClient) -> None:
+    _skip_if_no_openai_key()
+
     payload = {
         "model": settings.DEFAULT_MODEL,
         "input": [
