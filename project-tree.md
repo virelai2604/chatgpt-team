@@ -33,6 +33,7 @@
       📄 config.py
       📄 http_client.py
       📄 logging.py
+      📄 settings.py
     📁 manifests
       📄 __init__.py
       📄 tools_manifest.json
