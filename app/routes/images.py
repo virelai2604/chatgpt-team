@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from starlette.responses import Response
 
-from app.api.forward_openai import forward_openai_request
+from app.api.forward_openai import build_upstream_url, forward_openai_request
 from app.core.config import get_settings
 from app.utils.logger import relay_log as logger
 
@@ -147,12 +147,10 @@ def _upstream_headers() -> Dict[str, str]:
         "Accept": "application/json",
         "Accept-Encoding": "identity",
     }
-    if s.OPENAI_ORG:
-        headers["OpenAI-Organization"] = s.OPENAI_ORG
+    if s.OPENAI_ORGANIZATION:
+        headers["OpenAI-Organization"] = s.OPENAI_ORGANIZATION
     if s.OPENAI_PROJECT:
         headers["OpenAI-Project"] = s.OPENAI_PROJECT
-    if s.OPENAI_BETA:
-        headers["OpenAI-Beta"] = s.OPENAI_BETA
     return headers
 
 
@@ -163,7 +161,7 @@ async def _post_multipart_to_upstream(
     data: Dict[str, str],
 ) -> Response:
     s = get_settings()
-    upstream_url = s.OPENAI_API_BASE.rstrip("/") + endpoint_path
+     upstream_url = build_upstream_url(endpoint_path)
 
     timeout = httpx.Timeout(60.0, connect=10.0)
     limits = httpx.Limits(max_keepalive_connections=10, max_connections=20)

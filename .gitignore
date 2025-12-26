@@ -22,6 +22,7 @@ htmlcov/
 .vscode/
 .idea/
 .DS_Store
+.codex
 Thumbs.db
 
 # Logs

@@ -45,6 +45,13 @@ def _join_upstream_url(base: str, path: str) -> str:
     return f"{base}{path}"
 
 
+def _normalize_upstream_base(base: str, path: str) -> str:
+    normalized = base.rstrip("/")
+    if path.startswith("/v1") and normalized.endswith("/v1"):
+        normalized = normalized[: -len("/v1")]
+    return normalized
+    
+
 def _join_upstream_url_compat(*args: Any, **kwargs: Any) -> str:
     """
     Back-compat shim.
@@ -71,7 +78,9 @@ def build_upstream_url(
     settings = get_settings()
     base = getattr(settings, "UPSTREAM_BASE_URL", None) or getattr(settings, "OPENAI_API_BASE", None) or "https://api.openai.com"
 
-    url = _join_upstream_url(str(base), path)
+    normalized_base = _normalize_upstream_base(str(base), path)
+    url = _join_upstream_url(normalized_base, path)
+
 
     # Use explicit query override if provided; else forward inbound query params.
     q: Dict[str, str] = {}

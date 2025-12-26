@@ -308,7 +308,7 @@ def get_settings() -> Settings:
     log_format = _get_env("LOG_FORMAT", "console") or "console"
     log_color = _get_bool("LOG_COLOR", True)
 
-    openai_api_base = _get_env("OPENAI_API_BASE", "https://api.openai.com/v1") or "https://api.openai.com/v1"
+    openai_api_base = _get_env("OPENAI_API_BASE", "https://api.openai.com") or "https://api.openai.com"
     # Allow empty key so the server can start; forwarder should reject requests if missing.
     openai_api_key = _get_env("OPENAI_API_KEY", "") or ""
     openai_assistants_beta = _get_env("OPENAI_ASSISTANTS_BETA", "assistants=v2") or "assistants=v2"
