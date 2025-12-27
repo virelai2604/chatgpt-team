@@ -36,7 +36,7 @@ def get_async_httpx_client(*, timeout_seconds: float | None = None, timeout: flo
         else 60.0
     )
 
-   try:
+    try:
         loop_id = id(asyncio.get_running_loop())
     except RuntimeError:
         loop_id = None
