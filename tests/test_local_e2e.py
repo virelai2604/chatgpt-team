@@ -13,14 +13,10 @@ from app.main import app as fastapi_app
 pytestmark = pytest.mark.asyncio
 
 
-def _is_dummy_openai_key(key: str) -> bool:
-    normalized = key.strip().lower()
-    return normalized == "dummy" or normalized.startswith("dummy")
-
-
 def _skip_if_no_openai_key() -> None:
     key = (settings.OPENAI_API_KEY or "").strip()
-    if not key or _is_dummy_openai_key(key):
+    normalized = key.lower()
+    if not key or normalized == "dummy" or normalized.startswith("dummy"):
         pytest.skip("OPENAI_API_KEY is not set; skipping upstream-dependent local E2E tests.")
 
 
