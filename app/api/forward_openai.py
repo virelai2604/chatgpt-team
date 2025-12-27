@@ -139,7 +139,6 @@ def build_outbound_headers(
         if accept_header:
             out["Accept"] = accept_header
 
-   
     out["Accept-Encoding"] = "identity"
 
     # Optional: forward OpenAI project/org headers if present in Settings (do not invent).
