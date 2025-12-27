@@ -125,11 +125,7 @@ def build_outbound_headers(
         lk = k.lower()
         if lk in _HOP_BY_HOP_HEADERS:
             continue
-        if lk in {"host", "content-length"}:
-            continue
-              if lk == "accept-encoding":
-            continue
-        if lk == "authorization":
+        if lk in {"host", "content-length", "accept-encoding", "authorization"}:
             continue
         out[k] = v
 
