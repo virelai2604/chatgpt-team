@@ -18,6 +18,7 @@
   📄 pytest.ini
   📄 render.yaml
   📄 requirements.txt
+  📁 .codex
   📁 app
     📄 __init__.py
     📄 http_client.py
@@ -107,6 +108,7 @@
     📄 __init__.py
     📄 openapi.yaml
   📁 scripts
+    📄 README.md
     📄 batch_download_test.sh
     📄 content_endpoints_smoke.sh
     📄 images_variations_smoke.sh
@@ -118,7 +120,7 @@
     📄 sse_smoke_test.sh
     📄 test_local.sh
     📄 test_render.sh
-    📄 test_success_gates_integration.sh
+    📄 test_success_gates_integration.py
     📄 uploads_e2e_test.sh
   📁 static
     📁 .well-known
