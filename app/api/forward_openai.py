@@ -366,6 +366,7 @@ async def forward_embeddings_create(
     timeout_s = _get_timeout_seconds(settings)
 
     try:
+        url = build_upstream_url("/v1/embeddings")
         resp = await client.post(url, headers=headers, json=body, timeout=timeout_s)
     except httpx.HTTPError as e:
         raise HTTPException(status_code=424, detail=f"Upstream request failed: {type(e).__name__}: {e}") from e
