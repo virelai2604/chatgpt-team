@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.api.forward_openai import forward_openai_method_path, forward_openai_request
@@ -49,10 +51,19 @@ async def responses_compact(payload: ResponsesCompactRequest, request: Request):
     if payload.top_p is not None:
         req["top_p"] = payload.top_p
 
-    return await forward_openai_method_path(
+    upstream_response = await forward_openai_method_path(      return await forward_openai_method_path(
         "POST",
         "/v1/responses",
         json_body=req,
         inbound_headers=request.headers,
         request=request,
     )
+    if upstream_response.status_code != 200:
+        return upstream_response
+    try:
+        payload_data = json.loads(upstream_response.body.decode("utf-8"))
+    except Exception:
+        return upstream_response
+    if isinstance(payload_data, dict):
+        payload_data["object"] = "response.compaction"
+    return JSONResponse(content=payload_data, status_code=upstream_response.status_code)

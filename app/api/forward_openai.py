@@ -125,10 +125,14 @@ def build_outbound_headers(
         lk = k.lower()
         if lk in _HOP_BY_HOP_HEADERS:
             continue
-        if lk in {"host", "content-length", "accept-encoding", "authorization"}:
+        if lk in {"host", "content-length"}:
+            continue
+        if lk == "authorization":
+            continue
+        if lk == "accept-encoding":
             continue
         out[k] = v
-
+        
     out["Authorization"] = f"Bearer {upstream_key}"
 
     if content_type:
@@ -150,6 +154,10 @@ def build_outbound_headers(
     if project and "OpenAI-Project" not in out:
         out["OpenAI-Project"] = str(project)
 
+    beta = getattr(settings, "OPENAI_ASSISTANTS_BETA", None)
+    if beta and path_hint and path_hint.startswith("/v1/uploads"):
+        out.setdefault("OpenAI-Beta", str(beta))
+        
     return out
 
 
@@ -204,7 +212,7 @@ async def forward_openai_request(
     method_final = (method or request.method).upper()
 
     url = build_upstream_url(upstream_path_final, request=request, query=query)
-    headers = build_outbound_headers(request.headers)
+    headers = build_outbound_headers(request.headers, path_hint=upstream_path_final)    headers = build_outbound_headers(request.headers)
 
     body = await request.body()
     accept = request.headers.get("accept", "")
@@ -280,7 +288,7 @@ async def forward_openai_method_path(
     method_u = method.upper()
     url = build_upstream_url(path, request=request, query=query)
 
-    headers = build_outbound_headers(inbound_headers or {})
+    headers = build_outbound_headers(inbound_headers or {}, path_hint=path)
     timeout_s = _get_timeout_seconds(settings)
 
     body_bytes: bytes = b""
@@ -351,8 +359,7 @@ async def forward_embeddings_create(
     Returns JSON dict; raises HTTPException on upstream transport failures.
     """
     settings = get_settings()
-    url = build_upstream_url("/v1/embeddings")
-    headers = build_outbound_headers(inbound_headers or {})
+    headers = build_outbound_headers(inbound_headers or {}, path_hint="/v1/embeddings")
     headers.setdefault("Content-Type", "application/json")
 
     client = get_async_httpx_client()
