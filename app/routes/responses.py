@@ -51,7 +51,7 @@ async def responses_compact(payload: ResponsesCompactRequest, request: Request):
     if payload.top_p is not None:
         req["top_p"] = payload.top_p
 
-    upstream_response = await forward_openai_method_path(      return await forward_openai_method_path(
+    upstream_response = await forward_openai_method_path(
         "POST",
         "/v1/responses",
         json_body=req,

@@ -212,7 +212,7 @@ async def forward_openai_request(
     method_final = (method or request.method).upper()
 
     url = build_upstream_url(upstream_path_final, request=request, query=query)
-    headers = build_outbound_headers(request.headers, path_hint=upstream_path_final)    headers = build_outbound_headers(request.headers)
+    headers = build_outbound_headers(request.headers, path_hint=upstream_path_final)
 
     body = await request.body()
     accept = request.headers.get("accept", "")
