@@ -111,6 +111,7 @@
     📄 README.md
     📄 batch_download_test.sh
     📄 content_endpoints_smoke.sh
+    📄 coverage_report.sh
     📄 images_variations_smoke.sh
     📄 make_sample_png.py
     📄 make_test_png.py

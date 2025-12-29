@@ -1,3 +1,4 @@
+# app/routes/proxy.py
 from __future__ import annotations
 
 import re
@@ -61,9 +62,9 @@ _BLOCKED_PREFIXES: Tuple[str, ...] = (
     "/v1/admin",
     "/v1/webhooks",
     "/v1/moderations",
-    "/v1/realtime",   # websocket family (not Actions-friendly)
-    "/v1/uploads",    # multipart/resumable
-    "/v1/audio",      # often multipart/binary
+    "/v1/realtime",  # websocket family (not Actions-friendly)
+    "/v1/uploads",  # multipart/resumable
+    "/v1/audio",  # often multipart/binary
 )
 
 # Block direct recursion and local-only helpers
@@ -112,6 +113,11 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     ({"GET"}, re.compile(r"^/v1/videos/[^/]+$")),
     ({"DELETE"}, re.compile(r"^/v1/videos/[^/]+$")),
 
+    # ---- Batches (JSON) [PROXY_CANDIDATE_BATCHES] ----
+    ({"GET", "POST"}, re.compile(r"^/v1/batches$")),
+    ({"GET"}, re.compile(r"^/v1/batches/[^/]+$")),
+    ({"POST"}, re.compile(r"^/v1/batches/[^/]+/cancel$")),
+
     # ---- Vector Stores (JSON) ----
     ({"GET"}, re.compile(r"^/v1/vector_stores$")),
     ({"POST"}, re.compile(r"^/v1/vector_stores$")),
@@ -119,6 +125,10 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
     ({"DELETE"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
     ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+/search$")),
+
+    # Vector stores root-write ops [PROXY_CANDIDATE_VECTOR_STORES_ROOT_WRITE]
+    # NOTE: broad operations; still constrained by exact path match and method.
+    ({"PUT", "PATCH", "DELETE"}, re.compile(r"^/v1/vector_stores$")),
 
     # vector store files
     ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+/files$")),
@@ -141,6 +151,7 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
 
     # ---- Conversations (JSON) ----
     ({"POST"}, re.compile(r"^/v1/conversations$")),
+    ({"GET"}, re.compile(r"^/v1/conversations$")),  # <-- allow list endpoint (your failing GET)
     ({"GET"}, re.compile(r"^/v1/conversations/[^/]+$")),
     ({"POST"}, re.compile(r"^/v1/conversations/[^/]+$")),
     ({"DELETE"}, re.compile(r"^/v1/conversations/[^/]+$")),

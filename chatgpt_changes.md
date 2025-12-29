@@ -1,50 +1,33 @@
 # ChatGPT Sync
 Repo: chatgpt-team
 Base: origin/main
-Base commit (merge-base): ff7a0e267ecf77d0c22177f2f47aba47f26328df
+Base commit (merge-base): 64abbbe41368b475919839f82deca705ff3d423b
 Dirs: app tests static schemas src scripts/src
 Root files: project-tree.md pyproject.toml chatgpt_sync.sh AGENTS.md __init__.py generate_tree.py
 Mode: changes
-Generated: 2025-12-28T19:31:23+07:00
+Generated: 2025-12-28T21:51:48+07:00
 
-## CHANGE SUMMARY (since ff7a0e267ecf77d0c22177f2f47aba47f26328df, includes worktree)
+## CHANGE SUMMARY (since 64abbbe41368b475919839f82deca705ff3d423b, includes worktree)
 
 ```
 M	project-tree.md
 ```
 
-## PATCH (since ff7a0e267ecf77d0c22177f2f47aba47f26328df, includes worktree)
+## PATCH (since 64abbbe41368b475919839f82deca705ff3d423b, includes worktree)
 
 ```diff
 diff --git a/project-tree.md b/project-tree.md
-index a98ddd6..e0fe8bd 100755
+index e0fe8bd..3e6df9b 100755
 --- a/project-tree.md
 +++ b/project-tree.md
-@@ -18,6 +18,7 @@
-   📄 pytest.ini
-   📄 render.yaml
-   📄 requirements.txt
-+  📁 .codex
-   📁 app
-     📄 __init__.py
-     📄 http_client.py
-@@ -107,6 +108,7 @@
-     📄 __init__.py
-     📄 openapi.yaml
-   📁 scripts
-+    📄 README.md
+@@ -111,6 +111,7 @@
+     📄 README.md
      📄 batch_download_test.sh
      📄 content_endpoints_smoke.sh
++    📄 coverage_report.sh
      📄 images_variations_smoke.sh
-@@ -118,7 +120,7 @@
-     📄 sse_smoke_test.sh
-     📄 test_local.sh
-     📄 test_render.sh
--    📄 test_success_gates_integration.sh
-+    📄 test_success_gates_integration.py
-     📄 uploads_e2e_test.sh
-   📁 static
-     📁 .well-known
+     📄 make_sample_png.py
+     📄 make_test_png.py
 ```
 
 ## CURRENT CONTENT OF CHANGED FILES (WORKTREE)
@@ -164,6 +147,7 @@ index a98ddd6..e0fe8bd 100755
     📄 README.md
     📄 batch_download_test.sh
     📄 content_endpoints_smoke.sh
+    📄 coverage_report.sh
     📄 images_variations_smoke.sh
     📄 make_sample_png.py
     📄 make_test_png.py

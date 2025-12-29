@@ -24,7 +24,6 @@ fetch_json() {
 }
 
 extract_ops() {
-  # Prints "METHOD /path" (sorted, unique) from an OpenAPI JSON doc.
   jq -r '
     .paths
     | to_entries[]
@@ -36,14 +35,11 @@ extract_ops() {
   ' | sort -u
 }
 
-# Choose the proxy import path automatically if not set.
 detect_proxy_import_path() {
   if [[ -n "${PROXY_IMPORT_PATH}" ]]; then
     echo "$PROXY_IMPORT_PATH"
     return
   fi
-
-  # Try common locations used in this project.
   if python3 -c "import importlib; importlib.import_module('app.routes.proxy')" >/dev/null 2>&1; then
     echo "app.routes.proxy"
     return
@@ -52,20 +48,15 @@ detect_proxy_import_path() {
     echo "app.api.proxy"
     return
   fi
-
-  # Fallback: try a top-level proxy module.
   if python3 -c "import importlib; importlib.import_module('proxy')" >/dev/null 2>&1; then
     echo "proxy"
     return
   fi
-
-  echo ""  # not found
+  echo ""
 }
 
 PROXY_MOD="$(detect_proxy_import_path)"
 
-# Ask the relay proxy module whether a method/path is allowlisted (and not blocked).
-# Returns: "ALLOW" or "DENY:<reason>" or "NO_PROXY_MODULE"
 proxy_decision() {
   local method="$1"
   local path="$2"
@@ -81,19 +72,17 @@ mod = importlib.import_module("${PROXY_MOD}")
 method = "${method}".strip().upper()
 path = "${path}".strip()
 
-# Optional helpers (implementation-dependent)
 normalize = getattr(mod, "_normalize_path", None)
 blocked_reason = getattr(mod, "_blocked_reason", None)
 is_allowlisted = getattr(mod, "_is_allowlisted", None)
 
+path_n = path
 if normalize:
     try:
         path_n = normalize(path)
     except Exception as e:
         print(f"DENY:normalize_error:{type(e).__name__}")
         raise SystemExit(0)
-else:
-    path_n = path
 
 reason = None
 if blocked_reason:
@@ -114,10 +103,10 @@ else:
 PY
 }
 
-# Heuristic buckets for UI compatibility, used when not Actions-direct and not proxy-harness.
 heuristic_bucket() {
   local method="$1"
   local path="$2"
+  local proxy_detail="$3"
 
   # Legacy duplicates (prefer /v1/* in Actions)
   if [[ "$path" == "/health" || "$path" == "/actions/ping" || "$path" == "/actions/relay_info" ]]; then
@@ -125,9 +114,21 @@ heuristic_bucket() {
     return
   fi
 
+  # Keep /v1/actions/* out of Actions by default unless explicitly exposed
+  if [[ "$path" == "/v1/actions/ping" || "$path" == "/v1/actions/relay_info" ]]; then
+    echo "EXCLUDE_META_V1"
+    return
+  fi
+
   # Wildcard/catch-all routers - Actions should not expose
   if [[ "$path" == *"{path}"* || "$path" == *"{path:path}"* ]]; then
     echo "EXCLUDE_WILDCARD"
+    return
+  fi
+
+  # Conversations collection is broad; keep out unless intentionally allowlisted
+  if [[ "$path" == "/v1/conversations" ]]; then
+    echo "PROXY_CANDIDATE_CONVERSATIONS"
     return
   fi
 
@@ -147,27 +148,70 @@ heuristic_bucket() {
     return
   fi
 
-  # Multipart endpoints that Actions can't call directly (typical)
+  # Multipart endpoints that Actions can't call directly
   if [[ "$method" == "POST" && "$path" == "/v1/files" ]]; then
     echo "WRAPPER_FILES_UPLOAD"
     return
   fi
-  if [[ "$method" == "POST" && ( "$path" == "/v1/images/edits" || "$path" == "/v1/images/variations" ) ]]; then
-    echo "WRAPPER_IMAGES_MULTIPART"
-    return
-  fi
+
   if [[ "$path" == /v1/uploads* ]]; then
     echo "WRAPPER_UPLOADS_RESUMABLE"
     return
   fi
-  if [[ "$method" == "POST" && "$path" == "/v1/videos" ]]; then
+
+  if [[ "$method" == "POST" && ( "$path" == "/v1/images/edits" || "$path" == "/v1/images/variations" ) ]]; then
+    echo "WRAPPER_IMAGES_MULTIPART"
+    return
+  fi
+
+  if [[ "$method" == "POST" && ( "$path" == "/v1/videos" || "$path" == "/v1/videos/generations" || "$path" == "/v1/videos/{video_id}/remix" ) ]]; then
     echo "WRAPPER_VIDEOS_MULTIPART"
     return
   fi
 
-  # Default unknown if it didn't match any rule.
+  # Proxy candidates (JSON surfaces likely safe to proxy, but not allowlisted today)
+  if [[ "$path" == "/v1/batches" || "$path" == "/v1/batches/{batch_id}" || "$path" == "/v1/batches/{batch_id}/cancel" ]]; then
+    echo "PROXY_CANDIDATE_BATCHES"
+    return
+  fi
+
+  if [[ "$path" == "/v1/files" || "$path" == "/v1/files/{file_id}" ]]; then
+    echo "PROXY_CANDIDATE_FILES_META"
+    return
+  fi
+
+  if [[ "$method" == "DELETE" && "$path" == "/v1/files/{file_id}" ]]; then
+    echo "PROXY_CANDIDATE_FILES_DELETE"
+    return
+  fi
+
+  if [[ "$path" == "/v1/vector_stores" && ( "$method" == "PUT" || "$method" == "PATCH" || "$method" == "DELETE" ) ]]; then
+    echo "PROXY_CANDIDATE_VECTOR_STORES_ROOT_WRITE"
+    return
+  fi
+
+  if [[ "$path" == "/v1/videos/generations" || "$path" == "/v1/videos/{video_id}/remix" ]]; then
+    echo "PROXY_CANDIDATE_VIDEOS"
+    return
+  fi
+
+  if [[ "$proxy_detail" == "DENY:not_allowlisted" ]]; then
+    echo "UNKNOWN"
+    return
+  fi
+
   echo "UNKNOWN"
 }
+
+# Global cleanup var (trap-safe even with `set -u`)
+TMPDIR_CLEANUP=""
+
+cleanup() {
+  if [[ -n "${TMPDIR_CLEANUP}" && -d "${TMPDIR_CLEANUP}" ]]; then
+    rm -rf "${TMPDIR_CLEANUP}"
+  fi
+}
+trap cleanup EXIT
 
 main() {
   local full_url="${RELAY_BASE_URL%/}/openapi.json"
@@ -178,27 +222,22 @@ main() {
   echo "Actions OpenAPI: $actions_url"
   echo
 
-  # Fetch and extract ops
   local full_ops actions_ops
   full_ops="$(fetch_json "$full_url" | extract_ops)"
   actions_ops="$(fetch_json "$actions_url" | extract_ops)"
 
-  # Save to temp files for membership checks
-  local tmpdir
-  tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  TMPDIR_CLEANUP="$(mktemp -d)"
 
-  printf "%s\n" "$full_ops" > "$tmpdir/full_ops.txt"
-  printf "%s\n" "$actions_ops" > "$tmpdir/actions_ops.txt"
+  printf "%s\n" "$full_ops" > "$TMPDIR_CLEANUP/full_ops.txt"
+  printf "%s\n" "$actions_ops" > "$TMPDIR_CLEANUP/actions_ops.txt"
 
   echo "Counts:"
-  echo "  full_ops:    $(wc -l < "$tmpdir/full_ops.txt")"
-  echo "  actions_ops: $(wc -l < "$tmpdir/actions_ops.txt")"
+  echo "  full_ops:    $(wc -l < "$TMPDIR_CLEANUP/full_ops.txt")"
+  echo "  actions_ops: $(wc -l < "$TMPDIR_CLEANUP/actions_ops.txt")"
   echo "  proxy_module: ${PROXY_MOD:-<not detected>}"
   echo
 
-  # Buckets
-  local out="$tmpdir/report.tsv"
+  local out="$TMPDIR_CLEANUP/report.tsv"
   : > "$out"
 
   while IFS= read -r line; do
@@ -207,31 +246,33 @@ main() {
     method="${line%% *}"
     path="${line#* }"
 
-    local bucket detail
-
-    if grep -Fxq "$line" "$tmpdir/actions_ops.txt" && [[ "$path" == /v1/* ]]; then
+    local bucket detail pd
+    if grep -Fxq "$line" "$TMPDIR_CLEANUP/actions_ops.txt" && [[ "$path" == /v1/* ]]; then
       bucket="ACTIONS_DIRECT"
       detail="in_openapi.actions.json"
     else
-      local pd
       pd="$(proxy_decision "$method" "$path")"
       if [[ "$pd" == "ALLOW" ]]; then
         bucket="PROXY_HARNESS"
         detail="allowlisted_by_proxy"
       else
-        bucket="$(heuristic_bucket "$method" "$path")"
+        bucket="$(heuristic_bucket "$method" "$path" "$pd")"
         detail="$pd"
       fi
     fi
 
     printf "%s\t%s\t%s\t%s\n" "$bucket" "$method" "$path" "$detail" >> "$out"
-  done < "$tmpdir/full_ops.txt"
+  done < "$TMPDIR_CLEANUP/full_ops.txt"
 
   echo "Bucket summary:"
   cut -f1 "$out" | sort | uniq -c | sort -nr
   echo
 
-  for b in ACTIONS_DIRECT PROXY_HARNESS WRAPPER_FILES_UPLOAD WRAPPER_UPLOADS_RESUMABLE WRAPPER_STREAM WRAPPER_IMAGES_MULTIPART WRAPPER_VIDEOS_MULTIPART EXCLUDE_BINARY EXCLUDE_WILDCARD EXCLUDE_LEGACY EXCLUDE_COLON_PATH UNKNOWN; do
+  for b in ACTIONS_DIRECT PROXY_HARNESS \
+           PROXY_CANDIDATE_BATCHES PROXY_CANDIDATE_FILES_META PROXY_CANDIDATE_FILES_DELETE \
+           PROXY_CANDIDATE_VECTOR_STORES_ROOT_WRITE PROXY_CANDIDATE_CONVERSATIONS PROXY_CANDIDATE_VIDEOS \
+           WRAPPER_FILES_UPLOAD WRAPPER_UPLOADS_RESUMABLE WRAPPER_STREAM WRAPPER_IMAGES_MULTIPART WRAPPER_VIDEOS_MULTIPART \
+           EXCLUDE_BINARY EXCLUDE_WILDCARD EXCLUDE_LEGACY EXCLUDE_META_V1 EXCLUDE_COLON_PATH UNKNOWN; do
     local n
     n="$(awk -F'\t' -v B="$b" '$1==B{c++} END{print c+0}' "$out")"
     [[ "$n" -eq 0 ]] && continue
@@ -244,11 +285,15 @@ main() {
   unknown_count="$(awk -F'\t' '$1=="UNKNOWN"{c++} END{print c+0}' "$out")"
   if [[ "$unknown_count" -gt 0 ]]; then
     echo "ERROR: UNKNOWN endpoints detected ($unknown_count)."
-    echo "These endpoints were not assigned to any bucket. Add heuristics or proxy allowlist/wrapper policy."
+    echo "Guardrail: assign each new full endpoint to a bucket via proxy allowlist, wrapper policy, or explicit exclusion."
     exit 2
   fi
 
   echo "OK: All full endpoints mapped to a bucket (no UNKNOWN)."
+  echo
+  echo "Next actions:"
+  echo "  - Review PROXY_CANDIDATE_* buckets and decide which to add to proxy allowlist."
+  echo "  - Implement WRAPPER_* buckets if you need Actions coverage (multipart/uploads/streaming)."
 }
 
 main "$@"
