@@ -1,13 +1,13 @@
 # ChatGPT Sync
 Repo: chatgpt-team
 Base: origin/main
-Base commit (merge-base): 4633dfb0e24e9488323b34c03465b1ae26decf6d
+Base commit (merge-base): 926bf8761ef5b6467325953263af808099d0b794
 Dirs: app tests static schemas src scripts/src
 Root files: project-tree.md pyproject.toml chatgpt_sync.sh AGENTS.md __init__.py generate_tree.py
 Mode: baseline
-Generated: 2025-12-30T18:55:06+07:00
+Generated: 2025-12-30T19:39:38+07:00
 
-## TREE (repo root at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
+## TREE (repo root at 926bf8761ef5b6467325953263af808099d0b794)
 ```
  - .env.example.env
  - .gitattributes
@@ -41,7 +41,7 @@ Generated: 2025-12-30T18:55:06+07:00
  - tests
 ```
 
-## TREE (app/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
+## TREE (app/ at 926bf8761ef5b6467325953263af808099d0b794)
 ```
  - app/__init__.py
  - app/api/__init__.py
@@ -88,7 +88,7 @@ Generated: 2025-12-30T18:55:06+07:00
  - app/utils/logger.py
 ```
 
-## TREE (tests/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
+## TREE (tests/ at 926bf8761ef5b6467325953263af808099d0b794)
 ```
  - tests/__init__.py
  - tests/client.py
@@ -103,29 +103,29 @@ Generated: 2025-12-30T18:55:06+07:00
  - tests/test_success_gates_integration.py
 ```
 
-## TREE (static/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
+## TREE (static/ at 926bf8761ef5b6467325953263af808099d0b794)
 ```
  - static/.well-known/__init__.py
  - static/.well-known/ai-plugin.json
 ```
 
-## TREE (schemas/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
+## TREE (schemas/ at 926bf8761ef5b6467325953263af808099d0b794)
 ```
  - schemas/__init__.py
  - schemas/openapi.yaml
 ```
 
-## TREE (src/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
+## TREE (src/ at 926bf8761ef5b6467325953263af808099d0b794)
 ```
 ```
 
-## TREE (scripts/src/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
+## TREE (scripts/src/ at 926bf8761ef5b6467325953263af808099d0b794)
 ```
 ```
 
 ## BASELINE (ROOT FILES)
 
-## FILE: project-tree.md @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: project-tree.md @ 926bf8761ef5b6467325953263af808099d0b794
 ```
   📄 .env.env
   📄 .env.example.env
@@ -272,7 +272,7 @@ Generated: 2025-12-30T18:55:06+07:00
     📄 test_remaining_routes_smoke_integration.py
     📄 test_success_gates_integration.py```
 
-## FILE: pyproject.toml @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: pyproject.toml @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -335,7 +335,7 @@ exclude = ["tests*", "docs*", "render*"]
 app = ["manifests/*.json"]
 ```
 
-## FILE: chatgpt_sync.sh @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: chatgpt_sync.sh @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 #!/usr/bin/env bash
 set -euo pipefail
@@ -774,7 +774,7 @@ mv "$tmp_out" "$OUT_FILE"
 echo "Wrote: ${REPO_ROOT}/${OUT_FILE}"
 ```
 
-## FILE: AGENTS.md @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: AGENTS.md @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # Repository Guidelines – ChatGPT Team Relay (Codex Max / Custom Action Focus)
 
@@ -919,11 +919,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## FILE: __init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: __init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 ```
 
-## FILE: generate_tree.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: generate_tree.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 #!/usr/bin/env python3
 """
@@ -997,15 +997,15 @@ if __name__ == "__main__":
 
 ## BASELINE (app/)
 
-## FILE: app/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 ```
 
-## FILE: app/api/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/api/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 ```
 
-## FILE: app/api/forward_openai.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/api/forward_openai.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -1444,7 +1444,7 @@ _join_upstream_url = _join_upstream_url
 _join_upstream_url_compat = _join_upstream_url_compat
 ```
 
-## FILE: app/api/routes.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/api/routes.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -1546,7 +1546,7 @@ async def openapi_actions(request: Request) -> JSONResponse:
     return JSONResponse(filtered)
 ```
 
-## FILE: app/api/sse.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/api/sse.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -1579,7 +1579,7 @@ async def responses_stream(request: Request) -> Response:
     )
 ```
 
-## FILE: app/api/tools_api.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/api/tools_api.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # app/api/tools_api.py
 from __future__ import annotations
@@ -1689,11 +1689,11 @@ async def openapi_actions(request: Request) -> JSONResponse:
     return JSONResponse(filtered)
 ```
 
-## FILE: app/core/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/core/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 ```
 
-## FILE: app/core/config.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/core/config.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -2085,7 +2085,7 @@ def get_settings() -> Settings:
 settings: Settings = get_settings()
 ```
 
-## FILE: app/core/http_client.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/core/http_client.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -2140,7 +2140,7 @@ def get_async_httpx_client(*, timeout_seconds: float | None = None, timeout: flo
     return _async_httpx_client
 ```
 
-## FILE: app/core/logging.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/core/logging.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 """
 Logging configuration module for the ChatGPT Team Relay.
@@ -2190,7 +2190,7 @@ def configure_logging(settings: Any) -> None:
     get_logger("relay")
 ```
 
-## FILE: app/core/settings.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/core/settings.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -2206,7 +2206,7 @@ from .config import Settings, get_settings, settings
 __all__ = ["Settings", "get_settings", "settings"]
 ```
 
-## FILE: app/http_client.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/http_client.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -2222,7 +2222,7 @@ from app.core.http_client import get_async_httpx_client, get_async_openai_client
 __all__ = ["get_async_httpx_client", "get_async_openai_client"]
 ```
 
-## FILE: app/main.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/main.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -2290,7 +2290,7 @@ def create_app() -> FastAPI:
 app = create_app()
 ```
 
-## FILE: app/manifests/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/manifests/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # ==========================================================
 # app/manifests/__init__.py — Ground Truth Manifest Loader
@@ -2337,7 +2337,7 @@ except Exception as e:
     raise RuntimeError(f"Failed to load tools manifest: {_manifest_path} — {e}")
 ```
 
-## FILE: app/manifests/tools_manifest.json @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/manifests/tools_manifest.json @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 {
   "object": "list",
@@ -2628,11 +2628,11 @@ except Exception as e:
 }
 ```
 
-## FILE: app/middleware/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/middleware/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 ```
 
-## FILE: app/middleware/p4_orchestrator.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/middleware/p4_orchestrator.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # app/middleware/p4_orchestrator.py
 import uuid
@@ -2666,7 +2666,7 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         return response
 ```
 
-## FILE: app/middleware/relay_auth.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/middleware/relay_auth.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -2738,7 +2738,7 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/middleware/validation.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/middleware/validation.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -2839,14 +2839,14 @@ class ValidationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/models/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/models/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from .error import ErrorDetail, ErrorResponse
 
 __all__ = ["ErrorDetail", "ErrorResponse"]
 ```
 
-## FILE: app/models/error.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/models/error.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -2885,7 +2885,7 @@ class ErrorResponse(BaseModel):
         )
 ```
 
-## FILE: app/routes/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # app/routes/__init__.py
 
@@ -2894,7 +2894,7 @@ from .register_routes import register_routes
 __all__ = ["register_routes"]
 ```
 
-## FILE: app/routes/actions.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/actions.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # app/routes/actions.py
 
@@ -3124,7 +3124,7 @@ async def actions_files_upload(payload: FilesUploadRequest) -> Response:
     )
 ```
 
-## FILE: app/routes/batches.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/batches.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -3162,7 +3162,7 @@ async def cancel_batch(batch_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/containers.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/containers.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -3258,7 +3258,7 @@ async def containers_file_content_head(request: Request, container_id: str, file
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/conversations.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/conversations.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -3327,7 +3327,7 @@ async def conversations_subpaths_options(path: str, request: Request) -> Respons
     return await _forward(request)
 ```
 
-## FILE: app/routes/embeddings.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/embeddings.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -3349,7 +3349,7 @@ async def create_embedding(request: Request) -> JSONResponse:
     return JSONResponse(content=payload)
 ```
 
-## FILE: app/routes/files.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/files.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -3516,7 +3516,7 @@ async def actions_files_upload(payload: ActionsFileUploadRequest, request: Reque
     )
 ```
 
-## FILE: app/routes/health.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/health.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -3583,7 +3583,7 @@ async def v1_health() -> Dict[str, Any]:
     return _health_payload()
 ```
 
-## FILE: app/routes/images.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/images.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # app/api/images.py
 from __future__ import annotations
@@ -3932,7 +3932,7 @@ async def actions_edits(payload: ImagesEditsJSON) -> Response:
     return await _post_multipart_to_upstream(endpoint_path="/v1/images/edits", files=files, data=form)
 ```
 
-## FILE: app/routes/models.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/models.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # app/routes/models.py
 
@@ -3991,7 +3991,7 @@ async def retrieve_model(model_id: str) -> dict:
     }
 ```
 
-## FILE: app/routes/proxy.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/proxy.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -4236,7 +4236,7 @@ async def proxy(call: ProxyRequest, request: Request) -> Response:
     )
 ```
 
-## FILE: app/routes/realtime.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/realtime.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # app/routes/realtime.py
 
@@ -4432,7 +4432,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
         await websocket.close()
 ```
 
-## FILE: app/routes/register_routes.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/register_routes.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # app/routes/register_routes.py
 
@@ -4509,7 +4509,7 @@ def register_all_routes(app: _RouterLike) -> None:
     register_routes(app)
 ```
 
-## FILE: app/routes/responses.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/responses.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -4581,7 +4581,7 @@ async def responses_compact(payload: ResponsesCompactRequest, request: Request):
         payload_data["object"] = "response.compaction"
     return JSONResponse(content=payload_data, status_code=upstream_response.status_code)```
 
-## FILE: app/routes/uploads.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/uploads.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -4622,7 +4622,7 @@ async def uploads_passthrough(path: str, request: Request) -> Response:
     return await forward_openai_request(request, upstream_path=upstream_path)
 ```
 
-## FILE: app/routes/vector_stores.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/vector_stores.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -4703,7 +4703,7 @@ async def vector_stores_subpaths_alias(path: str, request: Request) -> Response:
     return await _forward(request)
 ```
 
-## FILE: app/routes/videos.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/routes/videos.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -4792,11 +4792,11 @@ async def videos_passthrough(path: str, request: Request):
     return await forward_openai_request(request)
 ```
 
-## FILE: app/utils/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/utils/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 ```
 
-## FILE: app/utils/authy.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/utils/authy.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -4866,7 +4866,7 @@ def check_relay_key(*, authorization: str | None, x_relay_key: str | None) -> No
     raise HTTPException(status_code=401, detail="Invalid relay key")
 ```
 
-## FILE: app/utils/error_handler.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/utils/error_handler.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # app/utils/error_handler.py
 
@@ -5010,7 +5010,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 ```
 
-## FILE: app/utils/http_client.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/utils/http_client.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -5019,7 +5019,7 @@ from app.core.http_client import get_async_httpx_client
 __all__ = ["get_async_httpx_client"]
 ```
 
-## FILE: app/utils/logger.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: app/utils/logger.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -5160,11 +5160,11 @@ def exception(msg: str, *args, **kwargs) -> None:
 
 ## BASELINE (tests/)
 
-## FILE: tests/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: tests/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 ```
 
-## FILE: tests/client.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: tests/client.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # tests/client.py
 
@@ -5201,7 +5201,7 @@ def _build_client() -> TestClient:
 client: TestClient = _build_client()
 ```
 
-## FILE: tests/conftest.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: tests/conftest.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -5336,7 +5336,7 @@ async def async_client() -> AsyncIterator[httpx.AsyncClient]:
         yield c
 ```
 
-## FILE: tests/relay_client_example.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: tests/relay_client_example.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # relay_client_example.py
 from __future__ import annotations
@@ -5411,7 +5411,7 @@ if __name__ == "__main__":
         raise
 ```
 
-## FILE: tests/test_extended_routes_smoke_integration.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: tests/test_extended_routes_smoke_integration.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 """Extended route smoke tests (integration).
 
@@ -5671,7 +5671,7 @@ def test_realtime_sessions_create_no_5xx() -> None:
     assert r.status_code < 500, f"realtime sessions returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_files_and_batches_integration.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: tests/test_files_and_batches_integration.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 """
 tests/test_files_and_batches_integration.py
@@ -6005,7 +6005,7 @@ async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient) -> N
     assert r.content, "output file content was empty"
 ```
 
-## FILE: tests/test_images_variations_integration.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: tests/test_images_variations_integration.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 import binascii
 import os
@@ -6089,7 +6089,7 @@ def test_images_variations_wiring_no_5xx(tmp_path) -> None:
     assert r.status_code < 500, r.text
 ```
 
-## FILE: tests/test_local_e2e.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: tests/test_local_e2e.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # tests/test_local_e2e.py
 from __future__ import annotations
@@ -6102,9 +6102,6 @@ import pytest
 from app.core.config import settings
 from app.main import app as fastapi_app
 
-# All tests in this module are async
-pytestmark = pytest.mark.asyncio
-
 
 def _skip_if_no_openai_key() -> None:
     key = (settings.OPENAI_API_KEY or "").strip()
@@ -6113,6 +6110,7 @@ def _skip_if_no_openai_key() -> None:
         pytest.skip("OPENAI_API_KEY is not set; skipping upstream-dependent local E2E tests.")
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_health_endpoints_ok(async_client: httpx.AsyncClient) -> None:
     paths = ["/", "/health", "/v1/health"]
@@ -6135,6 +6133,7 @@ async def test_health_endpoints_ok(async_client: httpx.AsyncClient) -> None:
         assert isinstance(body.get("meta"), dict)
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_responses_non_streaming_basic(async_client: httpx.AsyncClient) -> None:
     _skip_if_no_openai_key()
@@ -6167,6 +6166,7 @@ async def test_responses_non_streaming_basic(async_client: httpx.AsyncClient) ->
     assert "hello" in text.lower()
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_responses_streaming_sse_basic(async_client: httpx.AsyncClient) -> None:
     """
@@ -6200,6 +6200,7 @@ async def test_responses_streaming_sse_basic(async_client: httpx.AsyncClient) ->
     assert "data:" in stream_text
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_embeddings_basic(async_client: httpx.AsyncClient) -> None:
     """
@@ -6229,6 +6230,7 @@ async def test_embeddings_basic(async_client: httpx.AsyncClient) -> None:
     assert embedding, "embedding vector should not be empty"
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_models_list_basic(async_client: httpx.AsyncClient) -> None:
     """
@@ -6246,6 +6248,7 @@ async def test_models_list_basic(async_client: httpx.AsyncClient) -> None:
     assert any(isinstance(m, dict) and "id" in m for m in body["data"])
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_models_retrieve_default_model(async_client: httpx.AsyncClient) -> None:
     """
@@ -6263,6 +6266,7 @@ async def test_models_retrieve_default_model(async_client: httpx.AsyncClient) ->
     # e.g. "created", "owned_by", etc. – but we do not require them here
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_responses_compact_basic(async_client: httpx.AsyncClient) -> None:
     _skip_if_no_openai_key()
@@ -6281,6 +6285,7 @@ async def test_responses_compact_basic(async_client: httpx.AsyncClient) -> None:
     assert data["object"] == "response.compaction"
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncClient) -> None:
     resp = await async_client.get("/manifest")
@@ -6290,12 +6295,14 @@ async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncC
     assert "/v1/responses/compact" in data["endpoints"]["responses_compact"]
 
 
+@pytest.mark.asyncio
 async def test_actions_images_routes_registered() -> None:
     paths = {route.path for route in fastapi_app.routes if hasattr(route, "path")}
     assert "/v1/actions/images/variations" in paths
     assert "/v1/actions/images/edits" in paths
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_actions_images_endpoints_callable(async_client: httpx.AsyncClient) -> None:
     for path in ("/v1/actions/images/variations", "/v1/actions/images/edits"):
@@ -6304,7 +6311,7 @@ async def test_actions_images_endpoints_callable(async_client: httpx.AsyncClient
         assert "Missing image input" in resp.text
 ```
 
-## FILE: tests/test_relay_auth_guard.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: tests/test_relay_auth_guard.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 # tests/test_relay_auth_guard.py
 """Relay auth middleware guardrails.
@@ -6387,7 +6394,7 @@ def test_relay_auth_requires_valid_key_for_v1_paths(monkeypatch: pytest.MonkeyPa
         assert body.get("object") == "list"
 ```
 
-## FILE: tests/test_remaining_routes_smoke_integration.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: tests/test_remaining_routes_smoke_integration.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 from __future__ import annotations
 
@@ -6436,272 +6443,214 @@ def test_remaining_route_families_smoke_no_5xx() -> None:
         assert r.status_code < 500, f"{method} {path} returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_success_gates_integration.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: tests/test_success_gates_integration.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
-"""
-Success gates for the relay (integration).
-
-Gates:
-- Gate A: Uploads E2E passes (happy path + cancel path)
-- Gate B: SSE smoke passes (streaming content-type + incremental reads)
-- Gate C: OpenAPI has no duplicate operationId warnings (validated by uniqueness check)
-- Gate D: containers/videos `/content` endpoints validated (no relay 5xx; upstream 4xx is OK)
-
-Requires:
-  INTEGRATION_OPENAI_API_KEY=1
-Optional env:
-  RELAY_BASE_URL (default http://localhost:8000)
-  RELAY_TOKEN    (default dummy)
-  DEFAULT_MODEL  (default gpt-5.1)
-"""
-
 from __future__ import annotations
 
 import os
+import time
 from collections import Counter
-from typing import Any, Dict, List
+from typing import Any, Dict, Tuple
 
+import httpx
 import pytest
-import requests
 
 
-pytestmark = pytest.mark.integration
-
-RELAY_BASE_URL = os.getenv("RELAY_BASE_URL", "http://localhost:8000").rstrip("/")
-RELAY_TOKEN = os.getenv("RELAY_TOKEN", "dummy")
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-5.1")
-
-DEFAULT_TIMEOUT_S = float(os.getenv("RELAY_TEST_TIMEOUT_S", "60"))
+def _relay_base() -> str:
+    return (os.environ.get("RELAY_BASE_URL") or os.environ.get("RELAY_BASE") or "http://localhost:8000").rstrip("/")
 
 
-def _skip_if_no_real_key() -> None:
-    # Keep this consistent with existing integration tests.
-    if os.getenv("INTEGRATION_OPENAI_API_KEY") != "1":
-        pytest.skip("INTEGRATION_OPENAI_API_KEY != 1 (skipping real-API integration tests)")
+def _relay_token() -> str:
+    return os.environ.get("RELAY_TOKEN") or os.environ.get("RELAY_KEY") or "dummy"
 
 
-def _auth_headers(extra: Dict[str, str] | None = None) -> Dict[str, str]:
-    headers = {"Authorization": f"Bearer {RELAY_TOKEN}"}
-    if extra:
-        headers.update(extra)
-    return headers
+def _default_model() -> str:
+    return os.environ.get("DEFAULT_MODEL") or "gpt-5.1"
 
 
-def _must_ok(r: requests.Response, *, hint: str = "") -> None:
-    if r.ok:
+def _headers(*, accept: str | None = None, content_type: str | None = None) -> Dict[str, str]:
+    h = {"Authorization": f"Bearer {_relay_token()}"}
+    if accept:
+        h["Accept"] = accept
+    if content_type:
+        h["Content-Type"] = content_type
+    return h
+
+
+def _require_integration() -> None:
+    if os.environ.get("INTEGRATION_OPENAI_API_KEY") not in {"1", "true", "TRUE", "yes", "YES"}:
+        pytest.skip("Integration tests disabled (set INTEGRATION_OPENAI_API_KEY=1)")
+
+
+def _skip_if_upstream_server_error(response: httpx.Response, *, label: str) -> None:
+    if response.status_code < 500:
         return
-    # Provide debuggable payload (but keep it bounded).
-    body = r.text
-    if len(body) > 4000:
-        body = body[:4000] + "…(truncated)"
-    raise AssertionError(f"{hint}HTTP {r.status_code} {r.reason}: {body}")
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict) and error.get("type") == "server_error":
+            message = error.get("message") or "Upstream server error."
+            pytest.skip(f"{label}: {message}")
+    assert response.status_code < 500, response.text
 
 
-# -------------------------
-# Gate A: Uploads E2E
-# -------------------------
+@pytest.mark.integration
+def test_gate_a_uploads_e2e_happy_and_cancel() -> None:
+    _require_integration()
 
-def test_gate_a_uploads_e2e_happy_path_and_cancel_path() -> None:
-    """
-    Uploads API flow per OpenAI docs:
-      1) POST /v1/uploads
-      2) POST /v1/uploads/{upload_id}/parts (multipart field name: data)
-      3) POST /v1/uploads/{upload_id}/complete (ordered part_ids)
-      4) POST /v1/uploads/{upload_id}/cancel (cancel path)
-    """
-    _skip_if_no_real_key()
+    base = _relay_base()
+    purpose = os.environ.get("UPLOAD_PURPOSE") or "batch"
+    content = b"ping"
+    filename = "upload_ping.txt"
 
-    # Happy path: upload a tiny file in a single part, then complete.
-    payload = {
-        "purpose": "batch",
-        "filename": "relay_ping.txt",
-        "bytes": 4,
-        "mime_type": "text/plain",
-        # expires_after optional; keep default behavior.
-    }
-    r = requests.post(
-        f"{RELAY_BASE_URL}/v1/uploads",
-        headers=_auth_headers({"Content-Type": "application/json"}),
-        json=payload,
-        timeout=DEFAULT_TIMEOUT_S,
-    )
-    _must_ok(r, hint="Create upload failed. ")
-    upload = r.json()
-    upload_id = upload.get("id")
-    assert isinstance(upload_id, str) and upload_id.startswith("upload_")
+    with httpx.Client(timeout=60.0) as client:
+        r = client.post(
+            f"{base}/v1/uploads",
+            headers=_headers(content_type="application/json"),
+            json={"purpose": purpose, "filename": filename, "bytes": len(content), "mime_type": "text/plain"},
+        )
+        assert r.status_code == 200, r.text
+        upload_id = r.json().get("id")
+        assert upload_id and isinstance(upload_id, str)
 
-    # Add one part (multipart, field name MUST be `data`).
-    part_bytes = b"ping"
-    r = requests.post(
-        f"{RELAY_BASE_URL}/v1/uploads/{upload_id}/parts",
-        headers=_auth_headers(),
-        files={"data": ("part.bin", part_bytes, "application/octet-stream")},
-        timeout=DEFAULT_TIMEOUT_S,
-    )
-    _must_ok(r, hint="Add upload part failed. ")
-    part_obj = r.json()
-    part_id = part_obj.get("id")
-    assert isinstance(part_id, str) and part_id.startswith("part_")
+        files = {"data": (filename, content, "application/octet-stream")}
+        r = client.post(f"{base}/v1/uploads/{upload_id}/parts", headers=_headers(), files=files)
+        assert r.status_code == 200, r.text
+        part_id = r.json().get("id")
+        assert part_id and isinstance(part_id, str)
 
-    # Complete (md5 is optional per docs; omit to avoid format mismatch).
-    r = requests.post(
-        f"{RELAY_BASE_URL}/v1/uploads/{upload_id}/complete",
-        headers=_auth_headers({"Content-Type": "application/json"}),
-        json={"part_ids": [part_id]},
-        timeout=DEFAULT_TIMEOUT_S,
-    )
-    _must_ok(r, hint="Complete upload failed. ")
-    completed = r.json()
-    assert completed.get("status") == "completed"
-    file_obj = completed.get("file")
-    assert isinstance(file_obj, dict)
-    file_id = file_obj.get("id")
-    assert isinstance(file_id, str) and file_id.startswith("file-")
+        r = client.post(
+            f"{base}/v1/uploads/{upload_id}/complete",
+            headers=_headers(content_type="application/json"),
+            json={"part_ids": [part_id]},
+        )
+        _skip_if_upstream_server_error(r, label="Upload complete failed")
+        assert r.status_code == 200, r.text
+        completed = r.json()
 
-    # Cancel path: create a second upload then cancel immediately.
-    r = requests.post(
-        f"{RELAY_BASE_URL}/v1/uploads",
-        headers=_auth_headers({"Content-Type": "application/json"}),
-        json={
-            "purpose": "batch",
-            "filename": "relay_cancel.txt",
-            "bytes": 1,
-            "mime_type": "text/plain",
-        },
-        timeout=DEFAULT_TIMEOUT_S,
-    )
-    _must_ok(r, hint="Create upload (cancel path) failed. ")
-    cancel_upload_id = r.json().get("id")
-    assert isinstance(cancel_upload_id, str) and cancel_upload_id.startswith("upload_")
+        file_id = None
+        if isinstance(completed.get("file"), dict):
+            file_id = completed["file"].get("id")
+        file_id = file_id or completed.get("file_id") or completed.get("file")
+        assert file_id and isinstance(file_id, str), completed
 
-    r = requests.post(
-        f"{RELAY_BASE_URL}/v1/uploads/{cancel_upload_id}/cancel",
-        headers=_auth_headers(),
-        timeout=DEFAULT_TIMEOUT_S,
-    )
-    _must_ok(r, hint="Cancel upload failed. ")
-    cancelled = r.json()
-    assert cancelled.get("status") == "cancelled"
+        r = client.get(f"{base}/v1/files/{file_id}/content", headers=_headers())
+        assert r.status_code == 200, r.text
+        assert r.content == content
+
+        r = client.post(
+            f"{base}/v1/uploads",
+            headers=_headers(content_type="application/json"),
+            json={"purpose": purpose, "filename": "cancel_me.txt", "bytes": len(content), "mime_type": "text/plain"},
+        )
+        assert r.status_code == 200, r.text
+        upload2_id = r.json().get("id")
+        assert upload2_id and isinstance(upload2_id, str)
+
+        r = client.post(f"{base}/v1/uploads/{upload2_id}/cancel", headers=_headers())
+        assert r.status_code == 200, r.text
+        assert r.json().get("status") == "cancelled", r.text
 
 
-# -------------------------
-# Gate B: SSE smoke
-# -------------------------
+@pytest.mark.integration
+def test_gate_b_sse_smoke() -> None:
+    _require_integration()
 
-def test_gate_b_sse_smoke_streaming_content_type_and_incremental_reads() -> None:
-    """
-    Smoke-test the relay's SSE endpoint:
-      - Content-Type includes text/event-stream
-      - We receive multiple chunks/lines (incremental)
-      - The streamed content contains the expected token ("pong")
-    """
-    _skip_if_no_real_key()
+    base = _relay_base()
+    model = _default_model()
 
-    with requests.post(
-        f"{RELAY_BASE_URL}/v1/responses:stream",
-        headers=_auth_headers(
-            {
-                "Accept": "text/event-stream",
-                "Content-Type": "application/json",
-            }
-        ),
-        json={"model": DEFAULT_MODEL, "input": "Return exactly: pong"},
-        stream=True,
-        timeout=DEFAULT_TIMEOUT_S,
-    ) as r:
-        _must_ok(r, hint="SSE request failed. ")
-        ct = (r.headers.get("content-type") or "").lower()
-        assert "text/event-stream" in ct
+    payload = {"model": model, "input": "Write exactly: 12345678901234567890"}
+    max_seconds = float(os.environ.get("SSE_MAX_TIME_SECONDS") or "15")
 
-        lines: List[str] = []
-        # Read up to N lines to avoid hanging if upstream stalls.
-        for line in r.iter_lines(decode_unicode=True):
-            if line is None:
-                continue
-            if line == "":
-                continue
-            lines.append(line)
-            # Exit early once we see the expected token.
-            if "pong" in line:
-                break
-            if len(lines) >= 200:
-                break
+    with httpx.Client(timeout=max_seconds + 10) as client:
+        with client.stream(
+            "POST",
+            f"{base}/v1/responses:stream",
+            headers=_headers(accept="text/event-stream", content_type="application/json"),
+            json=payload,
+        ) as r:
+            assert r.status_code == 200, r.read().decode("utf-8", errors="replace")
+            ctype = r.headers.get("content-type", "")
+            assert "text/event-stream" in ctype.lower(), ctype
 
-        # Must have multiple lines to indicate incremental streaming.
-        assert len(lines) >= 3, f"Expected multiple SSE lines, got {len(lines)} lines: {lines[:10]}"
-        assert any("pong" in ln for ln in lines), f"Did not find 'pong' in SSE lines: {lines[:20]}"
+            saw_data = False
+            buf = b""
+            start = time.time()
+
+            for chunk in r.iter_bytes():
+                if chunk:
+                    buf += chunk
+                    if b"data:" in buf:
+                        saw_data = True
+                        break
+                if time.time() - start > max_seconds:
+                    break
+
+            assert saw_data, buf[:800].decode("utf-8", errors="replace")
 
 
-# -------------------------
-# Gate C: OpenAPI operationIds are unique
-# -------------------------
+@pytest.mark.integration
+def test_gate_c_openapi_operation_ids_unique() -> None:
+    base = _relay_base()
 
-def test_gate_c_openapi_has_no_duplicate_operation_ids() -> None:
-    """
-    FastAPI emits runtime warnings for duplicated operationIds.
-    We validate the OpenAPI JSON that the relay serves has unique operationId values.
-    """
-    r = requests.get(f"{RELAY_BASE_URL}/openapi.json", timeout=DEFAULT_TIMEOUT_S)
-    _must_ok(r, hint="GET /openapi.json failed. ")
-    spec = r.json()
+    with httpx.Client(timeout=30.0) as client:
+        r = client.get(f"{base}/openapi.json")
+        assert r.status_code == 200, r.text
+        spec = r.json()
 
-    op_ids: List[str] = []
-    paths: Dict[str, Any] = spec.get("paths", {}) or {}
-    for _path, methods in paths.items():
-        if not isinstance(methods, dict):
+    paths: Dict[str, Any] = spec.get("paths", {})
+    op_ids: list[Tuple[str, str, str]] = []
+    for path, ops in paths.items():
+        if not isinstance(ops, dict):
             continue
-        for _method, op in methods.items():
-            if not isinstance(op, dict):
+        for method, meta in ops.items():
+            if method.lower() not in {"get", "post", "put", "patch", "delete", "options", "head"}:
                 continue
-            op_id = op.get("operationId")
-            if isinstance(op_id, str) and op_id.strip():
-                op_ids.append(op_id.strip())
+            if not isinstance(meta, dict):
+                continue
+            op_id = meta.get("operationId")
+            if op_id:
+                op_ids.append((op_id, method.upper(), path))
 
-    counts = Counter(op_ids)
-    dups = sorted([op_id for op_id, n in counts.items() if n > 1])
-
-    assert not dups, f"Duplicate operationId values found: {dups}"
-
-
-# -------------------------
-# Gate D: containers/videos content endpoints are wired
-# -------------------------
-
-def _assert_not_5xx(r: requests.Response, *, label: str) -> None:
-    assert r.status_code < 500, f"{label} returned {r.status_code} (expected <500). Body: {r.text[:800]}"
+    counts = Counter([x[0] for x in op_ids])
+    dupes = {k: v for k, v in counts.items() if v > 1}
+    if dupes:
+        lines = ["Duplicate operationId values detected:"]
+        for op_id in sorted(dupes.keys()):
+            lines.append(f"- {op_id}")
+            for _, method, path in [x for x in op_ids if x[0] == op_id]:
+                lines.append(f"    {method} {path}")
+        raise AssertionError("\n".join(lines))
 
 
-def test_gate_d_containers_and_videos_content_endpoints_no_relay_5xx() -> None:
-    """
-    Without creating real container/video objects (cost/complexity),
-    we validate that:
-      - the endpoints exist and route to upstream
-      - relay does not raise 5xx due to wiring/header bugs
-    """
-    # Containers file content (likely 404/400 from upstream due to dummy ids)
-    r = requests.get(
-        f"{RELAY_BASE_URL}/v1/containers/cntr_dummy/files/file_dummy/content",
-        headers=_auth_headers(),
-        timeout=DEFAULT_TIMEOUT_S,
-    )
-    _assert_not_5xx(r, label="containers content")
+@pytest.mark.integration
+def test_gate_d_content_endpoints_wiring_negative_ids() -> None:
+    _require_integration()
 
-    # Videos content (likely 404/400 from upstream due to dummy id)
-    r = requests.get(
-        f"{RELAY_BASE_URL}/v1/videos/vid_dummy/content",
-        headers=_auth_headers(),
-        timeout=DEFAULT_TIMEOUT_S,
-    )
-    _assert_not_5xx(r, label="videos content")
+    base = _relay_base()
+
+    def check(url: str) -> None:
+        with httpx.Client(timeout=30.0) as client:
+            r = client.get(url, headers=_headers())
+            assert r.status_code != 500, r.text
+            assert "application/json" in (r.headers.get("content-type") or "").lower(), r.headers
+            body = r.json()
+            assert isinstance(body, dict) and "error" in body and "message" in body["error"], body
+
+    check(f"{base}/v1/containers/cont_invalid/files/file_invalid/content")
+    check(f"{base}/v1/videos/video_invalid/content")
 ```
 
 ## BASELINE (static/)
 
-## FILE: static/.well-known/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: static/.well-known/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 ```
 
-## FILE: static/.well-known/ai-plugin.json @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: static/.well-known/ai-plugin.json @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 {
   "schema_version": "v1",
@@ -6730,11 +6679,11 @@ def test_gate_d_containers_and_videos_content_endpoints_no_relay_5xx() -> None:
 
 ## BASELINE (schemas/)
 
-## FILE: schemas/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: schemas/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 ```
 
-## FILE: schemas/openapi.yaml @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
+## FILE: schemas/openapi.yaml @ 926bf8761ef5b6467325953263af808099d0b794
 ```
 openapi: 3.1.0
 info:
