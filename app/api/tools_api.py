@@ -29,6 +29,7 @@ def _build_manifest() -> Dict[str, Any]:
         "images": ["/v1/images/generations", "/v1/images/edits", "/v1/images/variations"],
         "images_actions": ["/v1/actions/images/edits", "/v1/actions/images/variations"],
         "files": ["/v1/files", "/v1/files/{file_id}", "/v1/files/{file_id}/content"],
+        "files_actions": ["/v1/actions/files/upload"],
         "uploads": [
             "/v1/uploads",
             "/v1/uploads/{upload_id}",
@@ -56,6 +57,7 @@ def _build_manifest() -> Dict[str, Any]:
             "embeddings",
             "images",
             "images_actions",
+            "files_actions",
             "proxy",
             "realtime_http",
         ],

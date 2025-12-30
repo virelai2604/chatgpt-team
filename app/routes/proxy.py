@@ -143,9 +143,17 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     # ---- Files (JSON metadata only; content is binary; create is multipart) ----
     ({"GET"}, re.compile(r"^/v1/files$")),
     ({"GET"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
+    ({"GET"}, re.compile(r"^/v1/conversations$")),
     ({"DELETE"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
 
     # >>> PROXY_CANDIDATE_BATCHES (added) <<<
+    ({"GET"}, re.compile(r"^/v1/batches$")),
+    ({"POST"}, re.compile(r"^/v1/batches$")),
+    ({"GET"}, re.compile(r"^/v1/batches/[^/]+$")),
+    ({"POST"}, re.compile(r"^/v1/batches/[^/]+/cancel$")),
+)
+
+    # ---- Batches (JSON) ----
     ({"GET"}, re.compile(r"^/v1/batches$")),
     ({"POST"}, re.compile(r"^/v1/batches$")),
     ({"GET"}, re.compile(r"^/v1/batches/[^/]+$")),
