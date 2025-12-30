@@ -57,6 +57,33 @@ detect_proxy_import_path() {
 
 PROXY_MOD="$(detect_proxy_import_path)"
 
+# Instantiate OpenAPI template parameters (e.g., /v1/files/{file_id}) into representative concrete values
+# so proxy allowlist regex checks reflect runtime behavior.
+instantiate_openapi_path() {
+  local p="$1"
+
+  # Most common OpenAI-style IDs in your proxy allowlist
+  p="$(echo "$p" | sed -E \
+    -e 's/\{file_id\}/file-EXAMPLE123/g' \
+    -e 's/\{batch_id\}/batch_EXAMPLE123/g' \
+    -e 's/\{video_id\}/video-EXAMPLE123/g' \
+    -e 's/\{image_id\}/image-EXAMPLE123/g' \
+    -e 's/\{vector_store_id\}/vs_EXAMPLE123/g' \
+    -e 's/\{assistant_id\}/asst_EXAMPLE123/g' \
+    -e 's/\{thread_id\}/thread_EXAMPLE123/g' \
+    -e 's/\{message_id\}/msg_EXAMPLE123/g' \
+    -e 's/\{run_id\}/run_EXAMPLE123/g' \
+    -e 's/\{upload_id\}/upload_EXAMPLE123/g' \
+    -e 's/\{chunk_id\}/chunk_EXAMPLE123/g' \
+  )"
+
+  # Generic safe fallback: replace any remaining {param} with a token that contains no slashes.
+  # This prevents template-literal mismatches while still letting allowlist enforcement do real work.
+  p="$(echo "$p" | sed -E 's/\{[^\/}]+\}/EXAMPLE123/g')"
+
+  echo "$p"
+}
+
 proxy_decision() {
   local method="$1"
   local path="$2"
@@ -246,12 +273,14 @@ main() {
     method="${line%% *}"
     path="${line#* }"
 
-    local bucket detail pd
+    local bucket detail pd path_for_proxy
     if grep -Fxq "$line" "$TMPDIR_CLEANUP/actions_ops.txt" && [[ "$path" == /v1/* ]]; then
       bucket="ACTIONS_DIRECT"
       detail="in_openapi.actions.json"
     else
-      pd="$(proxy_decision "$method" "$path")"
+      # Instantiate template params before proxy allowlist evaluation (keeps report aligned with runtime).
+      path_for_proxy="$(instantiate_openapi_path "$path")"
+      pd="$(proxy_decision "$method" "$path_for_proxy")"
       if [[ "$pd" == "ALLOW" ]]; then
         bucket="PROXY_HARNESS"
         detail="allowlisted_by_proxy"

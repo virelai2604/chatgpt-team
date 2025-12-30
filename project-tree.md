@@ -5,6 +5,7 @@
   📄 .gitleaks.toml
   📄 AGENTS.md
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
+  📄 P4_Cross_Domain_Analogy_Hybrid_Developer_v2_3_3.json
   📄 RELAY_CHECKLIST_v16.md
   📄 RELAY_PROGRESS_SUMMARY_v12.md
   📄 __init__.py
@@ -112,6 +113,7 @@
     📄 batch_download_test.sh
     📄 content_endpoints_smoke.sh
     📄 coverage_report.sh
+    📄 eval_p4_specs.py
     📄 images_variations_smoke.sh
     📄 make_sample_png.py
     📄 make_test_png.py
@@ -119,6 +121,7 @@
     📄 run_success_gates.sh
     📄 smoke_images_variations.sh
     📄 sse_smoke_test.sh
+    📄 test_31_endpoints.sh
     📄 test_local.sh
     📄 test_render.sh
     📄 test_success_gates_integration.py
