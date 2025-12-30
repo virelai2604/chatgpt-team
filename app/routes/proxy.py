@@ -52,8 +52,8 @@ _BLOCKED_PREFIXES: Tuple[str, ...] = (
     "/v1/webhooks",
     "/v1/moderations",
     "/v1/realtime",  # websocket family (not Actions-friendly)
-    "/v1/uploads",   # multipart/resumable (use explicit wrapper routes)
-    "/v1/audio",     # often multipart/binary
+    "/v1/uploads",  # multipart/resumable (use explicit wrapper routes)
+    "/v1/audio",  # often multipart/binary
 )
 
 _BLOCKED_PATHS: Set[str] = {
@@ -106,12 +106,9 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
     ({"DELETE"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
     ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+/search$")),
-
-    # >>> PROXY_CANDIDATE_VECTOR_STORES_ROOT_WRITE (added) <<<
-    ({"PUT"}, re.compile(r"^/v1/vector_stores$")),
-    ({"PATCH"}, re.compile(r"^/v1/vector_stores$")),
-    ({"DELETE"}, re.compile(r"^/v1/vector_stores$")),
-
+    ({"PUT"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
+    ({"PATCH"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
+    
     # vector store files
     ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+/files$")),
     ({"GET"}, re.compile(r"^/v1/vector_stores/[^/]+/files$")),
@@ -133,25 +130,15 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
 
     # ---- Conversations (JSON) ----
     ({"POST"}, re.compile(r"^/v1/conversations$")),
+    ({"GET"}, re.compile(r"^/v1/conversations$")),
     ({"GET"}, re.compile(r"^/v1/conversations/[^/]+$")),
     ({"POST"}, re.compile(r"^/v1/conversations/[^/]+$")),
     ({"DELETE"}, re.compile(r"^/v1/conversations/[^/]+$")),
 
-    # >>> PROXY_CANDIDATE_CONVERSATIONS (added) <<<
-    ({"GET"}, re.compile(r"^/v1/conversations$")),
-
     # ---- Files (JSON metadata only; content is binary; create is multipart) ----
     ({"GET"}, re.compile(r"^/v1/files$")),
     ({"GET"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
-    ({"GET"}, re.compile(r"^/v1/conversations$")),
     ({"DELETE"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
-
-    # >>> PROXY_CANDIDATE_BATCHES (added) <<<
-    ({"GET"}, re.compile(r"^/v1/batches$")),
-    ({"POST"}, re.compile(r"^/v1/batches$")),
-    ({"GET"}, re.compile(r"^/v1/batches/[^/]+$")),
-    ({"POST"}, re.compile(r"^/v1/batches/[^/]+/cancel$")),
-)
 
     # ---- Batches (JSON) ----
     ({"GET"}, re.compile(r"^/v1/batches$")),
