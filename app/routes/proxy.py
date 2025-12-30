@@ -102,6 +102,9 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     # ---- Vector Stores (JSON) ----
     ({"GET"}, re.compile(r"^/v1/vector_stores$")),
     ({"POST"}, re.compile(r"^/v1/vector_stores$")),
+    ({"PUT"}, re.compile(r"^/v1/vector_stores$")),
+    ({"PATCH"}, re.compile(r"^/v1/vector_stores$")),
+    ({"DELETE"}, re.compile(r"^/v1/vector_stores$")),
     ({"GET"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
     ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
     ({"DELETE"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
