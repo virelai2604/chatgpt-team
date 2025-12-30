@@ -1,4 +1,3 @@
-# app/routes/proxy.py
 from __future__ import annotations
 
 import re
@@ -14,13 +13,11 @@ router = APIRouter(prefix="/v1", tags=["proxy"])
 
 class ProxyRequest(BaseModel):
     """
-    Action-friendly proxy envelope (Option A).
+    Action-friendly proxy envelope.
 
-    NOTE:
-    - We intentionally do NOT use a field named `json`, because it shadows
-      BaseModel.json() and triggers Pydantic warnings.
-    - For backward compatibility, we still ACCEPT an input key named "json"
-      as an alias to `body`.
+    Notes:
+    - We intentionally do NOT use a field named `json`, because it shadows BaseModel.json().
+    - For backward compatibility, we still ACCEPT an input key named "json" as an alias to `body`.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -28,14 +25,12 @@ class ProxyRequest(BaseModel):
     method: str = Field(..., description="HTTP method: GET, POST, PUT, PATCH, DELETE")
     path: str = Field(..., description="Upstream OpenAI path, e.g. /v1/responses")
 
-    # Accept multiple common spellings (client convenience).
     query: Optional[Dict[str, Any]] = Field(
         default=None,
         validation_alias=AliasChoices("query", "params", "query_params"),
         description="Query parameters (object/dict)",
     )
 
-    # Back-compat: accept {"json": {...}} from older clients/examples
     body: Optional[Any] = Field(
         default=None,
         validation_alias=AliasChoices("body", "json", "json_body"),
@@ -44,11 +39,6 @@ class ProxyRequest(BaseModel):
 
     @model_validator(mode="after")
     def _avoid_empty_json_body_parse_errors(self) -> "ProxyRequest":
-        """
-        Some clients omit the body entirely for POST-like methods.
-        Defaulting to {} gives a consistent upstream behavior (400 w/ details)
-        instead of 'empty body' edge cases.
-        """
         m = (self.method or "").strip().upper()
         if m in {"POST", "PUT", "PATCH"} and self.body is None:
             self.body = {}
@@ -57,33 +47,29 @@ class ProxyRequest(BaseModel):
 
 _ALLOWED_METHODS: Set[str] = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 
-# Block higher-risk or non-Action-friendly families by prefix.
 _BLOCKED_PREFIXES: Tuple[str, ...] = (
     "/v1/admin",
     "/v1/webhooks",
     "/v1/moderations",
     "/v1/realtime",  # websocket family (not Actions-friendly)
-    "/v1/uploads",  # multipart/resumable
-    "/v1/audio",  # often multipart/binary
+    "/v1/uploads",   # multipart/resumable (use explicit wrapper routes)
+    "/v1/audio",     # often multipart/binary
 )
 
-# Block direct recursion and local-only helpers
 _BLOCKED_PATHS: Set[str] = {
     "/v1/proxy",
     "/v1/responses:stream",
 }
 
-# Block binary-ish suffixes (Actions are JSON-first)
 _BLOCKED_SUFFIXES: Tuple[str, ...] = (
     "/content",
     "/results",
 )
 
-# Multipart endpoints that should not be routed via JSON envelope
 _BLOCKED_METHOD_PATH_REGEX: Set[Tuple[str, re.Pattern[str]]] = {
     ("POST", re.compile(r"^/v1/files$")),
     ("POST", re.compile(r"^/v1/images/(edits|variations)$")),
-    ("POST", re.compile(r"^/v1/videos$")),  # per API ref, create video is multipart/form-data
+    ("POST", re.compile(r"^/v1/videos$")),  # create video is multipart/form-data
 }
 
 # Allowlist: (methods, regex)
@@ -113,11 +99,6 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     ({"GET"}, re.compile(r"^/v1/videos/[^/]+$")),
     ({"DELETE"}, re.compile(r"^/v1/videos/[^/]+$")),
 
-    # ---- Batches (JSON) [PROXY_CANDIDATE_BATCHES] ----
-    ({"GET", "POST"}, re.compile(r"^/v1/batches$")),
-    ({"GET"}, re.compile(r"^/v1/batches/[^/]+$")),
-    ({"POST"}, re.compile(r"^/v1/batches/[^/]+/cancel$")),
-
     # ---- Vector Stores (JSON) ----
     ({"GET"}, re.compile(r"^/v1/vector_stores$")),
     ({"POST"}, re.compile(r"^/v1/vector_stores$")),
@@ -126,9 +107,10 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     ({"DELETE"}, re.compile(r"^/v1/vector_stores/[^/]+$")),
     ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+/search$")),
 
-    # Vector stores root-write ops [PROXY_CANDIDATE_VECTOR_STORES_ROOT_WRITE]
-    # NOTE: broad operations; still constrained by exact path match and method.
-    ({"PUT", "PATCH", "DELETE"}, re.compile(r"^/v1/vector_stores$")),
+    # >>> PROXY_CANDIDATE_VECTOR_STORES_ROOT_WRITE (added) <<<
+    ({"PUT"}, re.compile(r"^/v1/vector_stores$")),
+    ({"PATCH"}, re.compile(r"^/v1/vector_stores$")),
+    ({"DELETE"}, re.compile(r"^/v1/vector_stores$")),
 
     # vector store files
     ({"POST"}, re.compile(r"^/v1/vector_stores/[^/]+/files$")),
@@ -151,36 +133,40 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
 
     # ---- Conversations (JSON) ----
     ({"POST"}, re.compile(r"^/v1/conversations$")),
-    ({"GET"}, re.compile(r"^/v1/conversations$")),  # <-- allow list endpoint (your failing GET)
     ({"GET"}, re.compile(r"^/v1/conversations/[^/]+$")),
     ({"POST"}, re.compile(r"^/v1/conversations/[^/]+$")),
     ({"DELETE"}, re.compile(r"^/v1/conversations/[^/]+$")),
+
+    # >>> PROXY_CANDIDATE_CONVERSATIONS (added) <<<
+    ({"GET"}, re.compile(r"^/v1/conversations$")),
 
     # ---- Files (JSON metadata only; content is binary; create is multipart) ----
     ({"GET"}, re.compile(r"^/v1/files$")),
     ({"GET"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
     ({"DELETE"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
+
+    # >>> PROXY_CANDIDATE_BATCHES (added) <<<
+    ({"GET"}, re.compile(r"^/v1/batches$")),
+    ({"POST"}, re.compile(r"^/v1/batches$")),
+    ({"GET"}, re.compile(r"^/v1/batches/[^/]+$")),
+    ({"POST"}, re.compile(r"^/v1/batches/[^/]+/cancel$")),
 )
 
 
 def _normalize_path(path: str) -> str:
     p = (path or "").strip()
-
     if not p:
         raise HTTPException(status_code=400, detail="path is required")
 
-    # Disallow full URLs; only allow API paths.
     if "://" in p or p.lower().startswith("http"):
         raise HTTPException(status_code=400, detail="path must be an OpenAI API path, not a URL")
 
-    # Disallow embedded query strings (use `query` field).
     if "?" in p:
         raise HTTPException(status_code=400, detail="path must not include '?'; use `query` field")
 
     if not p.startswith("/"):
         p = "/" + p
 
-    # Ensure /v1 prefix
     if p.startswith("/v1"):
         normalized = p
     elif p.startswith("v1/"):
@@ -188,7 +174,6 @@ def _normalize_path(path: str) -> str:
     else:
         normalized = "/v1" + p
 
-    # Collapse accidental double slashes
     while "//" in normalized:
         normalized = normalized.replace("//", "/")
 
@@ -196,15 +181,12 @@ def _normalize_path(path: str) -> str:
 
 
 def _blocked_reason(method: str, path: str, body: Any) -> Optional[str]:
-    # No streaming via proxy envelope
     if isinstance(body, dict) and body.get("stream") is True:
         return "stream=true is not allowed via /v1/proxy (use explicit streaming route)"
 
-    # Block weird colon paths like /v1/responses:stream
     if ":" in path:
         return "':' paths are not allowed via /v1/proxy"
 
-    # Basic traversal guards
     if ".." in path or "#" in path:
         return "path contains illegal sequences"
     if any(ch.isspace() for ch in path):
