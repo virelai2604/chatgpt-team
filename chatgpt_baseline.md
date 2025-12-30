@@ -1,13 +1,13 @@
 # ChatGPT Sync
 Repo: chatgpt-team
 Base: origin/main
-Base commit (merge-base): 926bf8761ef5b6467325953263af808099d0b794
+Base commit (merge-base): 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 Dirs: app tests static schemas src scripts/src
 Root files: project-tree.md pyproject.toml chatgpt_sync.sh AGENTS.md __init__.py generate_tree.py
 Mode: baseline
-Generated: 2025-12-30T19:39:38+07:00
+Generated: 2025-12-30T20:45:58+07:00
 
-## TREE (repo root at 926bf8761ef5b6467325953263af808099d0b794)
+## TREE (repo root at 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f)
 ```
  - .env.example.env
  - .gitattributes
@@ -41,7 +41,7 @@ Generated: 2025-12-30T19:39:38+07:00
  - tests
 ```
 
-## TREE (app/ at 926bf8761ef5b6467325953263af808099d0b794)
+## TREE (app/ at 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f)
 ```
  - app/__init__.py
  - app/api/__init__.py
@@ -88,7 +88,7 @@ Generated: 2025-12-30T19:39:38+07:00
  - app/utils/logger.py
 ```
 
-## TREE (tests/ at 926bf8761ef5b6467325953263af808099d0b794)
+## TREE (tests/ at 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f)
 ```
  - tests/__init__.py
  - tests/client.py
@@ -103,29 +103,29 @@ Generated: 2025-12-30T19:39:38+07:00
  - tests/test_success_gates_integration.py
 ```
 
-## TREE (static/ at 926bf8761ef5b6467325953263af808099d0b794)
+## TREE (static/ at 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f)
 ```
  - static/.well-known/__init__.py
  - static/.well-known/ai-plugin.json
 ```
 
-## TREE (schemas/ at 926bf8761ef5b6467325953263af808099d0b794)
+## TREE (schemas/ at 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f)
 ```
  - schemas/__init__.py
  - schemas/openapi.yaml
 ```
 
-## TREE (src/ at 926bf8761ef5b6467325953263af808099d0b794)
+## TREE (src/ at 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f)
 ```
 ```
 
-## TREE (scripts/src/ at 926bf8761ef5b6467325953263af808099d0b794)
+## TREE (scripts/src/ at 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f)
 ```
 ```
 
 ## BASELINE (ROOT FILES)
 
-## FILE: project-tree.md @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: project-tree.md @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
   📄 .env.env
   📄 .env.example.env
@@ -272,7 +272,7 @@ Generated: 2025-12-30T19:39:38+07:00
     📄 test_remaining_routes_smoke_integration.py
     📄 test_success_gates_integration.py```
 
-## FILE: pyproject.toml @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: pyproject.toml @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -335,7 +335,7 @@ exclude = ["tests*", "docs*", "render*"]
 app = ["manifests/*.json"]
 ```
 
-## FILE: chatgpt_sync.sh @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: chatgpt_sync.sh @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 #!/usr/bin/env bash
 set -euo pipefail
@@ -774,7 +774,7 @@ mv "$tmp_out" "$OUT_FILE"
 echo "Wrote: ${REPO_ROOT}/${OUT_FILE}"
 ```
 
-## FILE: AGENTS.md @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: AGENTS.md @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # Repository Guidelines – ChatGPT Team Relay (Codex Max / Custom Action Focus)
 
@@ -919,11 +919,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## FILE: __init__.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: __init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 ```
 
-## FILE: generate_tree.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: generate_tree.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 #!/usr/bin/env python3
 """
@@ -997,15 +997,15 @@ if __name__ == "__main__":
 
 ## BASELINE (app/)
 
-## FILE: app/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/__init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 ```
 
-## FILE: app/api/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/api/__init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 ```
 
-## FILE: app/api/forward_openai.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/api/forward_openai.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -1444,7 +1444,7 @@ _join_upstream_url = _join_upstream_url
 _join_upstream_url_compat = _join_upstream_url_compat
 ```
 
-## FILE: app/api/routes.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/api/routes.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -1471,6 +1471,7 @@ def _build_manifest() -> Dict[str, Any]:
             "/v1/responses/{response_id}/cancel",
             "/v1/responses/{response_id}/input_items",
         ],
+        "responses_stream": ["/v1/responses:stream"],
         "responses_compact": ["/v1/responses/compact"],
         "embeddings": ["/v1/embeddings"],
         "images": ["/v1/images/generations", "/v1/images/edits", "/v1/images/variations"],
@@ -1480,6 +1481,13 @@ def _build_manifest() -> Dict[str, Any]:
 
         # NEW: Actions-friendly wrapper for multipart file upload
         "files_actions": ["/v1/actions/files/upload"],
+        "uploads_actions": [
+            "/v1/actions/uploads",
+            "/v1/actions/uploads/{upload_id}/parts",
+            "/v1/actions/uploads/{upload_id}/complete",
+            "/v1/actions/uploads/{upload_id}/cancel",
+        ],
+        "videos_actions": ["/v1/actions/videos"],
     }
 
     meta = {
@@ -1492,6 +1500,7 @@ def _build_manifest() -> Dict[str, Any]:
             "health",
             "models",
             "responses",
+            "responses_stream",
             "responses_compact",
             "embeddings",
             "images",
@@ -1501,6 +1510,8 @@ def _build_manifest() -> Dict[str, Any]:
 
             # include wrapper route in Actions schema
             "files_actions",
+            "uploads_actions",
+            "videos_actions",
         ],
     }
 
@@ -1546,7 +1557,7 @@ async def openapi_actions(request: Request) -> JSONResponse:
     return JSONResponse(filtered)
 ```
 
-## FILE: app/api/sse.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/api/sse.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -1579,7 +1590,7 @@ async def responses_stream(request: Request) -> Response:
     )
 ```
 
-## FILE: app/api/tools_api.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/api/tools_api.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # app/api/tools_api.py
 from __future__ import annotations
@@ -1689,11 +1700,11 @@ async def openapi_actions(request: Request) -> JSONResponse:
     return JSONResponse(filtered)
 ```
 
-## FILE: app/core/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/core/__init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 ```
 
-## FILE: app/core/config.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/core/config.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -2085,7 +2096,7 @@ def get_settings() -> Settings:
 settings: Settings = get_settings()
 ```
 
-## FILE: app/core/http_client.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/core/http_client.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -2140,7 +2151,7 @@ def get_async_httpx_client(*, timeout_seconds: float | None = None, timeout: flo
     return _async_httpx_client
 ```
 
-## FILE: app/core/logging.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/core/logging.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 """
 Logging configuration module for the ChatGPT Team Relay.
@@ -2190,7 +2201,7 @@ def configure_logging(settings: Any) -> None:
     get_logger("relay")
 ```
 
-## FILE: app/core/settings.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/core/settings.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -2206,7 +2217,7 @@ from .config import Settings, get_settings, settings
 __all__ = ["Settings", "get_settings", "settings"]
 ```
 
-## FILE: app/http_client.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/http_client.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -2222,7 +2233,7 @@ from app.core.http_client import get_async_httpx_client, get_async_openai_client
 __all__ = ["get_async_httpx_client", "get_async_openai_client"]
 ```
 
-## FILE: app/main.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/main.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -2290,7 +2301,7 @@ def create_app() -> FastAPI:
 app = create_app()
 ```
 
-## FILE: app/manifests/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/manifests/__init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # ==========================================================
 # app/manifests/__init__.py — Ground Truth Manifest Loader
@@ -2337,7 +2348,7 @@ except Exception as e:
     raise RuntimeError(f"Failed to load tools manifest: {_manifest_path} — {e}")
 ```
 
-## FILE: app/manifests/tools_manifest.json @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/manifests/tools_manifest.json @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 {
   "object": "list",
@@ -2628,11 +2639,11 @@ except Exception as e:
 }
 ```
 
-## FILE: app/middleware/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/middleware/__init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 ```
 
-## FILE: app/middleware/p4_orchestrator.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/middleware/p4_orchestrator.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # app/middleware/p4_orchestrator.py
 import uuid
@@ -2666,7 +2677,7 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         return response
 ```
 
-## FILE: app/middleware/relay_auth.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/middleware/relay_auth.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -2738,7 +2749,7 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/middleware/validation.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/middleware/validation.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -2839,14 +2850,14 @@ class ValidationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/models/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/models/__init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from .error import ErrorDetail, ErrorResponse
 
 __all__ = ["ErrorDetail", "ErrorResponse"]
 ```
 
-## FILE: app/models/error.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/models/error.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -2885,7 +2896,7 @@ class ErrorResponse(BaseModel):
         )
 ```
 
-## FILE: app/routes/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/__init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # app/routes/__init__.py
 
@@ -2894,7 +2905,7 @@ from .register_routes import register_routes
 __all__ = ["register_routes"]
 ```
 
-## FILE: app/routes/actions.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/actions.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # app/routes/actions.py
 
@@ -3124,7 +3135,7 @@ async def actions_files_upload(payload: FilesUploadRequest) -> Response:
     )
 ```
 
-## FILE: app/routes/batches.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/batches.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -3162,7 +3173,7 @@ async def cancel_batch(batch_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/containers.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/containers.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -3258,7 +3269,7 @@ async def containers_file_content_head(request: Request, container_id: str, file
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/conversations.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/conversations.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -3327,7 +3338,7 @@ async def conversations_subpaths_options(path: str, request: Request) -> Respons
     return await _forward(request)
 ```
 
-## FILE: app/routes/embeddings.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/embeddings.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -3349,7 +3360,7 @@ async def create_embedding(request: Request) -> JSONResponse:
     return JSONResponse(content=payload)
 ```
 
-## FILE: app/routes/files.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/files.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -3516,7 +3527,7 @@ async def actions_files_upload(payload: ActionsFileUploadRequest, request: Reque
     )
 ```
 
-## FILE: app/routes/health.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/health.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -3583,7 +3594,7 @@ async def v1_health() -> Dict[str, Any]:
     return _health_payload()
 ```
 
-## FILE: app/routes/images.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/images.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # app/api/images.py
 from __future__ import annotations
@@ -3932,7 +3943,7 @@ async def actions_edits(payload: ImagesEditsJSON) -> Response:
     return await _post_multipart_to_upstream(endpoint_path="/v1/images/edits", files=files, data=form)
 ```
 
-## FILE: app/routes/models.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/models.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # app/routes/models.py
 
@@ -3991,7 +4002,7 @@ async def retrieve_model(model_id: str) -> dict:
     }
 ```
 
-## FILE: app/routes/proxy.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/proxy.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -4137,8 +4148,6 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     ({"GET"}, re.compile(r"^/v1/files$")),
     ({"GET"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
     ({"DELETE"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
-    ({"GET"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
-    ({"DELETE"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
     
     # ---- Batches (JSON) ----
     ({"GET"}, re.compile(r"^/v1/batches$")),
@@ -4236,7 +4245,7 @@ async def proxy(call: ProxyRequest, request: Request) -> Response:
     )
 ```
 
-## FILE: app/routes/realtime.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/realtime.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # app/routes/realtime.py
 
@@ -4432,7 +4441,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
         await websocket.close()
 ```
 
-## FILE: app/routes/register_routes.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/register_routes.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # app/routes/register_routes.py
 
@@ -4487,11 +4496,13 @@ def register_routes(app: _RouterLike) -> None:
     app.include_router(embeddings.router)  # /v1/embeddings
     app.include_router(images.router)  # /v1/images
     app.include_router(videos.router)  # /v1/videos
+    app.include_router(videos.actions_router)  # /v1/actions/videos
     app.include_router(models.router)  # /v1/models (local stub)
 
     # Files & uploads (multipart, binary content)
     app.include_router(files.router)  # /v1/files
     app.include_router(uploads.router)  # /v1/uploads
+    app.include_router(uploads.actions_router)  # /v1/actions/uploads/*
     app.include_router(vector_stores.router)  # /v1/vector_stores (+ /vector_stores)
 
     # Higher-level surfaces
@@ -4509,7 +4520,7 @@ def register_all_routes(app: _RouterLike) -> None:
     register_routes(app)
 ```
 
-## FILE: app/routes/responses.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/responses.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -4581,15 +4592,23 @@ async def responses_compact(payload: ResponsesCompactRequest, request: Request):
         payload_data["object"] = "response.compaction"
     return JSONResponse(content=payload_data, status_code=upstream_response.status_code)```
 
-## FILE: app/routes/uploads.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/uploads.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response
+import base64
+from typing import Dict, Optional
 
-from app.api.forward_openai import forward_openai_request
+import httpx
+from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel, ConfigDict, Field
+from starlette.responses import Response as StarletteResponse
+
+from app.api.forward_openai import build_outbound_headers, build_upstream_url, forward_openai_method_path, forward_openai_request
+from app.core.http_client import get_async_httpx_client
 
 router = APIRouter(prefix="/v1", tags=["uploads"])
+actions_router = APIRouter(prefix="/v1/actions/uploads", tags=["uploads_actions"])
 
 
 @router.post("/uploads")
@@ -4620,9 +4639,137 @@ async def cancel_upload(upload_id: str, request: Request) -> Response:
 async def uploads_passthrough(path: str, request: Request) -> Response:
     upstream_path = f"/v1/uploads/{path}".rstrip("/")
     return await forward_openai_request(request, upstream_path=upstream_path)
-```
 
-## FILE: app/routes/vector_stores.py @ 926bf8761ef5b6467325953263af808099d0b794
+
+class ActionsUploadCreateRequest(BaseModel):
+    """Actions-friendly JSON wrapper for /v1/uploads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    purpose: str = Field(..., description="Upload purpose (e.g. batch)")
+    filename: str = Field(..., description="Original filename")
+    bytes: int = Field(..., description="Total size in bytes")
+    mime_type: str = Field(..., description="MIME type, e.g. text/plain")
+
+
+class ActionsUploadPartRequest(BaseModel):
+    """Actions-friendly JSON wrapper for /v1/uploads/{id}/parts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data_base64: str = Field(..., description="Base64-encoded part bytes (no data: prefix)")
+    filename: Optional[str] = Field(default="part.bin", description="Part filename")
+    mime_type: Optional[str] = Field(default="application/octet-stream", description="Part MIME type")
+
+
+class ActionsUploadCompleteRequest(BaseModel):
+    """Actions-friendly JSON wrapper for /v1/uploads/{id}/complete."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    part_ids: list[str] = Field(..., description="List of upload part IDs to complete")
+
+
+def _filter_response_headers(headers: httpx.Headers) -> Dict[str, str]:
+    strip = {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+        "content-length",
+        "content-encoding",
+    }
+    out: Dict[str, str] = {}
+    for k, v in headers.items():
+        if k.lower() in strip:
+            continue
+        out[k] = v
+    return out
+
+
+@actions_router.post("", summary="Actions wrapper for /v1/uploads (create upload)")
+async def actions_create_upload(payload: ActionsUploadCreateRequest, request: Request) -> Response:
+    upstream = await forward_openai_method_path(
+        "POST",
+        "/v1/uploads",
+        json_body=payload.model_dump(),
+        inbound_headers=request.headers,
+        request=request,
+    )
+    return upstream
+
+
+@actions_router.post("/{upload_id}/parts", summary="Actions wrapper for /v1/uploads/{id}/parts")
+async def actions_create_upload_part(upload_id: str, payload: ActionsUploadPartRequest, request: Request) -> Response:
+    max_bytes = 20 * 1024 * 1024  # 20 MiB decoded
+    try:
+        raw = base64.b64decode(payload.data_base64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 in data_base64")
+
+    if len(raw) == 0:
+        raise HTTPException(status_code=400, detail="Empty upload part is not allowed")
+    if len(raw) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"Upload part too large (>{max_bytes} bytes)")
+
+    upstream_path = f"/v1/uploads/{upload_id}/parts"
+    upstream_url = build_upstream_url(upstream_path, request=request)
+
+    headers = build_outbound_headers(
+        inbound_headers=request.headers,
+        content_type=None,
+        forward_accept=True,
+        path_hint=upstream_path,
+    )
+
+    client = get_async_httpx_client(timeout=60.0)
+    files = {
+        "data": (payload.filename or "part.bin", raw, payload.mime_type or "application/octet-stream"),
+    }
+
+    try:
+        resp = await client.post(upstream_url, headers=headers, files=files)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Upstream timeout while uploading part")
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream HTTP error while uploading part: {exc!r}") from exc
+
+    return StarletteResponse(
+        content=resp.content,
+        status_code=resp.status_code,
+        media_type=resp.headers.get("content-type"),
+        headers=_filter_response_headers(resp.headers),
+    )
+
+
+@actions_router.post("/{upload_id}/complete", summary="Actions wrapper for /v1/uploads/{id}/complete")
+async def actions_complete_upload(upload_id: str, payload: ActionsUploadCompleteRequest, request: Request) -> Response:
+    upstream = await forward_openai_method_path(
+        "POST",
+        f"/v1/uploads/{upload_id}/complete",
+        json_body=payload.model_dump(),
+        inbound_headers=request.headers,
+        request=request,
+    )
+    return upstream
+
+
+@actions_router.post("/{upload_id}/cancel", summary="Actions wrapper for /v1/uploads/{id}/cancel")
+async def actions_cancel_upload(upload_id: str, request: Request) -> Response:
+    upstream = await forward_openai_method_path(
+        "POST",
+        f"/v1/uploads/{upload_id}/cancel",
+        json_body=None,
+        inbound_headers=request.headers,
+        request=request,
+    )
+    return upstream```
+
+## FILE: app/routes/vector_stores.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -4703,16 +4850,24 @@ async def vector_stores_subpaths_alias(path: str, request: Request) -> Response:
     return await _forward(request)
 ```
 
-## FILE: app/routes/videos.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/routes/videos.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+import base64
+from typing import Any, Dict, Optional
 
-from app.api.forward_openai import forward_openai_method_path, forward_openai_request
+import httpx
+from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel, ConfigDict, Field
+from starlette.responses import Response as StarletteResponse
+
+from app.api.forward_openai import build_outbound_headers, build_upstream_url, forward_openai_method_path, forward_openai_request
+from app.core.http_client import get_async_httpx_client
 from app.utils.logger import info
 
 router = APIRouter(prefix="/v1", tags=["videos"])
+actions_router = APIRouter(prefix="/v1/actions/videos", tags=["videos_actions"])
 
 
 # --- Canonical Videos API (per OpenAI API reference) ---
@@ -4790,13 +4945,117 @@ async def download_video_content(video_id: str, request: Request):
 async def videos_passthrough(path: str, request: Request):
     info("→ [videos/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
+
+
+class ActionsVideoCreateRequest(BaseModel):
+    """Actions-friendly multipart wrapper for /v1/videos."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: Optional[str] = Field(default=None, description="Prompt for video generation")
+    model: Optional[str] = Field(default=None, description="Model ID")
+    data_base64: Optional[str] = Field(default=None, description="Base64-encoded input image/video bytes")
+    filename: Optional[str] = Field(default="input.bin", description="Input filename")
+    mime_type: Optional[str] = Field(default="application/octet-stream", description="Input MIME type")
+    file_field: Optional[str] = Field(default="image", description="Multipart field name for the file")
+    params: Optional[Dict[str, Any]] = Field(default=None, description="Additional form fields to pass through")
+
+
+def _as_str_form_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float, str)):
+        return str(value)
+    return str(value)
+
+
+def _filter_response_headers(headers: httpx.Headers) -> Dict[str, str]:
+    strip = {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+        "content-length",
+        "content-encoding",
+    }
+    out: Dict[str, str] = {}
+    for k, v in headers.items():
+        if k.lower() in strip:
+            continue
+        out[k] = v
+    return out
+
+
+@actions_router.post("", summary="Actions wrapper for /v1/videos (multipart)")
+async def actions_create_video(payload: ActionsVideoCreateRequest, request: Request) -> Response:
+    form: Dict[str, str] = {}
+    if payload.model:
+        form["model"] = _as_str_form_value(payload.model)
+    if payload.prompt:
+        form["prompt"] = _as_str_form_value(payload.prompt)
+    if payload.params:
+        for k, v in payload.params.items():
+            if v is None:
+                continue
+            form[str(k)] = _as_str_form_value(v)
+
+    file_bytes: Optional[bytes] = None
+    if payload.data_base64:
+        try:
+            file_bytes = base64.b64decode(payload.data_base64, validate=True)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid base64 in data_base64")
+
+    if not form and file_bytes is None:
+        raise HTTPException(status_code=400, detail="At least one of prompt, params, or data_base64 is required")
+
+    upstream_path = "/v1/videos"
+    upstream_url = build_upstream_url(upstream_path, request=request)
+    headers = build_outbound_headers(
+        inbound_headers=request.headers,
+        content_type=None,
+        forward_accept=True,
+        path_hint=upstream_path,
+    )
+
+    files = None
+    if file_bytes is not None:
+        if len(file_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Empty data_base64 is not allowed")
+        files = {
+            payload.file_field or "image": (
+                payload.filename or "input.bin",
+                file_bytes,
+                payload.mime_type or "application/octet-stream",
+            )
+        }
+
+    client = get_async_httpx_client(timeout=90.0)
+    try:
+        resp = await client.post(upstream_url, headers=headers, data=form, files=files)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Upstream timeout while creating video")
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream HTTP error while creating video: {exc!r}") from exc
+
+    return StarletteResponse(
+        content=resp.content,
+        status_code=resp.status_code,
+        media_type=resp.headers.get("content-type"),
+        headers=_filter_response_headers(resp.headers),
+    )```
+
+## FILE: app/utils/__init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
+```
 ```
 
-## FILE: app/utils/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
-```
-```
-
-## FILE: app/utils/authy.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/utils/authy.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -4866,7 +5125,7 @@ def check_relay_key(*, authorization: str | None, x_relay_key: str | None) -> No
     raise HTTPException(status_code=401, detail="Invalid relay key")
 ```
 
-## FILE: app/utils/error_handler.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/utils/error_handler.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # app/utils/error_handler.py
 
@@ -5010,7 +5269,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 ```
 
-## FILE: app/utils/http_client.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/utils/http_client.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -5019,7 +5278,7 @@ from app.core.http_client import get_async_httpx_client
 __all__ = ["get_async_httpx_client"]
 ```
 
-## FILE: app/utils/logger.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: app/utils/logger.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -5160,11 +5419,11 @@ def exception(msg: str, *args, **kwargs) -> None:
 
 ## BASELINE (tests/)
 
-## FILE: tests/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: tests/__init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 ```
 
-## FILE: tests/client.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: tests/client.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # tests/client.py
 
@@ -5201,7 +5460,7 @@ def _build_client() -> TestClient:
 client: TestClient = _build_client()
 ```
 
-## FILE: tests/conftest.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: tests/conftest.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -5336,7 +5595,7 @@ async def async_client() -> AsyncIterator[httpx.AsyncClient]:
         yield c
 ```
 
-## FILE: tests/relay_client_example.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: tests/relay_client_example.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # relay_client_example.py
 from __future__ import annotations
@@ -5411,7 +5670,7 @@ if __name__ == "__main__":
         raise
 ```
 
-## FILE: tests/test_extended_routes_smoke_integration.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: tests/test_extended_routes_smoke_integration.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 """Extended route smoke tests (integration).
 
@@ -5671,7 +5930,7 @@ def test_realtime_sessions_create_no_5xx() -> None:
     assert r.status_code < 500, f"realtime sessions returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_files_and_batches_integration.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: tests/test_files_and_batches_integration.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 """
 tests/test_files_and_batches_integration.py
@@ -6005,7 +6264,7 @@ async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient) -> N
     assert r.content, "output file content was empty"
 ```
 
-## FILE: tests/test_images_variations_integration.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: tests/test_images_variations_integration.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 import binascii
 import os
@@ -6089,7 +6348,7 @@ def test_images_variations_wiring_no_5xx(tmp_path) -> None:
     assert r.status_code < 500, r.text
 ```
 
-## FILE: tests/test_local_e2e.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: tests/test_local_e2e.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # tests/test_local_e2e.py
 from __future__ import annotations
@@ -6303,15 +6562,25 @@ async def test_actions_images_routes_registered() -> None:
 
 
 @pytest.mark.asyncio
+async def test_actions_uploads_videos_routes_registered() -> None:
+    paths = {route.path for route in fastapi_app.routes if hasattr(route, "path")}
+    assert "/v1/actions/uploads" in paths
+    assert "/v1/actions/uploads/{upload_id}/parts" in paths
+    assert "/v1/actions/uploads/{upload_id}/complete" in paths
+    assert "/v1/actions/uploads/{upload_id}/cancel" in paths
+    assert "/v1/actions/videos" in paths
+    assert "/v1/responses:stream" in paths
+
+
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_actions_images_endpoints_callable(async_client: httpx.AsyncClient) -> None:
     for path in ("/v1/actions/images/variations", "/v1/actions/images/edits"):
         resp = await async_client.post(path, json={})
         assert resp.status_code == 400
-        assert "Missing image input" in resp.text
-```
+        assert "Missing image input" in resp.text```
 
-## FILE: tests/test_relay_auth_guard.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: tests/test_relay_auth_guard.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 # tests/test_relay_auth_guard.py
 """Relay auth middleware guardrails.
@@ -6394,7 +6663,7 @@ def test_relay_auth_requires_valid_key_for_v1_paths(monkeypatch: pytest.MonkeyPa
         assert body.get("object") == "list"
 ```
 
-## FILE: tests/test_remaining_routes_smoke_integration.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: tests/test_remaining_routes_smoke_integration.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -6443,7 +6712,7 @@ def test_remaining_route_families_smoke_no_5xx() -> None:
         assert r.status_code < 500, f"{method} {path} returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_success_gates_integration.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: tests/test_success_gates_integration.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 from __future__ import annotations
 
@@ -6512,6 +6781,7 @@ def test_gate_a_uploads_e2e_happy_and_cancel() -> None:
             headers=_headers(content_type="application/json"),
             json={"purpose": purpose, "filename": filename, "bytes": len(content), "mime_type": "text/plain"},
         )
+        _skip_if_upstream_server_error(r, label="Upload create failed")
         assert r.status_code == 200, r.text
         upload_id = r.json().get("id")
         assert upload_id and isinstance(upload_id, str)
@@ -6646,11 +6916,11 @@ def test_gate_d_content_endpoints_wiring_negative_ids() -> None:
 
 ## BASELINE (static/)
 
-## FILE: static/.well-known/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: static/.well-known/__init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 ```
 
-## FILE: static/.well-known/ai-plugin.json @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: static/.well-known/ai-plugin.json @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 {
   "schema_version": "v1",
@@ -6679,11 +6949,11 @@ def test_gate_d_content_endpoints_wiring_negative_ids() -> None:
 
 ## BASELINE (schemas/)
 
-## FILE: schemas/__init__.py @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: schemas/__init__.py @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 ```
 
-## FILE: schemas/openapi.yaml @ 926bf8761ef5b6467325953263af808099d0b794
+## FILE: schemas/openapi.yaml @ 4dad442ff528d6ec7b0d0d6db1ea511c1497f97f
 ```
 openapi: 3.1.0
 info:
@@ -6770,6 +7040,26 @@ paths:
             application/json:
               schema:
                 type: object
+
+  /v1/responses:stream:
+    post:
+      operationId: streamResponse
+      summary: Stream a response (SSE)
+      description: |
+        Wrapper that forces stream=true and proxies to /v1/responses.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: SSE stream of response events
+          content:
+            text/event-stream:
+              schema:
+                type: string
 
   /v1/responses/{response_id}:
     get:
@@ -7240,8 +7530,109 @@ paths:
               schema:
                 type: object
 
-components: {}
-```
+  /v1/actions/uploads:
+    post:
+      operationId: actionsCreateUpload
+      summary: Create an upload (Actions wrapper)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Upload object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/actions/uploads/{upload_id}/parts:
+    post:
+      operationId: actionsCreateUploadPart
+      summary: Create an upload part (Actions wrapper)
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Upload part object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/actions/uploads/{upload_id}/complete:
+    post:
+      operationId: actionsCompleteUpload
+      summary: Complete an upload (Actions wrapper)
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Upload completion result
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/actions/uploads/{upload_id}/cancel:
+    post:
+      operationId: actionsCancelUpload
+      summary: Cancel an upload (Actions wrapper)
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Upload cancellation result
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/actions/videos:
+    post:
+      operationId: actionsCreateVideo
+      summary: Create a video (Actions wrapper)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Video job object
+          content:
+            application/json:
+              schema:
+                type: object
+
+components: {}```
 
 ## BASELINE (src/)
 

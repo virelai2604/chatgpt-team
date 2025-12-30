@@ -141,6 +141,12 @@ heuristic_bucket() {
     return
   fi
 
+  # Actions wrappers (explicit)
+  if [[ "$path" == /v1/actions/uploads* || "$path" == "/v1/actions/videos" ]]; then
+    echo "ACTIONS_DIRECT"
+    return
+  fi
+
   # Keep /v1/actions/* out of Actions by default unless explicitly exposed
   if [[ "$path" == "/v1/actions/ping" || "$path" == "/v1/actions/relay_info" ]]; then
     echo "EXCLUDE_META_V1"
