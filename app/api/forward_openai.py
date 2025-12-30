@@ -10,6 +10,7 @@ from starlette.responses import StreamingResponse
 
 from app.core.http_client import get_async_httpx_client
 from app.core.settings import get_settings
+from app.utils.logger import get_logger
 
 _HOP_BY_HOP_HEADERS = {
     "connection",
@@ -27,6 +28,8 @@ _STRIP_RESPONSE_HEADERS = _HOP_BY_HOP_HEADERS | {
     "content-length",
     "content-encoding",
 }
+
+logger = get_logger(__name__)
 
 
 def _get_timeout_seconds(settings: Any) -> float:
@@ -51,6 +54,34 @@ def _normalize_upstream_base(base: str, path: str) -> str:
         normalized = normalized[: -len("/v1")]
     return normalized
     
+
+def _is_upload_parts_path(path: str) -> bool:
+    return path.startswith("/v1/uploads/") and path.rstrip("/").endswith("/parts")
+
+
+def _summarize_upstream_error(body: bytes, content_type: Optional[str]) -> str:
+    if not body:
+        return "empty body"
+
+    payload = body.decode("utf-8", errors="replace")
+    if content_type and "application/json" in content_type.lower():
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            error = parsed.get("error")
+            if isinstance(error, dict):
+                summary = {
+                    "message": error.get("message"),
+                    "type": error.get("type"),
+                    "code": error.get("code"),
+                    "param": error.get("param"),
+                }
+                return json.dumps(summary, ensure_ascii=False)
+
+    return payload[:2000]
+
 
 def _join_upstream_url_compat(*args: Any, **kwargs: Any) -> str:
     """
@@ -136,6 +167,9 @@ def build_outbound_headers(
     out["Authorization"] = f"Bearer {upstream_key}"
 
     if content_type:
+        for key in list(out.keys()):
+            if key.lower() == "content-type":
+                out.pop(key)  
         out["Content-Type"] = str(content_type)
 
     if forward_accept and "Accept" not in out and "accept" not in out:
@@ -212,7 +246,11 @@ async def forward_openai_request(
     method_final = (method or request.method).upper()
 
     url = build_upstream_url(upstream_path_final, request=request, query=query)
-    headers = build_outbound_headers(request.headers, path_hint=upstream_path_final)
+    headers = build_outbound_headers(
+        request.headers,
+        path_hint=upstream_path_final,
+        content_type=request.headers.get("content-type") if _is_upload_parts_path(upstream_path_final) else None,
+    )
 
     body = await request.body()
     accept = request.headers.get("accept", "")
@@ -257,6 +295,18 @@ async def forward_openai_request(
     except httpx.HTTPError as e:
         raise HTTPException(status_code=424, detail=f"Upstream request failed: {type(e).__name__}: {e}") from e
 
+    if _is_upload_parts_path(upstream_path_final) and upstream_resp.status_code >= 400:
+        summary = _summarize_upstream_error(
+            upstream_resp.content,
+            upstream_resp.headers.get("content-type"),
+        )
+        logger.warning(
+            "Upstream uploads parts error (%s) for %s: %s",
+            upstream_resp.status_code,
+            upstream_path_final,
+            summary,
+        )
+    
     return Response(
         content=upstream_resp.content,
         status_code=upstream_resp.status_code,
