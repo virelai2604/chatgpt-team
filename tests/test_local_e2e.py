@@ -169,6 +169,7 @@ async def test_models_retrieve_default_model(async_client: httpx.AsyncClient) ->
     # Optional extra checks if upstream includes them
     # e.g. "created", "owned_by", etc. – but we do not require them here
 
+
 @pytest.mark.integration
 async def test_responses_compact_basic(async_client: httpx.AsyncClient) -> None:
     _skip_if_no_openai_key()
@@ -196,7 +197,7 @@ async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncC
     assert "/v1/responses/compact" in data["endpoints"]["responses_compact"]
 
 
-def test_actions_images_routes_registered() -> None:
+async def test_actions_images_routes_registered() -> None:
     paths = {route.path for route in fastapi_app.routes if hasattr(route, "path")}
     assert "/v1/actions/images/variations" in paths
     assert "/v1/actions/images/edits" in paths
