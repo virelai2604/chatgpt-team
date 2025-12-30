@@ -9,9 +9,6 @@ import pytest
 from app.core.config import settings
 from app.main import app as fastapi_app
 
-# All tests in this module are async
-pytestmark = pytest.mark.asyncio
-
 
 def _skip_if_no_openai_key() -> None:
     key = (settings.OPENAI_API_KEY or "").strip()
@@ -20,6 +17,7 @@ def _skip_if_no_openai_key() -> None:
         pytest.skip("OPENAI_API_KEY is not set; skipping upstream-dependent local E2E tests.")
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_health_endpoints_ok(async_client: httpx.AsyncClient) -> None:
     paths = ["/", "/health", "/v1/health"]
@@ -42,6 +40,7 @@ async def test_health_endpoints_ok(async_client: httpx.AsyncClient) -> None:
         assert isinstance(body.get("meta"), dict)
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_responses_non_streaming_basic(async_client: httpx.AsyncClient) -> None:
     _skip_if_no_openai_key()
@@ -74,6 +73,7 @@ async def test_responses_non_streaming_basic(async_client: httpx.AsyncClient) ->
     assert "hello" in text.lower()
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_responses_streaming_sse_basic(async_client: httpx.AsyncClient) -> None:
     """
@@ -107,6 +107,7 @@ async def test_responses_streaming_sse_basic(async_client: httpx.AsyncClient) ->
     assert "data:" in stream_text
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_embeddings_basic(async_client: httpx.AsyncClient) -> None:
     """
@@ -136,6 +137,7 @@ async def test_embeddings_basic(async_client: httpx.AsyncClient) -> None:
     assert embedding, "embedding vector should not be empty"
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_models_list_basic(async_client: httpx.AsyncClient) -> None:
     """
@@ -153,6 +155,7 @@ async def test_models_list_basic(async_client: httpx.AsyncClient) -> None:
     assert any(isinstance(m, dict) and "id" in m for m in body["data"])
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_models_retrieve_default_model(async_client: httpx.AsyncClient) -> None:
     """
@@ -170,6 +173,7 @@ async def test_models_retrieve_default_model(async_client: httpx.AsyncClient) ->
     # e.g. "created", "owned_by", etc. – but we do not require them here
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_responses_compact_basic(async_client: httpx.AsyncClient) -> None:
     _skip_if_no_openai_key()
@@ -188,6 +192,7 @@ async def test_responses_compact_basic(async_client: httpx.AsyncClient) -> None:
     assert data["object"] == "response.compaction"
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncClient) -> None:
     resp = await async_client.get("/manifest")
@@ -197,12 +202,14 @@ async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncC
     assert "/v1/responses/compact" in data["endpoints"]["responses_compact"]
 
 
+@pytest.mark.asyncio
 async def test_actions_images_routes_registered() -> None:
     paths = {route.path for route in fastapi_app.routes if hasattr(route, "path")}
     assert "/v1/actions/images/variations" in paths
     assert "/v1/actions/images/edits" in paths
 
 
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_actions_images_endpoints_callable(async_client: httpx.AsyncClient) -> None:
     for path in ("/v1/actions/images/variations", "/v1/actions/images/edits"):

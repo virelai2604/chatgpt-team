@@ -1,13 +1,13 @@
 # ChatGPT Sync
 Repo: chatgpt-team
 Base: origin/main
-Base commit (merge-base): 090ef910daa12d3734a2db425541a4f876d7efc9
+Base commit (merge-base): 4633dfb0e24e9488323b34c03465b1ae26decf6d
 Dirs: app tests static schemas src scripts/src
 Root files: project-tree.md pyproject.toml chatgpt_sync.sh AGENTS.md __init__.py generate_tree.py
 Mode: baseline
-Generated: 2025-12-30T18:49:38+07:00
+Generated: 2025-12-30T18:55:06+07:00
 
-## TREE (repo root at 090ef910daa12d3734a2db425541a4f876d7efc9)
+## TREE (repo root at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
 ```
  - .env.example.env
  - .gitattributes
@@ -41,7 +41,7 @@ Generated: 2025-12-30T18:49:38+07:00
  - tests
 ```
 
-## TREE (app/ at 090ef910daa12d3734a2db425541a4f876d7efc9)
+## TREE (app/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
 ```
  - app/__init__.py
  - app/api/__init__.py
@@ -88,7 +88,7 @@ Generated: 2025-12-30T18:49:38+07:00
  - app/utils/logger.py
 ```
 
-## TREE (tests/ at 090ef910daa12d3734a2db425541a4f876d7efc9)
+## TREE (tests/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
 ```
  - tests/__init__.py
  - tests/client.py
@@ -103,29 +103,29 @@ Generated: 2025-12-30T18:49:38+07:00
  - tests/test_success_gates_integration.py
 ```
 
-## TREE (static/ at 090ef910daa12d3734a2db425541a4f876d7efc9)
+## TREE (static/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
 ```
  - static/.well-known/__init__.py
  - static/.well-known/ai-plugin.json
 ```
 
-## TREE (schemas/ at 090ef910daa12d3734a2db425541a4f876d7efc9)
+## TREE (schemas/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
 ```
  - schemas/__init__.py
  - schemas/openapi.yaml
 ```
 
-## TREE (src/ at 090ef910daa12d3734a2db425541a4f876d7efc9)
+## TREE (src/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
 ```
 ```
 
-## TREE (scripts/src/ at 090ef910daa12d3734a2db425541a4f876d7efc9)
+## TREE (scripts/src/ at 4633dfb0e24e9488323b34c03465b1ae26decf6d)
 ```
 ```
 
 ## BASELINE (ROOT FILES)
 
-## FILE: project-tree.md @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: project-tree.md @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
   📄 .env.env
   📄 .env.example.env
@@ -272,7 +272,7 @@ Generated: 2025-12-30T18:49:38+07:00
     📄 test_remaining_routes_smoke_integration.py
     📄 test_success_gates_integration.py```
 
-## FILE: pyproject.toml @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: pyproject.toml @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -335,7 +335,7 @@ exclude = ["tests*", "docs*", "render*"]
 app = ["manifests/*.json"]
 ```
 
-## FILE: chatgpt_sync.sh @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: chatgpt_sync.sh @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 #!/usr/bin/env bash
 set -euo pipefail
@@ -774,7 +774,7 @@ mv "$tmp_out" "$OUT_FILE"
 echo "Wrote: ${REPO_ROOT}/${OUT_FILE}"
 ```
 
-## FILE: AGENTS.md @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: AGENTS.md @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # Repository Guidelines – ChatGPT Team Relay (Codex Max / Custom Action Focus)
 
@@ -919,11 +919,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## FILE: __init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: __init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 ```
 
-## FILE: generate_tree.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: generate_tree.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 #!/usr/bin/env python3
 """
@@ -997,15 +997,15 @@ if __name__ == "__main__":
 
 ## BASELINE (app/)
 
-## FILE: app/__init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 ```
 
-## FILE: app/api/__init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/api/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 ```
 
-## FILE: app/api/forward_openai.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/api/forward_openai.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -1444,7 +1444,7 @@ _join_upstream_url = _join_upstream_url
 _join_upstream_url_compat = _join_upstream_url_compat
 ```
 
-## FILE: app/api/routes.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/api/routes.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -1546,7 +1546,7 @@ async def openapi_actions(request: Request) -> JSONResponse:
     return JSONResponse(filtered)
 ```
 
-## FILE: app/api/sse.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/api/sse.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -1579,7 +1579,7 @@ async def responses_stream(request: Request) -> Response:
     )
 ```
 
-## FILE: app/api/tools_api.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/api/tools_api.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # app/api/tools_api.py
 from __future__ import annotations
@@ -1689,11 +1689,11 @@ async def openapi_actions(request: Request) -> JSONResponse:
     return JSONResponse(filtered)
 ```
 
-## FILE: app/core/__init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/core/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 ```
 
-## FILE: app/core/config.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/core/config.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -2085,7 +2085,7 @@ def get_settings() -> Settings:
 settings: Settings = get_settings()
 ```
 
-## FILE: app/core/http_client.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/core/http_client.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -2140,7 +2140,7 @@ def get_async_httpx_client(*, timeout_seconds: float | None = None, timeout: flo
     return _async_httpx_client
 ```
 
-## FILE: app/core/logging.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/core/logging.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 """
 Logging configuration module for the ChatGPT Team Relay.
@@ -2190,7 +2190,7 @@ def configure_logging(settings: Any) -> None:
     get_logger("relay")
 ```
 
-## FILE: app/core/settings.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/core/settings.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -2206,7 +2206,7 @@ from .config import Settings, get_settings, settings
 __all__ = ["Settings", "get_settings", "settings"]
 ```
 
-## FILE: app/http_client.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/http_client.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -2222,7 +2222,7 @@ from app.core.http_client import get_async_httpx_client, get_async_openai_client
 __all__ = ["get_async_httpx_client", "get_async_openai_client"]
 ```
 
-## FILE: app/main.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/main.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -2290,7 +2290,7 @@ def create_app() -> FastAPI:
 app = create_app()
 ```
 
-## FILE: app/manifests/__init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/manifests/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # ==========================================================
 # app/manifests/__init__.py — Ground Truth Manifest Loader
@@ -2337,7 +2337,7 @@ except Exception as e:
     raise RuntimeError(f"Failed to load tools manifest: {_manifest_path} — {e}")
 ```
 
-## FILE: app/manifests/tools_manifest.json @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/manifests/tools_manifest.json @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 {
   "object": "list",
@@ -2628,11 +2628,11 @@ except Exception as e:
 }
 ```
 
-## FILE: app/middleware/__init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/middleware/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 ```
 
-## FILE: app/middleware/p4_orchestrator.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/middleware/p4_orchestrator.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # app/middleware/p4_orchestrator.py
 import uuid
@@ -2666,7 +2666,7 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         return response
 ```
 
-## FILE: app/middleware/relay_auth.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/middleware/relay_auth.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -2738,7 +2738,7 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/middleware/validation.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/middleware/validation.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -2839,14 +2839,14 @@ class ValidationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/models/__init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/models/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from .error import ErrorDetail, ErrorResponse
 
 __all__ = ["ErrorDetail", "ErrorResponse"]
 ```
 
-## FILE: app/models/error.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/models/error.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -2885,7 +2885,7 @@ class ErrorResponse(BaseModel):
         )
 ```
 
-## FILE: app/routes/__init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # app/routes/__init__.py
 
@@ -2894,7 +2894,7 @@ from .register_routes import register_routes
 __all__ = ["register_routes"]
 ```
 
-## FILE: app/routes/actions.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/actions.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # app/routes/actions.py
 
@@ -3124,7 +3124,7 @@ async def actions_files_upload(payload: FilesUploadRequest) -> Response:
     )
 ```
 
-## FILE: app/routes/batches.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/batches.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -3162,7 +3162,7 @@ async def cancel_batch(batch_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/containers.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/containers.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -3258,7 +3258,7 @@ async def containers_file_content_head(request: Request, container_id: str, file
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/conversations.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/conversations.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -3327,7 +3327,7 @@ async def conversations_subpaths_options(path: str, request: Request) -> Respons
     return await _forward(request)
 ```
 
-## FILE: app/routes/embeddings.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/embeddings.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -3349,7 +3349,7 @@ async def create_embedding(request: Request) -> JSONResponse:
     return JSONResponse(content=payload)
 ```
 
-## FILE: app/routes/files.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/files.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -3516,7 +3516,7 @@ async def actions_files_upload(payload: ActionsFileUploadRequest, request: Reque
     )
 ```
 
-## FILE: app/routes/health.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/health.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -3583,7 +3583,7 @@ async def v1_health() -> Dict[str, Any]:
     return _health_payload()
 ```
 
-## FILE: app/routes/images.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/images.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # app/api/images.py
 from __future__ import annotations
@@ -3932,7 +3932,7 @@ async def actions_edits(payload: ImagesEditsJSON) -> Response:
     return await _post_multipart_to_upstream(endpoint_path="/v1/images/edits", files=files, data=form)
 ```
 
-## FILE: app/routes/models.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/models.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # app/routes/models.py
 
@@ -3991,7 +3991,7 @@ async def retrieve_model(model_id: str) -> dict:
     }
 ```
 
-## FILE: app/routes/proxy.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/proxy.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -4236,7 +4236,7 @@ async def proxy(call: ProxyRequest, request: Request) -> Response:
     )
 ```
 
-## FILE: app/routes/realtime.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/realtime.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # app/routes/realtime.py
 
@@ -4432,7 +4432,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
         await websocket.close()
 ```
 
-## FILE: app/routes/register_routes.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/register_routes.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # app/routes/register_routes.py
 
@@ -4509,7 +4509,7 @@ def register_all_routes(app: _RouterLike) -> None:
     register_routes(app)
 ```
 
-## FILE: app/routes/responses.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/responses.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -4581,7 +4581,7 @@ async def responses_compact(payload: ResponsesCompactRequest, request: Request):
         payload_data["object"] = "response.compaction"
     return JSONResponse(content=payload_data, status_code=upstream_response.status_code)```
 
-## FILE: app/routes/uploads.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/uploads.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -4622,7 +4622,7 @@ async def uploads_passthrough(path: str, request: Request) -> Response:
     return await forward_openai_request(request, upstream_path=upstream_path)
 ```
 
-## FILE: app/routes/vector_stores.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/vector_stores.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -4703,7 +4703,7 @@ async def vector_stores_subpaths_alias(path: str, request: Request) -> Response:
     return await _forward(request)
 ```
 
-## FILE: app/routes/videos.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/routes/videos.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -4792,11 +4792,11 @@ async def videos_passthrough(path: str, request: Request):
     return await forward_openai_request(request)
 ```
 
-## FILE: app/utils/__init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/utils/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 ```
 
-## FILE: app/utils/authy.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/utils/authy.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -4866,7 +4866,7 @@ def check_relay_key(*, authorization: str | None, x_relay_key: str | None) -> No
     raise HTTPException(status_code=401, detail="Invalid relay key")
 ```
 
-## FILE: app/utils/error_handler.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/utils/error_handler.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # app/utils/error_handler.py
 
@@ -5010,7 +5010,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 ```
 
-## FILE: app/utils/http_client.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/utils/http_client.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -5019,7 +5019,7 @@ from app.core.http_client import get_async_httpx_client
 __all__ = ["get_async_httpx_client"]
 ```
 
-## FILE: app/utils/logger.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: app/utils/logger.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -5160,11 +5160,11 @@ def exception(msg: str, *args, **kwargs) -> None:
 
 ## BASELINE (tests/)
 
-## FILE: tests/__init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: tests/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 ```
 
-## FILE: tests/client.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: tests/client.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # tests/client.py
 
@@ -5201,7 +5201,7 @@ def _build_client() -> TestClient:
 client: TestClient = _build_client()
 ```
 
-## FILE: tests/conftest.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: tests/conftest.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -5336,7 +5336,7 @@ async def async_client() -> AsyncIterator[httpx.AsyncClient]:
         yield c
 ```
 
-## FILE: tests/relay_client_example.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: tests/relay_client_example.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # relay_client_example.py
 from __future__ import annotations
@@ -5411,7 +5411,7 @@ if __name__ == "__main__":
         raise
 ```
 
-## FILE: tests/test_extended_routes_smoke_integration.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: tests/test_extended_routes_smoke_integration.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 """Extended route smoke tests (integration).
 
@@ -5671,7 +5671,7 @@ def test_realtime_sessions_create_no_5xx() -> None:
     assert r.status_code < 500, f"realtime sessions returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_files_and_batches_integration.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: tests/test_files_and_batches_integration.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 """
 tests/test_files_and_batches_integration.py
@@ -6005,7 +6005,7 @@ async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient) -> N
     assert r.content, "output file content was empty"
 ```
 
-## FILE: tests/test_images_variations_integration.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: tests/test_images_variations_integration.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 import binascii
 import os
@@ -6089,7 +6089,7 @@ def test_images_variations_wiring_no_5xx(tmp_path) -> None:
     assert r.status_code < 500, r.text
 ```
 
-## FILE: tests/test_local_e2e.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: tests/test_local_e2e.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # tests/test_local_e2e.py
 from __future__ import annotations
@@ -6262,6 +6262,7 @@ async def test_models_retrieve_default_model(async_client: httpx.AsyncClient) ->
     # Optional extra checks if upstream includes them
     # e.g. "created", "owned_by", etc. – but we do not require them here
 
+
 @pytest.mark.integration
 async def test_responses_compact_basic(async_client: httpx.AsyncClient) -> None:
     _skip_if_no_openai_key()
@@ -6289,7 +6290,7 @@ async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncC
     assert "/v1/responses/compact" in data["endpoints"]["responses_compact"]
 
 
-def test_actions_images_routes_registered() -> None:
+async def test_actions_images_routes_registered() -> None:
     paths = {route.path for route in fastapi_app.routes if hasattr(route, "path")}
     assert "/v1/actions/images/variations" in paths
     assert "/v1/actions/images/edits" in paths
@@ -6300,9 +6301,10 @@ async def test_actions_images_endpoints_callable(async_client: httpx.AsyncClient
     for path in ("/v1/actions/images/variations", "/v1/actions/images/edits"):
         resp = await async_client.post(path, json={})
         assert resp.status_code == 400
-        assert "Missing image input" in resp.text```
+        assert "Missing image input" in resp.text
+```
 
-## FILE: tests/test_relay_auth_guard.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: tests/test_relay_auth_guard.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 # tests/test_relay_auth_guard.py
 """Relay auth middleware guardrails.
@@ -6385,7 +6387,7 @@ def test_relay_auth_requires_valid_key_for_v1_paths(monkeypatch: pytest.MonkeyPa
         assert body.get("object") == "list"
 ```
 
-## FILE: tests/test_remaining_routes_smoke_integration.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: tests/test_remaining_routes_smoke_integration.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 from __future__ import annotations
 
@@ -6434,7 +6436,7 @@ def test_remaining_route_families_smoke_no_5xx() -> None:
         assert r.status_code < 500, f"{method} {path} returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_success_gates_integration.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: tests/test_success_gates_integration.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 """
 Success gates for the relay (integration).
@@ -6695,11 +6697,11 @@ def test_gate_d_containers_and_videos_content_endpoints_no_relay_5xx() -> None:
 
 ## BASELINE (static/)
 
-## FILE: static/.well-known/__init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: static/.well-known/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 ```
 
-## FILE: static/.well-known/ai-plugin.json @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: static/.well-known/ai-plugin.json @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 {
   "schema_version": "v1",
@@ -6728,11 +6730,11 @@ def test_gate_d_containers_and_videos_content_endpoints_no_relay_5xx() -> None:
 
 ## BASELINE (schemas/)
 
-## FILE: schemas/__init__.py @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: schemas/__init__.py @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 ```
 
-## FILE: schemas/openapi.yaml @ 090ef910daa12d3734a2db425541a4f876d7efc9
+## FILE: schemas/openapi.yaml @ 4633dfb0e24e9488323b34c03465b1ae26decf6d
 ```
 openapi: 3.1.0
 info:
