@@ -146,6 +146,57 @@ async def test_proxy_blocks_evals_and_fine_tune(client: httpx.AsyncClient) -> No
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_proxy_allowlist_files_meta_and_vector_stores_root_write(client: httpx.AsyncClient) -> None:
+    if not _has_openai_key():
+        pytest.skip(f"{INTEGRATION_ENV_VAR} not set")
+
+    file_id = "file-does-not-exist"
+    for method in ("GET", "DELETE"):
+        r = await _request_with_retry(
+            client,
+            "POST",
+            "/v1/proxy",
+            headers=_auth_headers({"Content-Type": "application/json"}),
+            json={"method": method, "path": f"/v1/files/{file_id}"},
+        )
+        assert r.status_code < 500, f"proxy files metadata {method} returned {r.status_code}: {r.text[:200]}"
+        assert r.status_code != 403, f"proxy files metadata {method} blocked: {r.text[:200]}"
+
+    for method in ("PUT", "PATCH", "DELETE"):
+        payload: Dict[str, Any] = {"method": method, "path": "/v1/vector_stores"}
+        if method in {"PUT", "PATCH"}:
+            payload["body"] = {}
+        r = await _request_with_retry(
+            client,
+            "POST",
+            "/v1/proxy",
+            headers=_auth_headers({"Content-Type": "application/json"}),
+            json=payload,
+        )
+        assert r.status_code < 500, f"proxy vector_stores {method} returned {r.status_code}: {r.text[:200]}"
+        assert r.status_code != 403, f"proxy vector_stores {method} blocked: {r.text[:200]}"
+
+    r = await _request_with_retry(
+        client,
+        "POST",
+        "/v1/proxy",
+        headers=_auth_headers({"Content-Type": "application/json"}),
+        json={"method": "GET", "path": f"/v1/files/{file_id}/content"},
+    )
+    assert r.status_code == 403, f"proxy files content should be blocked: {r.status_code} {r.text[:200]}"
+
+    r = await _request_with_retry(
+        client,
+        "POST",
+        "/v1/proxy",
+        headers=_auth_headers({"Content-Type": "application/json"}),
+        json={"method": "POST", "path": "/v1/uploads"},
+    )
+    assert r.status_code == 403, f"proxy uploads should be blocked: {r.status_code} {r.text[:200]}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_user_data_file_download_is_forbidden(client: httpx.AsyncClient) -> None:
     if not _has_openai_key():
         pytest.skip(f"{INTEGRATION_ENV_VAR} not set")
