@@ -210,6 +210,17 @@ async def test_actions_images_routes_registered() -> None:
 
 
 @pytest.mark.asyncio
+async def test_actions_uploads_videos_routes_registered() -> None:
+    paths = {route.path for route in fastapi_app.routes if hasattr(route, "path")}
+    assert "/v1/actions/uploads" in paths
+    assert "/v1/actions/uploads/{upload_id}/parts" in paths
+    assert "/v1/actions/uploads/{upload_id}/complete" in paths
+    assert "/v1/actions/uploads/{upload_id}/cancel" in paths
+    assert "/v1/actions/videos" in paths
+    assert "/v1/responses:stream" in paths
+
+
+@pytest.mark.asyncio
 @pytest.mark.integration
 async def test_actions_images_endpoints_callable(async_client: httpx.AsyncClient) -> None:
     for path in ("/v1/actions/images/variations", "/v1/actions/images/edits"):

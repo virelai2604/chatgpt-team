@@ -51,11 +51,13 @@ def register_routes(app: _RouterLike) -> None:
     app.include_router(embeddings.router)  # /v1/embeddings
     app.include_router(images.router)  # /v1/images
     app.include_router(videos.router)  # /v1/videos
+    app.include_router(videos.actions_router)  # /v1/actions/videos
     app.include_router(models.router)  # /v1/models (local stub)
 
     # Files & uploads (multipart, binary content)
     app.include_router(files.router)  # /v1/files
     app.include_router(uploads.router)  # /v1/uploads
+    app.include_router(uploads.actions_router)  # /v1/actions/uploads/*
     app.include_router(vector_stores.router)  # /v1/vector_stores (+ /vector_stores)
 
     # Higher-level surfaces

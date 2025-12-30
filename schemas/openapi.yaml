@@ -84,6 +84,26 @@ paths:
               schema:
                 type: object
 
+  /v1/responses:stream:
+    post:
+      operationId: streamResponse
+      summary: Stream a response (SSE)
+      description: |
+        Wrapper that forces stream=true and proxies to /v1/responses.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: SSE stream of response events
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
   /v1/responses/{response_id}:
     get:
       operationId: retrieveResponse
@@ -548,6 +568,108 @@ paths:
       responses:
         "200":
           description: Relay info object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/actions/uploads:
+    post:
+      operationId: actionsCreateUpload
+      summary: Create an upload (Actions wrapper)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Upload object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/actions/uploads/{upload_id}/parts:
+    post:
+      operationId: actionsCreateUploadPart
+      summary: Create an upload part (Actions wrapper)
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Upload part object
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/actions/uploads/{upload_id}/complete:
+    post:
+      operationId: actionsCompleteUpload
+      summary: Complete an upload (Actions wrapper)
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Upload completion result
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/actions/uploads/{upload_id}/cancel:
+    post:
+      operationId: actionsCancelUpload
+      summary: Cancel an upload (Actions wrapper)
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Upload cancellation result
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/actions/videos:
+    post:
+      operationId: actionsCreateVideo
+      summary: Create a video (Actions wrapper)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Video job object
           content:
             application/json:
               schema:

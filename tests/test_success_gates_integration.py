@@ -65,6 +65,7 @@ def test_gate_a_uploads_e2e_happy_and_cancel() -> None:
             headers=_headers(content_type="application/json"),
             json={"purpose": purpose, "filename": filename, "bytes": len(content), "mime_type": "text/plain"},
         )
+        _skip_if_upstream_server_error(r, label="Upload create failed")
         assert r.status_code == 200, r.text
         upload_id = r.json().get("id")
         assert upload_id and isinstance(upload_id, str)

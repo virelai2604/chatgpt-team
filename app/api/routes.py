@@ -23,6 +23,7 @@ def _build_manifest() -> Dict[str, Any]:
             "/v1/responses/{response_id}/cancel",
             "/v1/responses/{response_id}/input_items",
         ],
+        "responses_stream": ["/v1/responses:stream"],
         "responses_compact": ["/v1/responses/compact"],
         "embeddings": ["/v1/embeddings"],
         "images": ["/v1/images/generations", "/v1/images/edits", "/v1/images/variations"],
@@ -32,6 +33,13 @@ def _build_manifest() -> Dict[str, Any]:
 
         # NEW: Actions-friendly wrapper for multipart file upload
         "files_actions": ["/v1/actions/files/upload"],
+        "uploads_actions": [
+            "/v1/actions/uploads",
+            "/v1/actions/uploads/{upload_id}/parts",
+            "/v1/actions/uploads/{upload_id}/complete",
+            "/v1/actions/uploads/{upload_id}/cancel",
+        ],
+        "videos_actions": ["/v1/actions/videos"],
     }
 
     meta = {
@@ -44,6 +52,7 @@ def _build_manifest() -> Dict[str, Any]:
             "health",
             "models",
             "responses",
+            "responses_stream",
             "responses_compact",
             "embeddings",
             "images",
@@ -53,6 +62,8 @@ def _build_manifest() -> Dict[str, Any]:
 
             # include wrapper route in Actions schema
             "files_actions",
+            "uploads_actions",
+            "videos_actions",
         ],
     }
 
