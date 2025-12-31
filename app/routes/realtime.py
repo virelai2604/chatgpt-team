@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 from websockets import connect as ws_connect  # type: ignore
 from websockets.exceptions import ConnectionClosed  # type: ignore
 
@@ -21,13 +23,10 @@ OPENAI_REALTIME_BETA = os.getenv("OPENAI_REALTIME_BETA", "realtime=v1")
 PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120")))
 DEFAULT_REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-4.1-mini")
 
-router = APIRouter(
-    prefix="/v1",
-    tags=["realtime"],
-)
+router = APIRouter(prefix="/v1", tags=["realtime"])
 
 
-def _build_headers(request: Request | None = None) -> Dict[str, str]:
+def _build_headers(request: Optional[Request] = None) -> Dict[str, str]:
     if not OPENAI_API_KEY:
         raise HTTPException(
             status_code=500,
@@ -97,7 +96,7 @@ async def create_realtime_session(request: Request) -> JSONResponse:
     If the client omits `model`, we default to REALTIME_MODEL.
     """
     try:
-        payload = await request.json()
+        payload: Any = await request.json()
     except Exception:
         payload = {}
 
@@ -108,6 +107,65 @@ async def create_realtime_session(request: Request) -> JSONResponse:
 
     status_code, data = await _post_realtime_sessions(request, payload)
     return JSONResponse(status_code=status_code, content=data)
+
+
+class RealtimeSessionValidateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str = Field(..., description="Realtime session ID to validate")
+    expires_at: Optional[float] = Field(
+        default=None,
+        description="Optional Unix timestamp (seconds) for session expiry",
+    )
+
+
+@router.post("/realtime/sessions/validate")
+async def validate_realtime_session(payload: RealtimeSessionValidateRequest) -> JSONResponse:
+    """
+    Local-only validation helper for realtime session descriptors.
+
+    This is stateless and does not call upstream; it simply validates shape and expiry.
+    """
+    now = time.time()
+    if payload.expires_at is not None and payload.expires_at <= now:
+        return JSONResponse(
+            status_code=410,
+            content={
+                "error": {
+                    "message": "Realtime session has expired",
+                    "type": "session_error",
+                    "code": "session_expired",
+                    "extra": {"expires_at": payload.expires_at, "now": now},
+                }
+            },
+        )
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "ok",
+            "session_id": payload.session_id,
+            "expires_at": payload.expires_at,
+            "now": now,
+        },
+    )
+
+
+@router.get("/realtime/sessions/introspect")
+async def introspect_realtime_sessions() -> JSONResponse:
+    """
+    Local-only introspection endpoint for realtime settings.
+    """
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "ok",
+            "realtime_model": DEFAULT_REALTIME_MODEL,
+            "openai_api_base": OPENAI_API_BASE,
+            "openai_realtime_beta": OPENAI_REALTIME_BETA,
+            "now": time.time(),
+        },
+    )
 
 
 def _build_ws_base() -> str:
@@ -128,10 +186,10 @@ async def realtime_ws(websocket: WebSocket) -> None:
     WebSocket proxy between client and OpenAI Realtime WS.
 
     Client connects to:
-      ws(s)://relay-host/v1/realtime/ws?model=.&session_id=.
+      ws(s)://relay-host/v1/realtime/ws?model=...&session_id=...
 
     Relay connects to:
-      wss://api.openai.com/v1/realtime?model=.&session_id=.
+      wss://api.openai.com/v1/realtime?model=...&session_id=...
     """
     await websocket.accept(subprotocol="openai-realtime-v1")
 
@@ -142,6 +200,10 @@ async def realtime_ws(websocket: WebSocket) -> None:
     url = f"{ws_base}/v1/realtime?model={model}"
     if session_id:
         url += f"&session_id={session_id}"
+
+    if not OPENAI_API_KEY:
+        await websocket.close(code=1011)
+        return
 
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",

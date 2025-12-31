@@ -14,7 +14,7 @@ router = APIRouter()
 def _build_manifest() -> Dict[str, Any]:
     s = get_settings()
 
-    endpoints = {
+    endpoints: Dict[str, list[str]] = {
         "health": ["/health", "/v1/health"],
         "models": ["/v1/models", "/v1/models/{model}"],
         "responses": [
@@ -23,14 +23,13 @@ def _build_manifest() -> Dict[str, Any]:
             "/v1/responses/{response_id}/cancel",
             "/v1/responses/{response_id}/input_items",
         ],
-        "responses_stream": ["/v1/responses:stream"],
         "responses_compact": ["/v1/responses/compact"],
+        "responses_actions": ["/v1/actions/responses/stream"],
         "embeddings": ["/v1/embeddings"],
         "images": ["/v1/images/generations", "/v1/images/edits", "/v1/images/variations"],
         "images_actions": ["/v1/actions/images/edits", "/v1/actions/images/variations"],
         "proxy": ["/v1/proxy"],
         "realtime_http": ["/v1/realtime/sessions"],
-
         # NEW: Actions-friendly wrapper for multipart file upload
         "files_actions": ["/v1/actions/files/upload"],
         "uploads_actions": [
@@ -41,11 +40,12 @@ def _build_manifest() -> Dict[str, Any]:
         ],
         "videos_actions": [
             "/v1/actions/videos",
-         "/v1/actions/videos/{video_id}/remix",
+            "/v1/actions/videos/generations",
+            "/v1/actions/videos/{video_id}/remix",
         ],
     }
 
-    meta = {
+    meta: Dict[str, Any] = {
         "relay_name": getattr(s, "RELAY_NAME", "chatgpt-team-relay"),
         "auth_required": bool(getattr(s, "RELAY_AUTH_ENABLED", False)),
         "auth_header": "X-Relay-Key",
@@ -55,15 +55,14 @@ def _build_manifest() -> Dict[str, Any]:
             "health",
             "models",
             "responses",
-            "responses_stream",
             "responses_compact",
+            "responses_actions",
             "embeddings",
             "images",
             "images_actions",
             "proxy",
             "realtime_http",
-
-            # include wrapper route in Actions schema
+            # include wrapper routes in Actions schema
             "files_actions",
             "uploads_actions",
             "videos_actions",
@@ -102,7 +101,9 @@ async def openapi_actions(request: Request) -> JSONResponse:
     allowed_paths.update({"/health", "/v1/health"})
 
     filtered = copy.deepcopy(full)
-    filtered["paths"] = {p: spec for p, spec in (full.get("paths") or {}).items() if p in allowed_paths}
+    filtered["paths"] = {
+        p: spec for p, spec in (full.get("paths") or {}).items() if p in allowed_paths
+    }
 
     info = filtered.get("info") or {}
     title = str(info.get("title") or "OpenAPI")

@@ -1,4 +1,3 @@
-# app/api/tools_api.py
 from __future__ import annotations
 
 import copy
@@ -15,7 +14,7 @@ router = APIRouter()
 def _build_manifest() -> Dict[str, Any]:
     s = get_settings()
 
-    endpoints = {
+    endpoints: Dict[str, list[str]] = {
         "health": ["/health", "/v1/health"],
         "models": ["/v1/models", "/v1/models/{model}"],
         "responses": [
@@ -24,6 +23,7 @@ def _build_manifest() -> Dict[str, Any]:
             "/v1/responses/{response_id}/cancel",
             "/v1/responses/{response_id}/input_items",
         ],
+        "responses_actions": ["/v1/actions/responses/stream"],
         "responses_compact": ["/v1/responses/compact"],
         "embeddings": ["/v1/embeddings"],
         "images": ["/v1/images/generations", "/v1/images/edits", "/v1/images/variations"],
@@ -38,8 +38,9 @@ def _build_manifest() -> Dict[str, Any]:
         ],
         "videos_actions": [
             "/v1/actions/videos",
+            "/v1/actions/videos/generations",
             "/v1/actions/videos/{video_id}/remix",
-        ],  
+        ],
         "uploads": [
             "/v1/uploads",
             "/v1/uploads/{upload_id}",
@@ -53,7 +54,7 @@ def _build_manifest() -> Dict[str, Any]:
         "realtime_ws": ["/v1/realtime/ws"],
     }
 
-    meta = {
+    meta: Dict[str, Any] = {
         "relay_name": getattr(s, "RELAY_NAME", "chatgpt-team-relay"),
         "auth_required": bool(getattr(s, "RELAY_AUTH_ENABLED", False)),
         "auth_header": "X-Relay-Key",
@@ -64,6 +65,7 @@ def _build_manifest() -> Dict[str, Any]:
             "models",
             "responses",
             "responses_compact",
+            "responses_actions",
             "embeddings",
             "images",
             "images_actions",
@@ -108,7 +110,9 @@ async def openapi_actions(request: Request) -> JSONResponse:
     allowed_paths.update({"/health", "/v1/health"})
 
     filtered = copy.deepcopy(full)
-    filtered["paths"] = {p: spec for p, spec in (full.get("paths") or {}).items() if p in allowed_paths}
+    filtered["paths"] = {
+        p: spec for p, spec in (full.get("paths") or {}).items() if p in allowed_paths
+    }
 
     info = filtered.get("info") or {}
     title = str(info.get("title") or "OpenAPI")

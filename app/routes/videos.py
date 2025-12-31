@@ -1,89 +1,143 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+import base64
+from typing import Optional
 
-from app.api.forward_openai import forward_openai_method_path, forward_openai_request
+import httpx
+from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.api.forward_openai import (
+    build_outbound_headers,
+    build_upstream_url,
+    forward_openai_method_path,
+    forward_openai_request,
+)
+from app.core.http_client import get_async_httpx_client
 from app.utils.logger import info
 
 router = APIRouter(prefix="/v1", tags=["videos"])
 actions_router = APIRouter(prefix="/v1/actions/videos", tags=["videos_actions"])
 
-# -----------------------------------------------------------------------------
+_MAX_VIDEO_BYTES = 25 * 1024 * 1024
+_MAX_DURATION_SECONDS = 30
+_MAX_FRAMES = 300
+
+
 # Canonical Videos API (per OpenAI API reference)
+# - POST /v1/videos -> create a video generation job (may be multipart)
+# - POST /v1/videos/{video_id}/remix -> remix an existing video
+# - GET /v1/videos -> list videos
+# - GET /v1/videos/{video_id} -> retrieve a video job
+# - DELETE /v1/videos/{video_id} -> delete a video job
+# - GET /v1/videos/{video_id}/content -> download generated content (binary)
 #
-# POST   /v1/videos                 -> create a video generation job (may be multipart)
-# POST   /v1/videos/{video_id}/remix -> remix an existing video
-# GET    /v1/videos                 -> list videos
-# GET    /v1/videos/{video_id}      -> retrieve a video job
-# DELETE /v1/videos/{video_id}      -> delete a video job
-# GET    /v1/videos/{video_id}/content -> download generated content (binary)
-#
-# We implement the main paths explicitly (for clean OpenAPI + clarity), and keep a
-# hidden catch-all for forward-compat endpoints that may appear later.
-# -----------------------------------------------------------------------------
+# We implement main paths explicitly (clean OpenAPI + clarity),
+# and keep a hidden catch-all for forward-compat endpoints.
+
 
 @router.post("/videos")
-async def create_video(request: Request):
+async def create_video(request: Request) -> Response:
     """Create a new video generation job (JSON or multipart/form-data)."""
     info("→ [videos.create] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.post("/videos/generations", deprecated=True)
-async def create_video_legacy_generations(request: Request):
-    """Legacy alias: historically /v1/videos/generations in older relays.
+async def create_video_legacy_generations(request: Request) -> Response:
+    """
+    Legacy alias: historically /v1/videos/generations in older relays.
 
-    The current OpenAI API uses `POST /v1/videos`. We forward this endpoint to
+    The current OpenAI API uses POST /v1/videos. We forward this endpoint to
     the canonical path for compatibility.
     """
     info("→ [videos.legacy_generations] %s %s", request.method, request.url.path)
-    # forward_openai_method_path expects (method, path, request)
-    return await forward_openai_method_path("POST", "/v1/videos", request)
+    return await forward_openai_method_path(
+        "POST",
+        "/v1/videos",
+        inbound_headers=request.headers,
+        request=request,
+    )
 
 
 @router.post("/videos/{video_id}/remix")
-async def remix_video(video_id: str, request: Request):
+async def remix_video(video_id: str, request: Request) -> Response:
     """Create a remix of an existing video job."""
     info("→ [videos.remix] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.get("/videos")
-async def list_videos(request: Request):
+async def list_videos(request: Request) -> Response:
     """List video jobs."""
     info("→ [videos.list] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.get("/videos/{video_id}")
-async def retrieve_video(video_id: str, request: Request):
+async def retrieve_video(video_id: str, request: Request) -> Response:
     """Retrieve a single video job."""
     info("→ [videos.retrieve] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
+
 @router.delete("/videos/{video_id}")
-async def delete_video(video_id: str, request: Request):
+async def delete_video(video_id: str, request: Request) -> Response:
     """Delete a single video job."""
     info("→ [videos.delete] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
 @router.get("/videos/{video_id}/content")
-async def download_video_content(video_id: str, request: Request):
+async def download_video_content(video_id: str, request: Request) -> Response:
     """Download generated content (binary) for a video job."""
     info("→ [videos.content] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
 
-# Forward-compat / extra endpoints (hidden from OpenAPI schema)
 @router.api_route(
     "/videos/{path:path}",
     methods=["GET", "POST", "DELETE", "PATCH", "PUT", "HEAD", "OPTIONS"],
     include_in_schema=False,
 )
-async def videos_passthrough(path: str, request: Request):
+async def videos_passthrough(path: str, request: Request) -> Response:
+    """Forward-compat / extra endpoints (hidden from OpenAPI schema)."""
     info("→ [videos/*] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
+
+
+class ActionsVideoGenerationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: Optional[str] = Field(default=None, description="Text prompt for video generation")
+    model: Optional[str] = Field(default=None, description="Model name")
+    size: Optional[str] = Field(default=None, description="Output size")
+    duration_seconds: Optional[int] = Field(default=None, description="Duration in seconds")
+    frames: Optional[int] = Field(default=None, description="Frame count")
+    data_base64: Optional[str] = Field(default=None, description="Optional base64-encoded input video")
+    filename: Optional[str] = Field(default="input.mp4", description="Input filename")
+    mime_type: Optional[str] = Field(default="video/mp4", description="Input MIME type")
+
+
+def _filter_response_headers(headers: httpx.Headers) -> dict:
+    strip = {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+        "content-length",
+        "content-encoding",
+    }
+    out: dict = {}
+    for k, v in headers.items():
+        if k.lower() in strip:
+            continue
+        out[k] = v
+    return out
 
 
 @actions_router.post(
@@ -91,7 +145,7 @@ async def videos_passthrough(path: str, request: Request):
     operation_id="actionsVideosCreateV1Actions",
     summary="Actions wrapper for /v1/videos",
 )
-async def actions_create_video(request: Request):
+async def actions_create_video(request: Request) -> Response:
     info("→ [actions.videos.create] %s %s", request.method, request.url.path)
     return await forward_openai_request(request, upstream_path="/v1/videos")
 
@@ -101,7 +155,76 @@ async def actions_create_video(request: Request):
     operation_id="actionsVideosRemixV1Actions",
     summary="Actions wrapper for /v1/videos/{video_id}/remix",
 )
-async def actions_remix_video(video_id: str, request: Request):
+async def actions_remix_video(video_id: str, request: Request) -> Response:
     info("→ [actions.videos.remix] %s %s", request.method, request.url.path)
     return await forward_openai_request(request, upstream_path=f"/v1/videos/{video_id}/remix")
-    
+
+
+@actions_router.post(
+    "/generations",
+    operation_id="actionsVideosGenerationsV1Actions",
+    summary="Actions wrapper for /v1/videos/generations (multipart)",
+)
+async def actions_generate_video(payload: ActionsVideoGenerationRequest, request: Request) -> Response:
+    if payload.duration_seconds is not None and payload.duration_seconds > _MAX_DURATION_SECONDS:
+        raise HTTPException(status_code=400, detail=f"duration_seconds exceeds {_MAX_DURATION_SECONDS}")
+    if payload.frames is not None and payload.frames > _MAX_FRAMES:
+        raise HTTPException(status_code=400, detail=f"frames exceeds {_MAX_FRAMES}")
+
+    raw: bytes | None = None
+    if payload.data_base64:
+        try:
+            raw = base64.b64decode(payload.data_base64, validate=True)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid data_base64: {exc}") from exc
+
+    if raw is not None:
+        if len(raw) == 0:
+            raise HTTPException(status_code=400, detail="Empty input video is not allowed")
+        if len(raw) > _MAX_VIDEO_BYTES:
+            raise HTTPException(status_code=413, detail=f"Input video too large (>{_MAX_VIDEO_BYTES} bytes)")
+
+    upstream_path = "/v1/videos/generations"
+    upstream_url = build_upstream_url(upstream_path, request=request)
+    headers = build_outbound_headers(
+        inbound_headers=request.headers,
+        content_type=None,
+        forward_accept=True,
+        path_hint=upstream_path,
+    )
+
+    data: dict[str, str] = {}
+    if payload.prompt:
+        data["prompt"] = payload.prompt
+    if payload.model:
+        data["model"] = payload.model
+    if payload.size:
+        data["size"] = payload.size
+    if payload.duration_seconds is not None:
+        data["duration_seconds"] = str(payload.duration_seconds)
+    if payload.frames is not None:
+        data["frames"] = str(payload.frames)
+
+    files = None
+    if raw is not None:
+        files = {
+            "file": (payload.filename or "input.mp4", raw, payload.mime_type or "video/mp4"),
+        }
+
+    client = get_async_httpx_client()
+    try:
+        resp = await client.post(upstream_url, headers=headers, data=data, files=files)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Upstream timeout while generating video")
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream HTTP error while generating video: {exc!r}") from exc
+
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        media_type=resp.headers.get("content-type"),
+        headers=_filter_response_headers(resp.headers),
+    )
+
+
+ActionsVideoGenerationRequest.model_rebuild()

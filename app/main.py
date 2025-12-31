@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.sse import actions_router as sse_actions_router
 from app.api.sse import router as sse_router
 from app.api.tools_api import router as tools_router
 from app.core.config import get_settings
@@ -55,8 +56,9 @@ def create_app() -> FastAPI:
     # Tool manifest / helper endpoints
     app.include_router(tools_router)
 
-    # SSE streaming endpoints (non-Actions surface)
+    # SSE streaming endpoints (non-Actions + Actions wrapper)
     app.include_router(sse_router)
+    app.include_router(sse_actions_router)
 
     return app
 
