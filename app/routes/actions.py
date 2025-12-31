@@ -88,6 +88,7 @@ def _relay_info_payloads() -> tuple[dict, dict]:
 
 
 # ----- ping -----
+
 @router.get("/actions/ping", summary="Simple local ping for tools/tests")
 async def actions_ping_root() -> dict:
     """
@@ -113,9 +114,8 @@ async def actions_ping_v1() -> dict:
     return _ping_payload()
 
 
-
-
 # ----- relay_info -----
+
 @router.get("/actions/relay_info", summary="Flat relay info for tools")
 async def actions_relay_info_root() -> dict:
     """
@@ -148,12 +148,12 @@ async def actions_relay_info_v1() -> dict:
     return nested
 
 
-@router.get("/actions/system/info", summary="Relay system info")
+@router.get("/actions/system/info", summary="Relay system info", include_in_schema=False)
 async def system_info() -> JSONResponse:
     """
     Basic config info for debugging.
 
- NOTE: Not part of the official relay API; keep it local.
+    NOTE: Not part of the official relay API; keep it local.
     """
     payload = {
         "relay_name": settings.RELAY_NAME,
