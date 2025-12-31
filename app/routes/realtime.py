@@ -1,3 +1,5 @@
+# app/routes/realtime.py
+
 from __future__ import annotations
 
 import asyncio
@@ -18,12 +20,8 @@ from app.utils.logger import relay_log as logger
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com").rstrip("/")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_REALTIME_BETA = os.getenv("OPENAI_REALTIME_BETA", "realtime=v1")
-
 PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120")))
-
-# Guard against accidental whitespace/newlines in env vars.
-DEFAULT_REALTIME_MODEL = (os.getenv("REALTIME_MODEL", "gpt-realtime") or "gpt-realtime").strip()
-
+DEFAULT_REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-realtime")
 ALLOWED_REALTIME_MODELS = {
     "gpt-realtime-mini-2025-12-15",
     "gpt-realtime",
@@ -32,10 +30,13 @@ ALLOWED_REALTIME_MODELS = {
     "gpt-realtime-mini-2025-10-06",
 }
 
-router = APIRouter(prefix="/v1", tags=["realtime"])
+router = APIRouter(
+    prefix="/v1",
+    tags=["realtime"],
+)
 
 
-def _build_headers(request: Optional[Request] = None) -> Dict[str, str]:
+def _build_headers(request: Request | None = None) -> Dict[str, str]:
     if not OPENAI_API_KEY:
         raise HTTPException(
             status_code=500,

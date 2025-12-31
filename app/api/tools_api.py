@@ -1,3 +1,4 @@
+#app/api/tools_api
 from __future__ import annotations
 
 import copy
@@ -14,7 +15,7 @@ router = APIRouter()
 def _build_manifest() -> Dict[str, Any]:
     s = get_settings()
 
-    endpoints: Dict[str, list[str]] = {
+    endpoints = {
         "health": ["/health", "/v1/health"],
         "models": ["/v1/models", "/v1/models/{model}"],
         "responses": [
@@ -54,7 +55,7 @@ def _build_manifest() -> Dict[str, Any]:
         "realtime_ws": ["/v1/realtime/ws"],
     }
 
-    meta: Dict[str, Any] = {
+    meta = {
         "relay_name": getattr(s, "RELAY_NAME", "chatgpt-team-relay"),
         "auth_required": bool(getattr(s, "RELAY_AUTH_ENABLED", False)),
         "auth_header": "X-Relay-Key",

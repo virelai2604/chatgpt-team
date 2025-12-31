@@ -15,22 +15,18 @@ async def responses_stream(request: Request) -> Response:
     """
     Map POST /v1/responses:stream -> upstream POST /v1/responses with stream enabled.
     """
-    try:
-        body: Any = await request.json()
-    except Exception:
-        body = {}
-
+    body: Any = await request.json()
     if not isinstance(body, dict):
         body = {"input": body}
 
     body.setdefault("stream", True)
 
     return await forward_openai_method_path(
-        "POST",
-        "/v1/responses",
-        json_body=cast(Dict[str, Any], body),
-        inbound_headers=request.headers,
         request=request,
+        method="POST",
+        path="/v1/responses",
+        inbound_headers=request.headers,
+        json_body=cast(Dict[str, Any], body),
     )
 
 
@@ -45,20 +41,16 @@ async def actions_responses_stream(request: Request) -> Response:
 
     Accepts JSON input and forwards to /v1/responses with stream enabled.
     """
-    try:
-        body: Any = await request.json()
-    except Exception:
-        body = {}
-
+    body: Any = await request.json()
     if not isinstance(body, dict):
         body = {"input": body}
 
     body.setdefault("stream", True)
 
     return await forward_openai_method_path(
-        "POST",
-        "/v1/responses",
-        json_body=cast(Dict[str, Any], body),
-        inbound_headers=request.headers,
         request=request,
+        method="POST",
+        path="/v1/responses",
+        inbound_headers=request.headers,
+        json_body=cast(Dict[str, Any], body),
     )

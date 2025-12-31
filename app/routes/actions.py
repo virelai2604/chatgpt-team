@@ -1,45 +1,13 @@
+# app/routes/actions.py
+
 from __future__ import annotations
 
-import base64
-from typing import Dict, Tuple
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
-import httpx
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
-
-from app.api.forward_openai import build_outbound_headers, build_upstream_url
 from app.core.config import settings
-from app.core.http_client import get_async_httpx_client
 
 router = APIRouter(tags=["actions"])
-
-_MAX_FILE_BYTES = 25 * 1024 * 1024
-
-
-class FilesUploadRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    purpose: str = Field(..., description="OpenAI file purpose, e.g. 'batch' or 'assistants'.")
-    filename: str = Field(..., description="Filename for the uploaded file.")
-    mime_type: str = Field(..., description="MIME type for the file, e.g. text/plain.")
-    data_base64: str = Field(..., description="Base64-encoded file contents.")
-
-
-def _filter_response_headers(headers: Dict[str, str]) -> Dict[str, str]:
-    blocked = {
-        "connection",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "te",
-        "trailers",
-        "transfer-encoding",
-        "upgrade",
-        "content-length",
-        "content-encoding",
-    }
-    return {k: v for k, v in headers.items() if k.lower() not in blocked}
 
 
 def _ping_payload() -> dict:
@@ -147,9 +115,6 @@ async def actions_ping_v1() -> dict:
 
 
 
-
-
-
 # ----- relay_info -----
 @router.get("/actions/relay_info", summary="Flat relay info for tools")
 async def actions_relay_info_root() -> dict:
@@ -183,49 +148,24 @@ async def actions_relay_info_v1() -> dict:
     return nested
 
 
-@router.post(
-    "/v1/actions/files/upload",
-    summary="Upload a file via base64 payload",
-    operation_id="actionsFilesUploadLegacy",
-)
-async def actions_files_upload(payload: FilesUploadRequest) -> Response:
-    try:
-        data = base64.b64decode(payload.data_base64, validate=True)
-    except (ValueError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid data_base64: {exc}") from exc
+@router.get("/actions/system/info", summary="Relay system info")
+async def system_info() -> JSONResponse:
+    """
+    Basic config info for debugging.
 
-    if len(data) > _MAX_FILE_BYTES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File exceeds {_MAX_FILE_BYTES} bytes limit",
-        )
-
-    files: Dict[str, Tuple[str, bytes, str]] = {
-        "file": (payload.filename, data, payload.mime_type),
+ NOTE: Not part of the official relay API; keep it local.
+    """
+    payload = {
+        "relay_name": settings.RELAY_NAME,
+        "app_mode": settings.APP_MODE,
+        "environment": settings.ENVIRONMENT,
+        "openai_api_base": settings.OPENAI_API_BASE,
+        "default_model": settings.DEFAULT_MODEL,
+        "org_id": settings.OPENAI_ORG_ID,
+        "project_id": settings.OPENAI_PROJECT_ID,
+        "openai_beta": settings.OPENAI_BETA,
+        "openai_realtime_beta": settings.OPENAI_REALTIME_BETA,
+        "relay_auth_enabled": settings.RELAY_AUTH_ENABLED,
+        "relay_auth_key_set": bool(settings.RELAY_KEY),
     }
-    form_data = {"purpose": payload.purpose}
-
-    url = build_upstream_url("/v1/files")
-    headers = build_outbound_headers({}, path_hint="/v1/files")
-
-    client = get_async_httpx_client()
-    try:
-        resp = await client.post(url, headers=headers, data=form_data, files=files)
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"Upstream request failed: {exc}") from exc
-
-    filtered_headers = _filter_response_headers(dict(resp.headers))
-    content_type = resp.headers.get("content-type", "") or ""
-    if content_type.startswith("application/json"):
-        return JSONResponse(
-            content=resp.json(),
-            status_code=resp.status_code,
-            headers=filtered_headers,
-        )
-
-    return Response(
-        content=resp.content,
-        status_code=resp.status_code,
-        headers=filtered_headers,
-        media_type=content_type,
-    )
+    return JSONResponse(payload)
