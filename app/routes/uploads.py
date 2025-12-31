@@ -45,35 +45,30 @@ async def uploads_passthrough(path: str, request: Request) -> Response:
 
 
 class ActionsUploadCreateRequest(BaseModel):
-    """Actions-friendly JSON wrapper for /v1/uploads."""
-
     model_config = ConfigDict(extra="forbid")
 
-    purpose: str = Field(..., description="Upload purpose (e.g. batch)")
+    purpose: str = Field(..., description="Upstream upload purpose")
     filename: str = Field(..., description="Original filename")
-    bytes: int = Field(..., description="Total size in bytes")
-    mime_type: str = Field(..., description="MIME type, e.g. text/plain")
+    bytes: int = Field(..., description="File size in bytes")
+    mime_type: str = Field(..., description="MIME type")
     expires_after: Optional[dict] = Field(default=None, description="Optional expiration settings")
 
-class ActionsUploadPartRequest(BaseModel):
-    """Actions-friendly JSON wrapper for /v1/uploads/{id}/parts."""
 
+class ActionsUploadPartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    data_base64: str = Field(..., description="Base64-encoded part bytes (no data: prefix)")
-    filename: Optional[str] = Field(default="part.bin", description="Original filename")
-    mime_type: Optional[str] = Field(default="application/octet-stream", description="Part MIME type")
+    filename: str = Field(..., description="Original filename")
+    mime_type: str = Field(..., description="MIME type")
+    data_base64: str = Field(..., description="Base64-encoded bytes for part data")
 
 
 class ActionsUploadCompleteRequest(BaseModel):
-    """Actions-friendly JSON wrapper for /v1/uploads/{id}/complete."""
-
     model_config = ConfigDict(extra="forbid")
 
-    part_ids: list[str] = Field(..., description="List of upload part IDs to complete")
+    part_ids: List[str] = Field(..., description="Ordered list of part IDs")
 
 
-def _filter_response_headers(headers: httpx.Headers) -> Dict[str, str]:
+def _filter_response_headers(headers: httpx.Headers) -> dict:
     strip = {
         "connection",
         "keep-alive",
@@ -86,7 +81,7 @@ def _filter_response_headers(headers: httpx.Headers) -> Dict[str, str]:
         "content-length",
         "content-encoding",
     }
-    out: Dict[str, str] = {}
+    out: dict = {}
     for k, v in headers.items():
         if k.lower() in strip:
             continue
@@ -94,34 +89,39 @@ def _filter_response_headers(headers: httpx.Headers) -> Dict[str, str]:
     return out
 
 
-@actions_router.post("", summary="Actions wrapper for /v1/uploads (create upload)")
+@actions_router.post(
+    "",
+    operation_id="actionsUploadsCreateV1Actions",
+    summary="Actions upload create (JSON)",
+)
 async def actions_create_upload(payload: ActionsUploadCreateRequest, request: Request) -> Response:
-    upstream = await forward_openai_method_path(
+    return await forward_openai_method_path(
         "POST",
         "/v1/uploads",
-        json_body=payload.model_dump(),
+        json_body=payload.model_dump(exclude_none=True),
         inbound_headers=request.headers,
-        request=request,
     )
-    return upstream
 
 
-@actions_router.post("/{upload_id}/parts", summary="Actions wrapper for /v1/uploads/{id}/parts")
+@actions_router.post(
+    "/{upload_id}/parts",
+    operation_id="actionsUploadsAddPartV1Actions",
+    summary="Actions upload part (base64 -> multipart)",
+)
 async def actions_create_upload_part(upload_id: str, payload: ActionsUploadPartRequest, request: Request) -> Response:
-    max_bytes = 20 * 1024 * 1024  # 20 MiB decoded
+    max_bytes = 10 * 1024 * 1024
     try:
         raw = base64.b64decode(payload.data_base64, validate=True)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid base64 in data_base64")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid data_base64: {exc}") from exc
 
-    if len(raw) == 0:
+    if not raw:
         raise HTTPException(status_code=400, detail="Empty upload part is not allowed")
     if len(raw) > max_bytes:
         raise HTTPException(status_code=413, detail=f"Upload part too large (>{max_bytes} bytes)")
 
     upstream_path = f"/v1/uploads/{upload_id}/parts"
     upstream_url = build_upstream_url(upstream_path, request=request)
-
     headers = build_outbound_headers(
         inbound_headers=request.headers,
         content_type=None,
@@ -129,10 +129,8 @@ async def actions_create_upload_part(upload_id: str, payload: ActionsUploadPartR
         path_hint=upstream_path,
     )
 
-    client = get_async_httpx_client(timeout=60.0)
-    files = {
-        "data": (payload.filename or "part.bin", raw, payload.mime_type or "application/octet-stream"),
-    }
+    client = get_async_httpx_client()
+    files = {"data": (payload.filename, raw, payload.mime_type)}
 
     try:
         resp = await client.post(upstream_url, headers=headers, files=files)
@@ -141,7 +139,7 @@ async def actions_create_upload_part(upload_id: str, payload: ActionsUploadPartR
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Upstream HTTP error while uploading part: {exc!r}") from exc
 
-    return StarletteResponse(
+    return Response(
         content=resp.content,
         status_code=resp.status_code,
         media_type=resp.headers.get("content-type"),
@@ -149,25 +147,31 @@ async def actions_create_upload_part(upload_id: str, payload: ActionsUploadPartR
     )
 
 
-@actions_router.post("/{upload_id}/complete", summary="Actions wrapper for /v1/uploads/{id}/complete")
-async def actions_complete_upload(upload_id: str, payload: ActionsUploadCompleteRequest, request: Request) -> Response:
-    upstream = await forward_openai_method_path(
+@actions_router.post(
+    "/{upload_id}/complete",
+    operation_id="actionsUploadsCompleteV1Actions",
+    summary="Actions upload complete (JSON)",
+)
+async def actions_complete_upload(
+    upload_id: str, payload: ActionsUploadCompleteRequest, request: Request
+) -> Response:
+    return await forward_openai_method_path(
         "POST",
         f"/v1/uploads/{upload_id}/complete",
-        json_body=payload.model_dump(),
+        json_body=payload.model_dump(exclude_none=True),
         inbound_headers=request.headers,
-        request=request,
     )
-    return upstream
 
 
-@actions_router.post("/{upload_id}/cancel", summary="Actions wrapper for /v1/uploads/{id}/cancel")
+@actions_router.post(
+    "/{upload_id}/cancel",
+    operation_id="actionsUploadsCancelV1Actions",
+    summary="Actions upload cancel (JSON)",
+)
 async def actions_cancel_upload(upload_id: str, request: Request) -> Response:
-    upstream = await forward_openai_method_path(
+    return await forward_openai_method_path(
         "POST",
         f"/v1/uploads/{upload_id}/cancel",
-        json_body=None,
+        json_body={},
         inbound_headers=request.headers,
-        request=request,
     )
-    return upstream

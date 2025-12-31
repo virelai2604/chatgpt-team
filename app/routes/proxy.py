@@ -143,6 +143,7 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     ({"GET"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
     ({"DELETE"}, re.compile(r"^/v1/files/[A-Za-z0-9_-]+$")),
     
+    
     # ---- Batches (JSON) ----
     ({"GET"}, re.compile(r"^/v1/batches$")),
     ({"POST"}, re.compile(r"^/v1/batches$")),

@@ -22,7 +22,6 @@ actions_router = APIRouter(prefix="/v1/actions/videos", tags=["videos_actions"])
 # hidden catch-all for forward-compat endpoints that may appear later.
 # -----------------------------------------------------------------------------
 
-
 @router.post("/videos")
 async def create_video(request: Request):
     """Create a new video generation job (JSON or multipart/form-data)."""
@@ -62,7 +61,6 @@ async def retrieve_video(video_id: str, request: Request):
     info("→ [videos.retrieve] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
 
-
 @router.delete("/videos/{video_id}")
 async def delete_video(video_id: str, request: Request):
     """Delete a single video job."""
@@ -77,9 +75,7 @@ async def download_video_content(video_id: str, request: Request):
     return await forward_openai_request(request)
 
 
-# -----------------------------------------------------------------------------
 # Forward-compat / extra endpoints (hidden from OpenAPI schema)
-# -----------------------------------------------------------------------------
 @router.api_route(
     "/videos/{path:path}",
     methods=["GET", "POST", "DELETE", "PATCH", "PUT", "HEAD", "OPTIONS"],
@@ -90,12 +86,9 @@ async def videos_passthrough(path: str, request: Request):
     return await forward_openai_request(request)
 
 
-# -----------------------------------------------------------------------------
-# Actions wrappers: stable JSON-friendly surface for Actions clients
-# -----------------------------------------------------------------------------
 @actions_router.post(
     "",
-    operation_id="actionsVideosCreate",
+    operation_id="actionsVideosCreateV1Actions",
     summary="Actions wrapper for /v1/videos",
 )
 async def actions_create_video(request: Request):
@@ -105,9 +98,10 @@ async def actions_create_video(request: Request):
 
 @actions_router.post(
     "/{video_id}/remix",
-    operation_id="actionsVideosRemix",
+    operation_id="actionsVideosRemixV1Actions",
     summary="Actions wrapper for /v1/videos/{video_id}/remix",
 )
 async def actions_remix_video(video_id: str, request: Request):
     info("→ [actions.videos.remix] %s %s", request.method, request.url.path)
     return await forward_openai_request(request, upstream_path=f"/v1/videos/{video_id}/remix")
+    
