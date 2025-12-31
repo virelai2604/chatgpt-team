@@ -7,7 +7,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.api.forward_openai import build_outbound_hears, build_upstream_url, forward_openai_method_path, forward_openai_request
+from app.api.forward_openai import build_outbound_headers, build_upstream_url, forward_openai_method_path, forward_openai_request
 from app.core.http_client import get_async_httpx_client
 
 router = APIRouter(prefix="/v1", tags=["uploads"])
