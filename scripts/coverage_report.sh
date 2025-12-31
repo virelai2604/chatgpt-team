@@ -192,6 +192,12 @@ heuristic_bucket() {
     return
   fi
 
+  # Local-only realtime helpers (explicitly excluded from proxy/actions)
+  if [[ "$path" == "/v1/realtime/sessions/validate" || "$path" == "/v1/realtime/sessions/introspect" ]]; then
+    echo "EXCLUDE_REALTIME_LOCAL"
+    return
+  fi
+
   if [[ "$method" == "POST" && ( "$path" == "/v1/images/edits" || "$path" == "/v1/images/variations" ) ]]; then
     echo "WRAPPER_IMAGES_MULTIPART"
     return
@@ -275,6 +281,8 @@ main() {
 
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
+
+    # Parse: "METHOD /path"
     local method path
     method="${line%% *}"
     path="${line#* }"

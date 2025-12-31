@@ -1,5 +1,3 @@
-# app/routes/realtime.py
-
 from __future__ import annotations
 
 import asyncio
@@ -20,8 +18,19 @@ from app.utils.logger import relay_log as logger
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com").rstrip("/")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_REALTIME_BETA = os.getenv("OPENAI_REALTIME_BETA", "realtime=v1")
+
 PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120")))
-DEFAULT_REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-4.1-mini")
+
+# Guard against accidental whitespace/newlines in env vars.
+DEFAULT_REALTIME_MODEL = (os.getenv("REALTIME_MODEL", "gpt-realtime") or "gpt-realtime").strip()
+
+ALLOWED_REALTIME_MODELS = {
+    "gpt-realtime-mini-2025-12-15",
+    "gpt-realtime",
+    "gpt-realtime-2025-08-28",
+    "gpt-realtime-mini",
+    "gpt-realtime-mini-2025-10-06",
+}
 
 router = APIRouter(prefix="/v1", tags=["realtime"])
 
@@ -57,7 +66,7 @@ async def _post_realtime_sessions(
     body: Optional[Dict[str, Any]] = None,
 ) -> Tuple[int, Dict[str, Any]]:
     """
-    Helper for POST /v1/realtime/sessions
+    Helper for POST {OPENAI_API_BASE}/v1/realtime/sessions
     """
     url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
     headers = _build_headers(request)
@@ -104,6 +113,24 @@ async def create_realtime_session(request: Request) -> JSONResponse:
         payload = {}
 
     payload.setdefault("model", DEFAULT_REALTIME_MODEL)
+    model = payload.get("model")
+
+    if model not in ALLOWED_REALTIME_MODELS:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": "Unsupported realtime model",
+                    "type": "invalid_request_error",
+                    "code": "unsupported_model",
+                    "param": "model",
+                    "extra": {
+                        "model": model,
+                        "allowed": sorted(ALLOWED_REALTIME_MODELS),
+                    },
+                }
+            },
+        )
 
     status_code, data = await _post_realtime_sessions(request, payload)
     return JSONResponse(status_code=status_code, content=data)
@@ -124,7 +151,7 @@ async def validate_realtime_session(payload: RealtimeSessionValidateRequest) -> 
     """
     Local-only validation helper for realtime session descriptors.
 
-    This is stateless and does not call upstream; it simply validates shape and expiry.
+    Stateless; does not call upstream. Validates shape and expiry.
     """
     now = time.time()
     if payload.expires_at is not None and payload.expires_at <= now:
@@ -193,7 +220,11 @@ async def realtime_ws(websocket: WebSocket) -> None:
     """
     await websocket.accept(subprotocol="openai-realtime-v1")
 
-    model = websocket.query_params.get("model") or DEFAULT_REALTIME_MODEL
+    model = (websocket.query_params.get("model") or DEFAULT_REALTIME_MODEL).strip()
+    if model not in ALLOWED_REALTIME_MODELS:
+        await websocket.close(code=1008)
+        return
+
     session_id = websocket.query_params.get("session_id")
 
     ws_base = _build_ws_base()
@@ -224,6 +255,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
                         if msg["type"] == "websocket.disconnect":
                             await upstream_ws.close()
                             break
+
                         if msg.get("text") is not None:
                             await upstream_ws.send(msg["text"])
                         elif msg.get("bytes") is not None:

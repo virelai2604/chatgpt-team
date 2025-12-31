@@ -60,7 +60,8 @@ services:
       - key: DEFAULT_MODEL
         value: gpt-5.1
       - key: REALTIME_MODEL
-        value: gpt-4o-realtime-preview
+        value: gpt-realtime
+
 
       # -------- Relay identity / runtime --------
       - key: RELAY_HOST

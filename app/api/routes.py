@@ -62,6 +62,7 @@ def _build_manifest() -> Dict[str, Any]:
             "images_actions",
             "proxy",
             "realtime_http",
+            
             # include wrapper routes in Actions schema
             "files_actions",
             "uploads_actions",
