@@ -26,6 +26,9 @@ dependencies = [
   "orjson>=3.9,<4.0",
   "pyyaml>=6.0,<7.0",
   "loguru>=0.7,<1.0",
+
+  # Realtime WS proxy client
+  "websockets>=12,<14",
 ]
 
 [project.optional-dependencies]
