@@ -65,7 +65,7 @@ class ActionsUploadPartRequest(BaseModel):
 class ActionsUploadCompleteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    part_ids: List[str] = Field(..., description="Ordered list of part IDs")
+    part_ids: list[str] = Field(..., description="Ordered list of part IDs")
 
 
 def _filter_response_headers(headers: httpx.Headers) -> dict:
