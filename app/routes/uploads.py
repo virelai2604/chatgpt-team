@@ -175,3 +175,8 @@ async def actions_cancel_upload(upload_id: str, request: Request) -> Response:
         json_body={},
         inbound_headers=request.headers,
     )
+
+
+ActionsUploadCreateRequest.model_rebuild()
+ActionsUploadPartRequest.model_rebuild()
+ActionsUploadCompleteRequest.model_rebuild()
