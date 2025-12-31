@@ -45,6 +45,8 @@ def register_routes(app: _RouterLike) -> None:
     # Relay diagnostics / metadata for Actions
     app.include_router(actions.router)
     app.include_router(images.actions_router)  # /v1/actions/images/*
+    app.include_router(uploads.actions_router)  # /v1/actions/uploads/*
+    app.include_router(videos.actions_router)  # /v1/actions/videos/*
 
     # Core OpenAI resource families
     app.include_router(responses.router)  # /v1/responses

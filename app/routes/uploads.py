@@ -6,9 +6,8 @@ from typing import Dict, Optional
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.responses import Response as StarletteResponse
 
-from app.api.forward_openai import build_outbound_headers, build_upstream_url, forward_openai_method_path, forward_openai_request
+from app.api.forward_openai import build_outbound_hears, build_upstream_url, forward_openai_method_path, forward_openai_request
 from app.core.http_client import get_async_httpx_client
 
 router = APIRouter(prefix="/v1", tags=["uploads"])
@@ -54,7 +53,7 @@ class ActionsUploadCreateRequest(BaseModel):
     filename: str = Field(..., description="Original filename")
     bytes: int = Field(..., description="Total size in bytes")
     mime_type: str = Field(..., description="MIME type, e.g. text/plain")
-
+    expires_after: Optional[dict] = Field(default=None, description="Optional expiration settings")
 
 class ActionsUploadPartRequest(BaseModel):
     """Actions-friendly JSON wrapper for /v1/uploads/{id}/parts."""
@@ -62,7 +61,7 @@ class ActionsUploadPartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     data_base64: str = Field(..., description="Base64-encoded part bytes (no data: prefix)")
-    filename: Optional[str] = Field(default="part.bin", description="Part filename")
+    filename: Optional[str] = Field(default="part.bin", description="Original filename")
     mime_type: Optional[str] = Field(default="application/octet-stream", description="Part MIME type")
 
 

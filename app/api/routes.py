@@ -39,7 +39,10 @@ def _build_manifest() -> Dict[str, Any]:
             "/v1/actions/uploads/{upload_id}/complete",
             "/v1/actions/uploads/{upload_id}/cancel",
         ],
-        "videos_actions": ["/v1/actions/videos"],
+        "videos_actions": [
+            "/v1/actions/videos",
+         "/v1/actions/videos/{video_id}/remix",
+        ],
     }
 
     meta = {

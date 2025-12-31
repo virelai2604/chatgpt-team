@@ -105,7 +105,11 @@ class ActionsFileUploadRequest(BaseModel):
     data_base64: str = Field(..., description="Base64-encoded file bytes (no data: prefix)")
 
 
-@router.post("/actions/files/upload", summary="Actions-friendly JSON->multipart wrapper for /v1/files")
+@router.post(
+    "/actions/files/upload",
+    summary="Actions-friendly JSON->multipart wrapper for /v1/files",
+    operation_id="actionsFilesUploadV1",
+)
 async def actions_files_upload(payload: ActionsFileUploadRequest, request: Request) -> Response:
     """
     Wrapper for multipart POST /v1/files:
