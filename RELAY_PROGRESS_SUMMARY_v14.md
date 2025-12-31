@@ -1,103 +1,112 @@
+# Relay Progress Summary v14 (as of 2025-12-31)
+
+## Current posture (BIFL)
+
+The relay remains intentionally **hybrid**:
+- **Proxy**: minimal, explicit allowlist, JSON-safe, deny-by-default.
+- **Wrappers**: used for high-risk operations (multipart, resumable uploads, streaming, video multipart).
+- **Actions OpenAPI**: curated subset that exposes only intentional REST capabilities.
+- **Guardrails**: coverage must classify every route; integration tests must remain green on Local + Render.
 
 ---
 
-# `RELAY_PROGRESS_SUMMARY.md` (v14)
+## Current state (Green with one guardrail item)
 
-```md
-# Relay Progress Summary (v14)
+### Test status
+- ✅ Local integration (live uvicorn): `pytest -q -m integration` — **PASS**
+- ✅ Local/Render script suites remain green per prior baseline (v13)
 
-## Current state
+### Actions OpenAPI
+- ✅ `/openapi.actions.json` loads and is stable
+- ✅ No duplicate `operationId` detected in Actions schema
+- ✅ Actions surface includes:
+  - `health`, `models`
+  - `responses` + `responses/compact`
+  - `embeddings`
+  - `images` + Actions JSON wrappers
+  - `uploads` Actions wrappers
+  - `files` Actions upload wrapper
+  - `videos` Actions wrappers
+  - `realtime/sessions`
 
-The relay is now **structurally clean, contract-stable, and behaviorally verified**.
-
-All recent changes have been validated:
-- against live uvicorn
-- with full OpenAPI generation
-- using the full integration test suite
-
----
-
-## What is definitively complete
-
-### 1) Actions surface stability
-
-- `openapi.actions.json` generates cleanly
-- No duplicate `operationId`
-- No FastAPI or Pydantic schema errors
-- Suitable for ingestion by Actions tooling
-
----
-
-### 2) Uploads & Videos normalization
-
-- Single responsibility per router
-- Actions wrappers map 1:1 to upstream endpoints
-- Multipart logic isolated from proxy
-- Cancel / complete paths verified
+### Functional surfaces verified (by integration suite)
+- ✅ Resumable uploads: create/parts/complete/cancel
+- ✅ Files: multipart upload via Actions wrapper; metadata via proxy/direct
+- ✅ Batches: create + poll
+- ✅ Proxy policy: deny multipart/binary/streaming/wildcard; allowlist intact
+- ✅ SSE wrapper present and does not expand proxy surface
 
 ---
 
-### 3) Proxy design integrity
+## What changed since v13
 
-- Minimal allowlist
-- Explicit deny for:
-  - binary content
-  - wildcard paths
-  - legacy/meta routes
-- Proxy mounted last to avoid shadowing
+1. **Streaming wrapper added**
+   - `POST /v1/responses:stream` (SSE)
+   - `POST /v1/actions/responses/stream` (Actions wrapper)
 
----
+2. **Realtime capabilities added**
+   - `POST /v1/realtime/sessions` (Actions-visible)
+   - `WS /v1/realtime/ws` (non-Actions)
+   - Local-only helpers (`/validate`, `/introspect`) introduced for debugging
 
-### 4) Test confidence upgrade
-
-- Integration tests executed against:
-  - real uvicorn
-  - real middleware stack
-  - real headers and routing
-- Confirms behavior beyond unit-level assumptions
+3. **Videos surfaced cleanly**
+   - Canonical `/v1/videos` routes present
+   - Actions wrappers added, including a JSON→multipart helper for generations
 
 ---
 
-## Known non-goals (intentional)
+## Known issue (must resolve)
 
-The relay does **not** expose:
-- Assistants API
-- Threads / Runs
-- Fine-tuning
-- Organization endpoints
+### Coverage guardrail: one UNKNOWN on Render
+- `GET /actions/system/info` is surfaced in `openapi.json` but is not bucketed.
+- This breaks the “no UNKNOWN endpoints” invariant.
 
-These are intentionally excluded.
+Recommended resolution (lowest risk):
+- Classify it as an explicit exclusion bucket (treat it as **legacy/non-v1 meta**).
 
----
-
-## Bottom-line policy (BIFL principle)
-
-**Minimal surface, explicit contracts, no ambiguity.**
-
-- Prefer Actions wrappers over proxy expansion
-- Never allow wildcard growth
-- Every exposed path must be test-covered
-- OpenAPI is the source of truth
+Acceptance criteria:
+- `./scripts/coverage_report.sh` returns **0 UNKNOWN** for:
+  - Local uvicorn
+  - Render deployment
 
 ---
 
-## Recommended next steps (optional)
+## Next plan (incremental, low-refactor)
 
-1) CI hardening
-   - Fail CI on duplicate `operationId`
-   - Fail CI on OpenAPI generation warnings
+### Phase 1 — Restore guardrail invariants
+1. Bucket `/actions/system/info` explicitly (EXCLUDE_LEGACY or new EXCLUDE_META_NONV1)
+2. Re-run coverage report against Render and local
+3. Add/adjust a minimal test that asserts this endpoint is excluded (if desired)
 
-2) Documentation freeze
-   - Snapshot `openapi.actions.json`
-   - Add short Actions contract README
+### Phase 2 — Realtime stabilization
+1. Add a small integration smoke for `POST /v1/realtime/sessions`
+2. Add a non-Actions WS smoke test for `/v1/realtime/ws` (optional; can be skipped in CI if env lacks WS reachability)
+3. Ensure local-only helper endpoints remain excluded from proxy and Actions schema
+
+### Phase 3 — Video generations hardening
+1. Add focused tests for `/v1/actions/videos/generations`:
+   - invalid base64
+   - empty bytes
+   - >max bytes
+   - frames/duration exceeding limits
+2. Confirm header filtering is correct (no hop-by-hop headers)
+
+### Phase 4 — SSE regression coverage
+1. Basic stream-open test ensuring `text/event-stream` and chunk pass-through
+2. Confirm proxy continues to deny colon paths
 
 ---
 
-## Conclusion
+## Quick commands
 
-This relay is now:
-- safe to tag,
-- safe to deploy,
-- safe to extend incrementally without refactor risk.
+```bash
+# local live integration
+export RELAY_BASE_URL=http://127.0.0.1:8000
+pytest -q -m integration
 
-Status: **Ready**
+# local coverage
+./scripts/coverage_report.sh
+
+# render coverage
+RELAY_BASE_URL=https://chatgpt-team-relay.onrender.com ./scripts/coverage_report.sh
+```
