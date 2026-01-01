@@ -130,6 +130,7 @@ class Settings:
     RELAY_TIMEOUT: int
     PROXY_TIMEOUT: int
     PYTHON_VERSION: str
+    RELAY_REALTIME_WS_ENABLED: bool
 
     # Streaming / orchestration
     ENABLE_STREAM: bool
@@ -296,6 +297,10 @@ class Settings:
     def cors_allow_credentials(self) -> bool:
         return self.CORS_ALLOW_CREDENTIALS
 
+    @property
+    def relay_realtime_ws_enabled(self) -> bool:
+        return self.RELAY_REALTIME_WS_ENABLED
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
@@ -325,6 +330,7 @@ def get_settings() -> Settings:
     relay_timeout = _get_int("RELAY_TIMEOUT", 120)
     proxy_timeout = _get_int("PROXY_TIMEOUT", 120)
     python_version = _get_env("PYTHON_VERSION", "") or ""
+    relay_realtime_ws_enabled = _get_bool("RELAY_REALTIME_WS_ENABLED", False)
 
     enable_stream = _get_bool("ENABLE_STREAM", True)
     chain_wait_mode = _get_env("CHAIN_WAIT_MODE", "sequential") or "sequential"
@@ -368,6 +374,7 @@ def get_settings() -> Settings:
         RELAY_TIMEOUT=relay_timeout,
         PROXY_TIMEOUT=proxy_timeout,
         PYTHON_VERSION=python_version,
+        RELAY_REALTIME_WS_ENABLED=relay_realtime_ws_enabled,
         ENABLE_STREAM=enable_stream,
         CHAIN_WAIT_MODE=chain_wait_mode,
         RELAY_AUTH_ENABLED=relay_auth_enabled,

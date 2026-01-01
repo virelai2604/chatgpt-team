@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from websockets import connect as ws_connect  # type: ignore
 from websockets.exceptions import ConnectionClosed  # type: ignore
 
+from app.core.config import get_settings
 from app.utils.logger import relay_log as logger
 
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com").rstrip("/")
@@ -220,6 +221,11 @@ async def realtime_ws(websocket: WebSocket) -> None:
       wss://api.openai.com/v1/realtime?model=...&session_id=...
     """
     await websocket.accept(subprotocol="openai-realtime-v1")
+
+    settings = get_settings()
+    if not settings.RELAY_REALTIME_WS_ENABLED:
+        await websocket.close(code=1008)
+        return
 
     model = (websocket.query_params.get("model") or DEFAULT_REALTIME_MODEL).strip()
     if model not in ALLOWED_REALTIME_MODELS:
