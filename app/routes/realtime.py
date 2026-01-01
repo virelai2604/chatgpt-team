@@ -7,6 +7,7 @@ import json
 import os
 import time
 from typing import Any, Dict, Optional, Tuple
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -26,7 +27,9 @@ def _normalize_openai_api_base(raw: str) -> str:
     return base
 
 
-OPENAI_API_BASE = _normalize_openai_api_base(os.getenv("OPENAI_API_BASE", "https://api.openai.com"))
+RAW_OPENAI_API_BASE = os.getenv("OPENAI_API_BASE")
+OPENAI_API_BASE_SOURCE = "env:OPENAI_API_BASE" if RAW_OPENAI_API_BASE else "default:https://api.openai.com"
+OPENAI_API_BASE = _normalize_openai_api_base(RAW_OPENAI_API_BASE or "https://api.openai.com")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_REALTIME_BETA = os.getenv("OPENAI_REALTIME_BETA", "realtime=v1")
 PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120")))
@@ -71,6 +74,94 @@ def _build_headers(request: Request | None = None) -> Dict[str, str]:
     return headers
 
 
+def _realtime_upstream_context() -> Dict[str, Any]:
+    return {
+        "openai_api_base": OPENAI_API_BASE,
+        "openai_api_base_source": OPENAI_API_BASE_SOURCE,
+        "realtime_sessions_url": f"{OPENAI_API_BASE}/v1/realtime/sessions",
+    }
+
+
+def _resolve_port(scheme: Optional[str], port: Optional[int]) -> Optional[int]:
+    if port is not None:
+        return port
+    if scheme == "https":
+        return 443
+    if scheme == "http":
+        return 80
+    return None
+
+
+def _validate_realtime_upstream(request: Request) -> None:
+    url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
+    parsed_base = urlparse(OPENAI_API_BASE)
+    context = _realtime_upstream_context()
+    settings = get_settings()
+
+    if parsed_base.scheme not in ("http", "https") or not parsed_base.hostname:
+        logger.error("Invalid realtime upstream base: %s", context)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": "Invalid OPENAI_API_BASE for realtime sessions",
+                    "type": "config_error",
+                    "code": "invalid_api_base",
+                    "extra": context,
+                }
+            },
+        )
+
+    relay_host = request.url.hostname
+    if relay_host and parsed_base.hostname == relay_host:
+        relay_port = _resolve_port(request.url.scheme, request.url.port)
+        upstream_port = _resolve_port(parsed_base.scheme, parsed_base.port)
+        if upstream_port is None or relay_port == upstream_port:
+            loop_context = {
+                **context,
+                "relay_host": relay_host,
+                "relay_port": relay_port,
+                "upstream_host": parsed_base.hostname,
+                "upstream_port": upstream_port,
+            }
+            logger.error("Realtime upstream base would loop to relay: %s", loop_context)
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": {
+                        "message": "OPENAI_API_BASE resolves to the relay host and would cause a proxy loop",
+                        "type": "config_error",
+                        "code": "realtime_base_loop",
+                        "extra": loop_context,
+                    }
+                },
+            )
+
+    if settings.RELAY_HOST and parsed_base.hostname == settings.RELAY_HOST:
+        relay_port = _resolve_port(request.url.scheme, settings.RELAY_PORT)
+        upstream_port = _resolve_port(parsed_base.scheme, parsed_base.port)
+        if upstream_port is None or relay_port == upstream_port:
+            loop_context = {
+                **context,
+                "relay_host": settings.RELAY_HOST,
+                "relay_port": relay_port,
+                "upstream_host": parsed_base.hostname,
+                "upstream_port": upstream_port,
+            }
+            logger.error("Realtime upstream base matches relay settings: %s", loop_context)
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": {
+                        "message": "OPENAI_API_BASE matches relay host settings and would cause a proxy loop",
+                        "type": "config_error",
+                        "code": "realtime_base_loop_settings",
+                        "extra": loop_context,
+                    }
+                },
+            )
+
+
 async def _post_realtime_sessions(
     request: Request,
     body: Optional[Dict[str, Any]] = None,
@@ -78,6 +169,7 @@ async def _post_realtime_sessions(
     """
     Helper for POST {OPENAI_API_BASE}/v1/realtime/sessions
     """
+    _validate_realtime_upstream(request)
     url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
     headers = _build_headers(request)
     timeout = httpx.Timeout(PROXY_TIMEOUT)
@@ -87,6 +179,7 @@ async def _post_realtime_sessions(
             resp = await client.post(url, headers=headers, json=body or {})
         except httpx.RequestError as exc:
             logger.error("Error calling OpenAI Realtime sessions: %r", exc)
+            context = _realtime_upstream_context()
             raise HTTPException(
                 status_code=502,
                 detail={
@@ -94,7 +187,7 @@ async def _post_realtime_sessions(
                         "message": "Error calling OpenAI Realtime sessions",
                         "type": "server_error",
                         "code": "upstream_request_error",
-                        "extra": {"exception": str(exc)},
+                        "extra": {"exception": str(exc), **context},
                     }
                 },
             ) from exc
@@ -145,6 +238,32 @@ async def create_realtime_session(request: Request) -> JSONResponse:
         )
 
     status_code, data = await _post_realtime_sessions(request, payload)
+    if status_code >= 400:
+        upstream_url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
+        logger.warning(
+            "Realtime session upstream error: status=%s base=%s url=%s source=%s",
+            status_code,
+            OPENAI_API_BASE,
+            upstream_url,
+            OPENAI_API_BASE_SOURCE,
+        )
+        if not isinstance(data, dict):
+            data = {"error": {"message": "Realtime upstream error", "type": "upstream_error"}}
+        error = data.get("error")
+        if not isinstance(error, dict):
+            error = {"message": "Realtime upstream error", "type": "upstream_error"}
+        extra = error.get("extra")
+        if not isinstance(extra, dict):
+            extra = {}
+        extra.update(
+            {
+                "openai_api_base": OPENAI_API_BASE,
+                "openai_api_base_source": OPENAI_API_BASE_SOURCE,
+                "realtime_sessions_url": upstream_url,
+            }
+        )
+        error["extra"] = extra
+        data["error"] = error
     return JSONResponse(status_code=status_code, content=data)
 
 
@@ -261,6 +380,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
             extra_headers=headers,
             subprotocols=["openai-realtime-v1"],
         ) as upstream:
+
             async def client_to_upstream() -> None:
                 while True:
                     message = await websocket.receive_text()
