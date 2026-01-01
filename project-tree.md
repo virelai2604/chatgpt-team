@@ -16,7 +16,6 @@
   📄 chatgpt_changes.md
   📄 chatgpt_sync.sh
   📄 generate_tree.py
-  📄 input.png
   📄 openai_models_2025-11.csv
   📄 project-tree.md
   📄 pytest.ini
