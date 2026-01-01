@@ -12,6 +12,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.websockets import WebSocketState
 from websockets import connect as ws_connect  # type: ignore
 from websockets.exceptions import ConnectionClosed  # type: ignore
 
@@ -221,6 +222,22 @@ def _build_ws_base() -> str:
     return openai_base
 
 
+def _ws_open(websocket: WebSocket) -> bool:
+    return (
+        websocket.application_state == WebSocketState.CONNECTED
+        and websocket.client_state == WebSocketState.CONNECTED
+    )
+
+
+async def _safe_close(websocket: WebSocket, code: int = 1000) -> None:
+    if not _ws_open(websocket):
+        return
+    try:
+        await websocket.close(code=code)
+    except RuntimeError:
+        return
+
+
 @router.websocket("/realtime/ws")
 async def realtime_ws(websocket: WebSocket) -> None:
     """
@@ -236,12 +253,12 @@ async def realtime_ws(websocket: WebSocket) -> None:
 
     settings = get_settings()
     if not settings.RELAY_REALTIME_WS_ENABLED:
-        await websocket.close(code=1008)
+        await _safe_close(websocket, code=1008)
         return
 
     model = (websocket.query_params.get("model") or DEFAULT_REALTIME_MODEL).strip()
     if model not in ALLOWED_REALTIME_MODELS:
-        await websocket.close(code=1008)
+        await _safe_close(websocket, code=1008)
         return
 
     session_id = websocket.query_params.get("session_id")
@@ -252,7 +269,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
         url += f"&session_id={session_id}"
 
     if not OPENAI_API_KEY:
-        await websocket.close(code=1011)
+        await _safe_close(websocket, code=1011)
         return
 
     headers = {
@@ -288,18 +305,20 @@ async def realtime_ws(websocket: WebSocket) -> None:
             async def _openai_to_client() -> None:
                 try:
                     async for message in upstream_ws:
+                        if not _ws_open(websocket):
+                            break
                         if isinstance(message, bytes):
                             await websocket.send_bytes(message)
                         else:
                             await websocket.send_text(message)
                 except ConnectionClosed:
-                    await websocket.close()
+                    await _safe_close(websocket)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("OpenAI->Client WS error: %r", exc)
-                    await websocket.close()
+                    await _safe_close(websocket)
 
             await asyncio.gather(_client_to_openai(), _openai_to_client())
 
     except Exception as exc:  # noqa: BLE001
         logger.error("Failed to establish WS to OpenAI: %r", exc)
-        await websocket.close()
+        await _safe_close(websocket)
