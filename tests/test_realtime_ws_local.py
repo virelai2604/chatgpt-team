@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Dict
 
 import pytest
@@ -39,14 +40,30 @@ def test_realtime_session_rejects_invalid_model(client: TestClient) -> None:
     assert body.get("error", {}).get("code") == "unsupported_model"
 
 
-def test_realtime_local_helpers_ok(client: TestClient) -> None:
-    response = client.post("/v1/realtime/sessions/validate", json={"session_id": "sess_dummy"})
+def test_realtime_local_validation_and_introspection(client: TestClient) -> None:
+    response = client.post("/v1/realtime/sessions/validate", json={"session_id": "sess_valid"})
     assert response.status_code == 200
-    assert response.json().get("status") == "ok"
+    body = response.json()
+    assert body.get("status") == "ok"
+    assert body.get("session_id") == "sess_valid"
+
+    expired_at = time.time() - 10
+    response = client.post(
+        "/v1/realtime/sessions/validate",
+        json={"session_id": "sess_expired", "expires_at": expired_at},
+    )
+    assert response.status_code == 410
+    error = response.json().get("error", {})
+    assert error.get("code") == "session_expired"
 
     response = client.get("/v1/realtime/sessions/introspect")
     assert response.status_code == 200
-    assert response.json().get("status") == "ok"
+    body = response.json()
+    assert body.get("status") == "ok"
+    assert body.get("realtime_model")
+    assert body.get("openai_api_base")
+    assert body.get("openai_realtime_beta")
+    assert body.get("now") is not None
 
 
 def test_realtime_ws_disabled_closes(client: TestClient) -> None:
