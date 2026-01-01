@@ -18,7 +18,7 @@ from websockets.exceptions import ConnectionClosed  # type: ignore
 from app.core.config import get_settings
 from app.utils.logger import relay_log as logger
 
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com").rstrip("/")
+RAW_OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_REALTIME_BETA = os.getenv("OPENAI_REALTIME_BETA", "realtime=v1")
 PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120")))
@@ -35,6 +35,13 @@ router = APIRouter(
     prefix="/v1",
     tags=["realtime"],
 )
+
+
+def _normalize_openai_base(raw_base: str) -> str:
+    base = (raw_base or "").strip().rstrip("/")
+    if base.endswith("/v1"):
+        base = base[: -len("/v1")]
+    return base or "https://api.openai.com"
 
 
 def _build_headers(request: Request | None = None) -> Dict[str, str]:
@@ -70,7 +77,8 @@ async def _post_realtime_sessions(
     """
     Helper for POST {OPENAI_API_BASE}/v1/realtime/sessions
     """
-    url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
+    openai_base = _normalize_openai_base(RAW_OPENAI_API_BASE)
+    url = f"{openai_base}/v1/realtime/sessions"
     headers = _build_headers(request)
     timeout = httpx.Timeout(PROXY_TIMEOUT)
 
@@ -185,12 +193,13 @@ async def introspect_realtime_sessions() -> JSONResponse:
     """
     Local-only introspection endpoint for realtime settings.
     """
+    openai_base = _normalize_openai_base(RAW_OPENAI_API_BASE)
     return JSONResponse(
         status_code=200,
         content={
             "status": "ok",
             "realtime_model": DEFAULT_REALTIME_MODEL,
-            "openai_api_base": OPENAI_API_BASE,
+            "openai_api_base": openai_base,
             "openai_realtime_beta": OPENAI_REALTIME_BETA,
             "now": time.time(),
         },
@@ -201,12 +210,12 @@ def _build_ws_base() -> str:
     """
     Convert OPENAI_API_BASE (http/https) into ws/wss base for Realtime WS.
     """
-    if OPENAI_API_BASE.startswith("https://"):
-        return "wss://" + OPENAI_API_BASE[len("https://") :]
-    if OPENAI_API_BASE.startswith("http://"):
-        return "ws://" + OPENAI_API_BASE[len("http://") :]
-    # Fallback: assume already ws/wss
-    return OPENAI_API_BASE
+    openai_base = _normalize_openai_base(RAW_OPENAI_API_BASE)
+    if openai_base.startswith("https://"):
+        return "wss://" + openai_base[len("https://") :]
+    if openai_base.startswith("http://"):
+        return "ws://" + openai_base[len("http://") :]
+    return openai_base
 
 
 @router.websocket("/realtime/ws")
