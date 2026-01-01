@@ -12,14 +12,21 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.websockets import WebSocketState
 from websockets import connect as ws_connect  # type: ignore
 from websockets.exceptions import ConnectionClosed  # type: ignore
 
 from app.core.config import get_settings
 from app.utils.logger import relay_log as logger
 
-RAW_OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
+
+def _normalize_openai_api_base(raw: str) -> str:
+    base = raw.rstrip("/")
+    if base.endswith("/v1"):
+        base = base[: -len("/v1")]
+    return base
+
+
+OPENAI_API_BASE = _normalize_openai_api_base(os.getenv("OPENAI_API_BASE", "https://api.openai.com"))
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_REALTIME_BETA = os.getenv("OPENAI_REALTIME_BETA", "realtime=v1")
 PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120")))
@@ -32,20 +39,10 @@ ALLOWED_REALTIME_MODELS = {
     "gpt-realtime-mini-2025-10-06",
 }
 
-UPSTREAM_WS_SUBPROTOCOLS = ["realtime"]
-CLIENT_WS_SUBPROTOCOL = "openai-realtime-v1"
-
 router = APIRouter(
     prefix="/v1",
     tags=["realtime"],
 )
-
-
-def _normalize_openai_base(raw_base: str) -> str:
-    base = (raw_base or "").strip().rstrip("/")
-    if base.endswith("/v1"):
-        base = base[: -len("/v1")]
-    return base or "https://api.openai.com"
 
 
 def _build_headers(request: Request | None = None) -> Dict[str, str]:
@@ -81,8 +78,7 @@ async def _post_realtime_sessions(
     """
     Helper for POST {OPENAI_API_BASE}/v1/realtime/sessions
     """
-    openai_base = _normalize_openai_base(RAW_OPENAI_API_BASE)
-    url = f"{openai_base}/v1/realtime/sessions"
+    url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
     headers = _build_headers(request)
     timeout = httpx.Timeout(PROXY_TIMEOUT)
 
@@ -126,8 +122,9 @@ async def create_realtime_session(request: Request) -> JSONResponse:
     if not isinstance(payload, dict):
         payload = {}
 
+    payload.pop("expires_at", None)
+
     payload.setdefault("model", DEFAULT_REALTIME_MODEL)
-    payload.setdefault("expires_at", int(time.time()) + 10)
     model = payload.get("model")
 
     if model not in ALLOWED_REALTIME_MODELS:
@@ -198,13 +195,12 @@ async def introspect_realtime_sessions() -> JSONResponse:
     """
     Local-only introspection endpoint for realtime settings.
     """
-    openai_base = _normalize_openai_base(RAW_OPENAI_API_BASE)
     return JSONResponse(
         status_code=200,
         content={
             "status": "ok",
             "realtime_model": DEFAULT_REALTIME_MODEL,
-            "openai_api_base": openai_base,
+            "openai_api_base": OPENAI_API_BASE,
             "openai_realtime_beta": OPENAI_REALTIME_BETA,
             "now": time.time(),
         },
@@ -215,39 +211,12 @@ def _build_ws_base() -> str:
     """
     Convert OPENAI_API_BASE (http/https) into ws/wss base for Realtime WS.
     """
-    openai_base = _normalize_openai_base(RAW_OPENAI_API_BASE)
-    if openai_base.startswith("https://"):
-        return "wss://" + openai_base[len("https://") :]
-    if openai_base.startswith("http://"):
-        return "ws://" + openai_base[len("http://") :]
-    return openai_base
-
-
-def _ws_open(websocket: WebSocket) -> bool:
-    return (
-        websocket.application_state == WebSocketState.CONNECTED
-        and websocket.client_state == WebSocketState.CONNECTED
-    )
-
-
-def _select_client_subprotocol(websocket: WebSocket) -> Optional[str]:
-    requested = websocket.scope.get("subprotocols") or []
-    requested_set = {str(value).strip() for value in requested if str(value).strip()}
-
-    if CLIENT_WS_SUBPROTOCOL in requested_set:
-        return CLIENT_WS_SUBPROTOCOL
-    if "realtime" in requested_set:
-        return "realtime"
-    return None
-
-
-async def _safe_close(websocket: WebSocket, code: int = 1000) -> None:
-    if not _ws_open(websocket):
-        return
-    try:
-        await websocket.close(code=code)
-    except RuntimeError:
-        return
+    if OPENAI_API_BASE.startswith("https://"):
+        return "wss://" + OPENAI_API_BASE[len("https://") :]
+    if OPENAI_API_BASE.startswith("http://"):
+        return "ws://" + OPENAI_API_BASE[len("http://") :]
+    # Fallback: assume already ws/wss
+    return OPENAI_API_BASE
 
 
 @router.websocket("/realtime/ws")
@@ -261,28 +230,25 @@ async def realtime_ws(websocket: WebSocket) -> None:
     Relay connects to:
       wss://api.openai.com/v1/realtime?model=...&session_id=...
     """
-    await websocket.accept(subprotocol=_select_client_subprotocol(websocket))
+    await websocket.accept(subprotocol="openai-realtime-v1")
 
     settings = get_settings()
     if not settings.RELAY_REALTIME_WS_ENABLED:
-        await _safe_close(websocket, code=1008)
+        await websocket.close(code=1008, reason="Realtime WS is disabled on this relay")
         return
 
     model = (websocket.query_params.get("model") or DEFAULT_REALTIME_MODEL).strip()
     if model not in ALLOWED_REALTIME_MODELS:
-        await _safe_close(websocket, code=1008)
+        await websocket.close(code=1008, reason="Unsupported realtime model")
         return
 
-    session_id = websocket.query_params.get("session_id")
+    session_id = (websocket.query_params.get("session_id") or "").strip()
+    if not session_id:
+        await websocket.close(code=1008, reason="Missing session_id")
+        return
 
     ws_base = _build_ws_base()
     url = f"{ws_base}/v1/realtime?model={model}"
-    if session_id:
-        url += f"&session_id={session_id}"
-
-    if not OPENAI_API_KEY:
-        await _safe_close(websocket, code=1011)
-        return
 
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -293,44 +259,21 @@ async def realtime_ws(websocket: WebSocket) -> None:
         async with ws_connect(
             url,
             extra_headers=headers,
-            subprotocols=UPSTREAM_WS_SUBPROTOCOLS,
-        ) as upstream_ws:
+            subprotocols=["openai-realtime-v1"],
+        ) as upstream:
+            async def client_to_upstream() -> None:
+                while True:
+                    message = await websocket.receive_text()
+                    await upstream.send(message)
 
-            async def _client_to_openai() -> None:
-                try:
-                    while True:
-                        msg = await websocket.receive()
-                        if msg["type"] == "websocket.disconnect":
-                            await upstream_ws.close()
-                            break
+            async def upstream_to_client() -> None:
+                async for message in upstream:
+                    await websocket.send_text(message)
 
-                        if msg.get("text") is not None:
-                            await upstream_ws.send(msg["text"])
-                        elif msg.get("bytes") is not None:
-                            await upstream_ws.send(msg["bytes"])
-                except WebSocketDisconnect:
-                    await upstream_ws.close()
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Client->OpenAI WS error: %r", exc)
-                    await upstream_ws.close()
-
-            async def _openai_to_client() -> None:
-                try:
-                    async for message in upstream_ws:
-                        if not _ws_open(websocket):
-                            break
-                        if isinstance(message, bytes):
-                            await websocket.send_bytes(message)
-                        else:
-                            await websocket.send_text(message)
-                except ConnectionClosed:
-                    await _safe_close(websocket)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("OpenAI->Client WS error: %r", exc)
-                    await _safe_close(websocket)
-
-            await asyncio.gather(_client_to_openai(), _openai_to_client())
-
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Failed to establish WS to OpenAI: %r", exc)
-        await _safe_close(websocket)
+            await asyncio.gather(client_to_upstream(), upstream_to_client())
+    except WebSocketDisconnect:
+        return
+    except ConnectionClosed:
+        await websocket.close(code=1011, reason="Upstream websocket closed")
+    except Exception:
+        await websocket.close(code=1011, reason="Realtime websocket proxy error")
