@@ -1,13 +1,13 @@
 # ChatGPT Sync
 Repo: chatgpt-team
 Base: origin/main
-Base commit (merge-base): 321e4bfe4223f32a8009241cc7103707db4e9d59
+Base commit (merge-base): 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 Dirs: app tests static schemas src scripts/src
 Root files: project-tree.md pyproject.toml chatgpt_sync.sh AGENTS.md __init__.py generate_tree.py
 Mode: baseline
-Generated: 2026-01-01T15:07:49+07:00
+Generated: 2026-01-01T19:05:58+07:00
 
-## TREE (repo root at 321e4bfe4223f32a8009241cc7103707db4e9d59)
+## TREE (repo root at 89cb5e4b4ff70a57ed50322136140888ea1f23c0)
 ```
  - .env.example.env
  - .gitattributes
@@ -30,7 +30,6 @@ Generated: 2026-01-01T15:07:49+07:00
  - data
  - docs
  - generate_tree.py
- - input.png
  - openai_models_2025-11.csv
  - path
  - project-tree.md
@@ -44,7 +43,7 @@ Generated: 2026-01-01T15:07:49+07:00
  - tests
 ```
 
-## TREE (app/ at 321e4bfe4223f32a8009241cc7103707db4e9d59)
+## TREE (app/ at 89cb5e4b4ff70a57ed50322136140888ea1f23c0)
 ```
  - app/__init__.py
  - app/api/__init__.py
@@ -91,7 +90,7 @@ Generated: 2026-01-01T15:07:49+07:00
  - app/utils/logger.py
 ```
 
-## TREE (tests/ at 321e4bfe4223f32a8009241cc7103707db4e9d59)
+## TREE (tests/ at 89cb5e4b4ff70a57ed50322136140888ea1f23c0)
 ```
  - tests/__init__.py
  - tests/client.py
@@ -108,29 +107,29 @@ Generated: 2026-01-01T15:07:49+07:00
  - tests/test_success_gates_integration.py
 ```
 
-## TREE (static/ at 321e4bfe4223f32a8009241cc7103707db4e9d59)
+## TREE (static/ at 89cb5e4b4ff70a57ed50322136140888ea1f23c0)
 ```
  - static/.well-known/__init__.py
  - static/.well-known/ai-plugin.json
 ```
 
-## TREE (schemas/ at 321e4bfe4223f32a8009241cc7103707db4e9d59)
+## TREE (schemas/ at 89cb5e4b4ff70a57ed50322136140888ea1f23c0)
 ```
  - schemas/__init__.py
  - schemas/openapi.yaml
 ```
 
-## TREE (src/ at 321e4bfe4223f32a8009241cc7103707db4e9d59)
+## TREE (src/ at 89cb5e4b4ff70a57ed50322136140888ea1f23c0)
 ```
 ```
 
-## TREE (scripts/src/ at 321e4bfe4223f32a8009241cc7103707db4e9d59)
+## TREE (scripts/src/ at 89cb5e4b4ff70a57ed50322136140888ea1f23c0)
 ```
 ```
 
 ## BASELINE (ROOT FILES)
 
-## FILE: project-tree.md @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: project-tree.md @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
   📄 .env.env
   📄 .env.example.env
@@ -138,8 +137,11 @@ Generated: 2026-01-01T15:07:49+07:00
   📄 .gitignore
   📄 .gitleaks.toml
   📄 AGENTS.md
+  📄 CONTRIBUTING.md
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
+  📄 Governence.md
   📄 P4_Cross_Domain_Analogy_Hybrid_Developer_v2_3_3.json
+  📄 README.md
   📄 RELAY_CHECKLIST_v19.md
   📄 RELAY_PROGRESS_SUMMARY_v14.md
   📄 __init__.py
@@ -273,11 +275,13 @@ Generated: 2026-01-01T15:07:49+07:00
     📄 test_files_and_batches_integration.py
     📄 test_images_variations_integration.py
     📄 test_local_e2e.py
+    📄 test_realtime_ws_integration.py
+    📄 test_realtime_ws_local.py
     📄 test_relay_auth_guard.py
     📄 test_remaining_routes_smoke_integration.py
     📄 test_success_gates_integration.py```
 
-## FILE: pyproject.toml @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: pyproject.toml @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -343,7 +347,7 @@ exclude = ["tests*", "docs*", "render*"]
 app = ["manifests/*.json"]
 ```
 
-## FILE: chatgpt_sync.sh @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: chatgpt_sync.sh @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 #!/usr/bin/env bash
 set -euo pipefail
@@ -782,7 +786,7 @@ mv "$tmp_out" "$OUT_FILE"
 echo "Wrote: ${REPO_ROOT}/${OUT_FILE}"
 ```
 
-## FILE: AGENTS.md @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: AGENTS.md @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # Repository Guidelines – ChatGPT Team Relay (Codex Max / Custom Action Focus)
 
@@ -927,11 +931,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## FILE: __init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: __init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 ```
 
-## FILE: generate_tree.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: generate_tree.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 #!/usr/bin/env python3
 """
@@ -1005,15 +1009,15 @@ if __name__ == "__main__":
 
 ## BASELINE (app/)
 
-## FILE: app/__init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/__init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 ```
 
-## FILE: app/api/__init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/api/__init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 ```
 
-## FILE: app/api/forward_openai.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/api/forward_openai.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -1452,7 +1456,7 @@ _join_upstream_url = _join_upstream_url
 _join_upstream_url_compat = _join_upstream_url_compat
 ```
 
-## FILE: app/api/routes.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/api/routes.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -1570,7 +1574,7 @@ async def openapi_actions(request: Request) -> JSONResponse:
     return JSONResponse(filtered)
 ```
 
-## FILE: app/api/sse.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/api/sse.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -1629,7 +1633,7 @@ async def actions_responses_stream(request: Request) -> Response:
         json_body=cast(Dict[str, Any], body),
     )```
 
-## FILE: app/api/tools_api.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/api/tools_api.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 #app/api/tools_api
 from __future__ import annotations
@@ -1756,11 +1760,11 @@ async def openapi_actions(request: Request) -> JSONResponse:
     return JSONResponse(filtered)
 ```
 
-## FILE: app/core/__init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/core/__init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 ```
 
-## FILE: app/core/config.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/core/config.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -2159,7 +2163,7 @@ def get_settings() -> Settings:
 settings: Settings = get_settings()
 ```
 
-## FILE: app/core/http_client.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/core/http_client.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -2214,7 +2218,7 @@ def get_async_httpx_client(*, timeout_seconds: float | None = None, timeout: flo
     return _async_httpx_client
 ```
 
-## FILE: app/core/logging.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/core/logging.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 """
 Logging configuration module for the ChatGPT Team Relay.
@@ -2264,7 +2268,7 @@ def configure_logging(settings: Any) -> None:
     get_logger("relay")
 ```
 
-## FILE: app/core/settings.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/core/settings.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -2280,7 +2284,7 @@ from .config import Settings, get_settings, settings
 __all__ = ["Settings", "get_settings", "settings"]
 ```
 
-## FILE: app/http_client.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/http_client.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -2296,7 +2300,7 @@ from app.core.http_client import get_async_httpx_client, get_async_openai_client
 __all__ = ["get_async_httpx_client", "get_async_openai_client"]
 ```
 
-## FILE: app/main.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/main.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -2366,7 +2370,7 @@ def create_app() -> FastAPI:
 app = create_app()
 ```
 
-## FILE: app/manifests/__init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/manifests/__init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # ==========================================================
 # app/manifests/__init__.py — Ground Truth Manifest Loader
@@ -2413,7 +2417,7 @@ except Exception as e:
     raise RuntimeError(f"Failed to load tools manifest: {_manifest_path} — {e}")
 ```
 
-## FILE: app/manifests/tools_manifest.json @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/manifests/tools_manifest.json @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 {
   "object": "list",
@@ -2704,11 +2708,11 @@ except Exception as e:
 }
 ```
 
-## FILE: app/middleware/__init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/middleware/__init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 ```
 
-## FILE: app/middleware/p4_orchestrator.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/middleware/p4_orchestrator.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # app/middleware/p4_orchestrator.py
 import uuid
@@ -2742,7 +2746,7 @@ class P4OrchestratorMiddleware(BaseHTTPMiddleware):
         return response
 ```
 
-## FILE: app/middleware/relay_auth.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/middleware/relay_auth.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -2814,7 +2818,7 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/middleware/validation.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/middleware/validation.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -2915,14 +2919,14 @@ class ValidationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 ```
 
-## FILE: app/models/__init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/models/__init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from .error import ErrorDetail, ErrorResponse
 
 __all__ = ["ErrorDetail", "ErrorResponse"]
 ```
 
-## FILE: app/models/error.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/models/error.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -2961,7 +2965,7 @@ class ErrorResponse(BaseModel):
         )
 ```
 
-## FILE: app/routes/__init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/__init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # app/routes/__init__.py
 
@@ -2970,7 +2974,7 @@ from .register_routes import register_routes
 __all__ = ["register_routes"]
 ```
 
-## FILE: app/routes/actions.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/actions.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # app/routes/actions.py
 
@@ -3145,7 +3149,7 @@ async def system_info() -> JSONResponse:
     return JSONResponse(payload)
 ```
 
-## FILE: app/routes/batches.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/batches.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -3183,7 +3187,7 @@ async def cancel_batch(batch_id: str, request: Request) -> Response:
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/containers.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/containers.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -3279,7 +3283,7 @@ async def containers_file_content_head(request: Request, container_id: str, file
     return await forward_openai_request(request)
 ```
 
-## FILE: app/routes/conversations.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/conversations.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -3348,7 +3352,7 @@ async def conversations_subpaths_options(path: str, request: Request) -> Respons
     return await _forward(request)
 ```
 
-## FILE: app/routes/embeddings.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/embeddings.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -3370,7 +3374,7 @@ async def create_embedding(request: Request) -> JSONResponse:
     return JSONResponse(content=payload)
 ```
 
-## FILE: app/routes/files.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/files.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -3541,7 +3545,7 @@ async def actions_files_upload(payload: ActionsFileUploadRequest, request: Reque
     )
 ```
 
-## FILE: app/routes/health.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/health.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -3608,7 +3612,7 @@ async def v1_health() -> Dict[str, Any]:
     return _health_payload()
 ```
 
-## FILE: app/routes/images.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/images.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # app/api/images.py
 from __future__ import annotations
@@ -3957,7 +3961,7 @@ async def actions_edits(payload: ImagesEditsJSON) -> Response:
     return await _post_multipart_to_upstream(endpoint_path="/v1/images/edits", files=files, data=form)
 ```
 
-## FILE: app/routes/models.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/models.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # app/routes/models.py
 
@@ -4016,7 +4020,7 @@ async def retrieve_model(model_id: str) -> dict:
     }
 ```
 
-## FILE: app/routes/proxy.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/proxy.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -4261,7 +4265,7 @@ async def proxy(call: ProxyRequest, request: Request) -> Response:
     )
 ```
 
-## FILE: app/routes/realtime.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/realtime.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # app/routes/realtime.py
 
@@ -4272,19 +4276,29 @@ import json
 import os
 import time
 from typing import Any, Dict, Optional, Tuple
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.websockets import WebSocketState
 from websockets import connect as ws_connect  # type: ignore
 from websockets.exceptions import ConnectionClosed  # type: ignore
 
 from app.core.config import get_settings
 from app.utils.logger import relay_log as logger
 
-RAW_OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
+
+def _normalize_openai_api_base(raw: str) -> str:
+    base = raw.rstrip("/")
+    if base.endswith("/v1"):
+        base = base[: -len("/v1")]
+    return base
+
+
+RAW_OPENAI_API_BASE = os.getenv("OPENAI_API_BASE")
+OPENAI_API_BASE_SOURCE = "env:OPENAI_API_BASE" if RAW_OPENAI_API_BASE else "default:https://api.openai.com"
+OPENAI_API_BASE = _normalize_openai_api_base(RAW_OPENAI_API_BASE or "https://api.openai.com")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_REALTIME_BETA = os.getenv("OPENAI_REALTIME_BETA", "realtime=v1")
 PROXY_TIMEOUT = float(os.getenv("PROXY_TIMEOUT", os.getenv("RELAY_TIMEOUT", "120")))
@@ -4297,20 +4311,10 @@ ALLOWED_REALTIME_MODELS = {
     "gpt-realtime-mini-2025-10-06",
 }
 
-UPSTREAM_WS_SUBPROTOCOLS = ["realtime"]
-CLIENT_WS_SUBPROTOCOL = "openai-realtime-v1"
-
 router = APIRouter(
     prefix="/v1",
     tags=["realtime"],
 )
-
-
-def _normalize_openai_base(raw_base: str) -> str:
-    base = (raw_base or "").strip().rstrip("/")
-    if base.endswith("/v1"):
-        base = base[: -len("/v1")]
-    return base or "https://api.openai.com"
 
 
 def _build_headers(request: Request | None = None) -> Dict[str, str]:
@@ -4339,6 +4343,94 @@ def _build_headers(request: Request | None = None) -> Dict[str, str]:
     return headers
 
 
+def _realtime_upstream_context() -> Dict[str, Any]:
+    return {
+        "openai_api_base": OPENAI_API_BASE,
+        "openai_api_base_source": OPENAI_API_BASE_SOURCE,
+        "realtime_sessions_url": f"{OPENAI_API_BASE}/v1/realtime/sessions",
+    }
+
+
+def _resolve_port(scheme: Optional[str], port: Optional[int]) -> Optional[int]:
+    if port is not None:
+        return port
+    if scheme == "https":
+        return 443
+    if scheme == "http":
+        return 80
+    return None
+
+
+def _validate_realtime_upstream(request: Request) -> None:
+    url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
+    parsed_base = urlparse(OPENAI_API_BASE)
+    context = _realtime_upstream_context()
+    settings = get_settings()
+
+    if parsed_base.scheme not in ("http", "https") or not parsed_base.hostname:
+        logger.error("Invalid realtime upstream base: %s", context)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": "Invalid OPENAI_API_BASE for realtime sessions",
+                    "type": "config_error",
+                    "code": "invalid_api_base",
+                    "extra": context,
+                }
+            },
+        )
+
+    relay_host = request.url.hostname
+    if relay_host and parsed_base.hostname == relay_host:
+        relay_port = _resolve_port(request.url.scheme, request.url.port)
+        upstream_port = _resolve_port(parsed_base.scheme, parsed_base.port)
+        if upstream_port is None or relay_port == upstream_port:
+            loop_context = {
+                **context,
+                "relay_host": relay_host,
+                "relay_port": relay_port,
+                "upstream_host": parsed_base.hostname,
+                "upstream_port": upstream_port,
+            }
+            logger.error("Realtime upstream base would loop to relay: %s", loop_context)
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": {
+                        "message": "OPENAI_API_BASE resolves to the relay host and would cause a proxy loop",
+                        "type": "config_error",
+                        "code": "realtime_base_loop",
+                        "extra": loop_context,
+                    }
+                },
+            )
+
+    if settings.RELAY_HOST and parsed_base.hostname == settings.RELAY_HOST:
+        relay_port = _resolve_port(request.url.scheme, settings.RELAY_PORT)
+        upstream_port = _resolve_port(parsed_base.scheme, parsed_base.port)
+        if upstream_port is None or relay_port == upstream_port:
+            loop_context = {
+                **context,
+                "relay_host": settings.RELAY_HOST,
+                "relay_port": relay_port,
+                "upstream_host": parsed_base.hostname,
+                "upstream_port": upstream_port,
+            }
+            logger.error("Realtime upstream base matches relay settings: %s", loop_context)
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": {
+                        "message": "OPENAI_API_BASE matches relay host settings and would cause a proxy loop",
+                        "type": "config_error",
+                        "code": "realtime_base_loop_settings",
+                        "extra": loop_context,
+                    }
+                },
+            )
+
+
 async def _post_realtime_sessions(
     request: Request,
     body: Optional[Dict[str, Any]] = None,
@@ -4346,8 +4438,9 @@ async def _post_realtime_sessions(
     """
     Helper for POST {OPENAI_API_BASE}/v1/realtime/sessions
     """
-    openai_base = _normalize_openai_base(RAW_OPENAI_API_BASE)
-    url = f"{openai_base}/v1/realtime/sessions"
+    _validate_realtime_upstream(request)
+    url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
+    
     headers = _build_headers(request)
     timeout = httpx.Timeout(PROXY_TIMEOUT)
 
@@ -4356,6 +4449,7 @@ async def _post_realtime_sessions(
             resp = await client.post(url, headers=headers, json=body or {})
         except httpx.RequestError as exc:
             logger.error("Error calling OpenAI Realtime sessions: %r", exc)
+            context = _realtime_upstream_context()
             raise HTTPException(
                 status_code=502,
                 detail={
@@ -4363,7 +4457,7 @@ async def _post_realtime_sessions(
                         "message": "Error calling OpenAI Realtime sessions",
                         "type": "server_error",
                         "code": "upstream_request_error",
-                        "extra": {"exception": str(exc)},
+                        "extra": {"exception": str(exc), **context},
                     }
                 },
             ) from exc
@@ -4391,6 +4485,8 @@ async def create_realtime_session(request: Request) -> JSONResponse:
     if not isinstance(payload, dict):
         payload = {}
 
+    payload.pop("expires_at", None)
+
     payload.setdefault("model", DEFAULT_REALTIME_MODEL)
     model = payload.get("model")
 
@@ -4412,6 +4508,32 @@ async def create_realtime_session(request: Request) -> JSONResponse:
         )
 
     status_code, data = await _post_realtime_sessions(request, payload)
+    if status_code >= 400:
+        upstream_url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
+        logger.warning(
+            "Realtime session upstream error: status=%s base=%s url=%s source=%s",
+            status_code,
+            OPENAI_API_BASE,
+            upstream_url,
+            OPENAI_API_BASE_SOURCE,
+        )
+        if not isinstance(data, dict):
+            data = {"error": {"message": "Realtime upstream error", "type": "upstream_error"}}
+        error = data.get("error")
+        if not isinstance(error, dict):
+            error = {"message": "Realtime upstream error", "type": "upstream_error"}
+        extra = error.get("extra")
+        if not isinstance(extra, dict):
+            extra = {}
+        extra.update(
+            {
+                "openai_api_base": OPENAI_API_BASE,
+                "openai_api_base_source": OPENAI_API_BASE_SOURCE,
+                "realtime_sessions_url": upstream_url,
+            }
+        )
+        error["extra"] = extra
+        data["error"] = error
     return JSONResponse(status_code=status_code, content=data)
 
 
@@ -4462,13 +4584,12 @@ async def introspect_realtime_sessions() -> JSONResponse:
     """
     Local-only introspection endpoint for realtime settings.
     """
-    openai_base = _normalize_openai_base(RAW_OPENAI_API_BASE)
     return JSONResponse(
         status_code=200,
         content={
             "status": "ok",
             "realtime_model": DEFAULT_REALTIME_MODEL,
-            "openai_api_base": openai_base,
+            "openai_api_base": OPENAI_API_BASE,
             "openai_realtime_beta": OPENAI_REALTIME_BETA,
             "now": time.time(),
         },
@@ -4479,39 +4600,12 @@ def _build_ws_base() -> str:
     """
     Convert OPENAI_API_BASE (http/https) into ws/wss base for Realtime WS.
     """
-    openai_base = _normalize_openai_base(RAW_OPENAI_API_BASE)
-    if openai_base.startswith("https://"):
-        return "wss://" + openai_base[len("https://") :]
-    if openai_base.startswith("http://"):
-        return "ws://" + openai_base[len("http://") :]
-    return openai_base
-
-
-def _ws_open(websocket: WebSocket) -> bool:
-    return (
-        websocket.application_state == WebSocketState.CONNECTED
-        and websocket.client_state == WebSocketState.CONNECTED
-    )
-
-
-def _select_client_subprotocol(websocket: WebSocket) -> Optional[str]:
-    requested = websocket.scope.get("subprotocols") or []
-    requested_set = {str(value).strip() for value in requested if str(value).strip()}
-
-    if CLIENT_WS_SUBPROTOCOL in requested_set:
-        return CLIENT_WS_SUBPROTOCOL
-    if "realtime" in requested_set:
-        return "realtime"
-    return None
-
-
-async def _safe_close(websocket: WebSocket, code: int = 1000) -> None:
-    if not _ws_open(websocket):
-        return
-    try:
-        await websocket.close(code=code)
-    except RuntimeError:
-        return
+    if OPENAI_API_BASE.startswith("https://"):
+        return "wss://" + OPENAI_API_BASE[len("https://") :]
+    if OPENAI_API_BASE.startswith("http://"):
+        return "ws://" + OPENAI_API_BASE[len("http://") :]
+    # Fallback: assume already ws/wss
+    return OPENAI_API_BASE
 
 
 @router.websocket("/realtime/ws")
@@ -4525,31 +4619,38 @@ async def realtime_ws(websocket: WebSocket) -> None:
     Relay connects to:
       wss://api.openai.com/v1/realtime?model=...&session_id=...
     """
-    await websocket.accept(subprotocol=_select_client_subprotocol(websocket))
+    subprotocols = websocket.headers.get("sec-websocket-protocol")
+    if subprotocols and "openai-realtime-v1" in subprotocols:
+        await websocket.accept(subprotocol="openai-realtime-v1")
+    else:
+        await websocket.accept()
 
     settings = get_settings()
     if not settings.RELAY_REALTIME_WS_ENABLED:
-        await _safe_close(websocket, code=1008)
+        await websocket.close(code=1008, reason="Realtime WS is disabled on this relay")
         return
 
     model = (websocket.query_params.get("model") or DEFAULT_REALTIME_MODEL).strip()
     if model not in ALLOWED_REALTIME_MODELS:
-        await _safe_close(websocket, code=1008)
+        await websocket.close(code=1008, reason="Unsupported realtime model")
         return
 
-    session_id = websocket.query_params.get("session_id")
+    session_id = (websocket.query_params.get("session_id") or "").strip()
+    if not session_id:
+        await websocket.close(code=1008, reason="Missing session_id")
+        return
 
+    client_auth = websocket.headers.get("authorization")
+    if not client_auth and not OPENAI_API_KEY:
+        await websocket.close(code=1008, reason="Missing Authorization header or OPENAI_API_KEY")
+        return
+        
     ws_base = _build_ws_base()
-    url = f"{ws_base}/v1/realtime?model={model}"
-    if session_id:
-        url += f"&session_id={session_id}"
+    url = f"{ws_base}/v1/realtime?model={model}&session_id={session_id}"
 
-    if not OPENAI_API_KEY:
-        await _safe_close(websocket, code=1011)
-        return
-
+    auth_header = client_auth or f"Bearer {OPENAI_API_KEY}"
     headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Authorization": auth_header,
         "OpenAI-Beta": OPENAI_REALTIME_BETA,
     }
 
@@ -4557,50 +4658,28 @@ async def realtime_ws(websocket: WebSocket) -> None:
         async with ws_connect(
             url,
             extra_headers=headers,
-            subprotocols=UPSTREAM_WS_SUBPROTOCOLS,
-        ) as upstream_ws:
+            subprotocols=["openai-realtime-v1"],
+        ) as upstream:
 
-            async def _client_to_openai() -> None:
-                try:
-                    while True:
-                        msg = await websocket.receive()
-                        if msg["type"] == "websocket.disconnect":
-                            await upstream_ws.close()
-                            break
+            async def client_to_upstream() -> None:
+                while True:
+                    message = await websocket.receive_text()
+                    await upstream.send(message)
 
-                        if msg.get("text") is not None:
-                            await upstream_ws.send(msg["text"])
-                        elif msg.get("bytes") is not None:
-                            await upstream_ws.send(msg["bytes"])
-                except WebSocketDisconnect:
-                    await upstream_ws.close()
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Client->OpenAI WS error: %r", exc)
-                    await upstream_ws.close()
+            async def upstream_to_client() -> None:
+                async for message in upstream:
+                    await websocket.send_text(message)
 
-            async def _openai_to_client() -> None:
-                try:
-                    async for message in upstream_ws:
-                        if not _ws_open(websocket):
-                            break
-                        if isinstance(message, bytes):
-                            await websocket.send_bytes(message)
-                        else:
-                            await websocket.send_text(message)
-                except ConnectionClosed:
-                    await _safe_close(websocket)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("OpenAI->Client WS error: %r", exc)
-                    await _safe_close(websocket)
-
-            await asyncio.gather(_client_to_openai(), _openai_to_client())
-
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Failed to establish WS to OpenAI: %r", exc)
-        await _safe_close(websocket)
+            await asyncio.gather(client_to_upstream(), upstream_to_client())
+    except WebSocketDisconnect:
+        return
+    except ConnectionClosed:
+        await websocket.close(code=1011, reason="Upstream websocket closed")
+    except Exception:
+        await websocket.close(code=1011, reason="Realtime websocket proxy error")
 ```
 
-## FILE: app/routes/register_routes.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/register_routes.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # app/routes/register_routes.py
 
@@ -4686,7 +4765,7 @@ def register_all_routes(app: _RouterLike) -> None:
     register_routes(app)
 ```
 
-## FILE: app/routes/responses.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/responses.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -4758,7 +4837,7 @@ async def responses_compact(payload: ResponsesCompactRequest, request: Request):
         payload_data["object"] = "response.compaction"
     return JSONResponse(content=payload_data, status_code=upstream_response.status_code)```
 
-## FILE: app/routes/uploads.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/uploads.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -4943,7 +5022,7 @@ ActionsUploadCreateRequest.model_rebuild()
 ActionsUploadPartRequest.model_rebuild()
 ActionsUploadCompleteRequest.model_rebuild()```
 
-## FILE: app/routes/vector_stores.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/vector_stores.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -5024,7 +5103,7 @@ async def vector_stores_subpaths_alias(path: str, request: Request) -> Response:
     return await _forward(request)
 ```
 
-## FILE: app/routes/videos.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/routes/videos.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -5258,11 +5337,11 @@ async def actions_generate_video(payload: ActionsVideoGenerationRequest, request
 ActionsVideoGenerationRequest.model_rebuild()
 ```
 
-## FILE: app/utils/__init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/utils/__init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 ```
 
-## FILE: app/utils/authy.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/utils/authy.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -5332,7 +5411,7 @@ def check_relay_key(*, authorization: str | None, x_relay_key: str | None) -> No
     raise HTTPException(status_code=401, detail="Invalid relay key")
 ```
 
-## FILE: app/utils/error_handler.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/utils/error_handler.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # app/utils/error_handler.py
 
@@ -5476,7 +5555,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 ```
 
-## FILE: app/utils/http_client.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/utils/http_client.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -5485,7 +5564,7 @@ from app.core.http_client import get_async_httpx_client
 __all__ = ["get_async_httpx_client"]
 ```
 
-## FILE: app/utils/logger.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: app/utils/logger.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -5626,11 +5705,11 @@ def exception(msg: str, *args, **kwargs) -> None:
 
 ## BASELINE (tests/)
 
-## FILE: tests/__init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/__init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 ```
 
-## FILE: tests/client.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/client.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # tests/client.py
 
@@ -5667,7 +5746,7 @@ def _build_client() -> TestClient:
 client: TestClient = _build_client()
 ```
 
-## FILE: tests/conftest.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/conftest.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -5802,7 +5881,7 @@ async def async_client() -> AsyncIterator[httpx.AsyncClient]:
         yield c
 ```
 
-## FILE: tests/relay_client_example.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/relay_client_example.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # relay_client_example.py
 from __future__ import annotations
@@ -5877,7 +5956,7 @@ if __name__ == "__main__":
         raise
 ```
 
-## FILE: tests/test_extended_routes_smoke_integration.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/test_extended_routes_smoke_integration.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 """Extended route smoke tests (integration).
 
@@ -6137,7 +6216,7 @@ def test_realtime_sessions_create_no_5xx() -> None:
     assert r.status_code < 500, f"realtime sessions returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_files_and_batches_integration.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/test_files_and_batches_integration.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 """
 tests/test_files_and_batches_integration.py
@@ -6471,7 +6550,7 @@ async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient) -> N
     assert r.content, "output file content was empty"
 ```
 
-## FILE: tests/test_images_variations_integration.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/test_images_variations_integration.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 import binascii
 import os
@@ -6555,7 +6634,7 @@ def test_images_variations_wiring_no_5xx(tmp_path) -> None:
     assert r.status_code < 500, r.text
 ```
 
-## FILE: tests/test_local_e2e.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/test_local_e2e.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # tests/test_local_e2e.py
 from __future__ import annotations
@@ -6787,175 +6866,118 @@ async def test_actions_images_endpoints_callable(async_client: httpx.AsyncClient
         assert resp.status_code == 400
         assert "Missing image input" in resp.text```
 
-## FILE: tests/test_realtime_ws_integration.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/test_realtime_ws_integration.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
-"""Integration smoke test for realtime WS relay."""
-
 from __future__ import annotations
 
 import asyncio
 import json
 import os
 from typing import Any, Dict, Optional
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import pytest
 import requests
-import websockets
-from websockets.exceptions import ConnectionClosed
+from websockets import connect as ws_connect
+
+
+pytestmark = pytest.mark.integration
 
 RELAY_BASE_URL = os.getenv("RELAY_BASE_URL", "http://localhost:8000").rstrip("/")
-RELAY_TOKEN = os.getenv("RELAY_TOKEN") or os.getenv("RELAY_KEY") or os.getenv("RELAY_AUTH_TOKEN")
-DEFAULT_TIMEOUT_S = float(os.getenv("RELAY_TEST_TIMEOUT_S", "30"))
-REALTIME_MODEL = os.getenv("RELAY_REALTIME_MODEL", "gpt-realtime")
-INTEGRATION_ENV_VAR = "INTEGRATION_OPENAI_API_KEY"
+RELAY_TOKEN = os.getenv("RELAY_TOKEN", "dummy")
+REALTIME_MODEL = os.getenv("REALTIME_MODEL", "gpt-realtime")
+DEFAULT_TIMEOUT_S = float(os.getenv("RELAY_TEST_TIMEOUT_S", "60"))
 
 
-def _bool_env(name: str) -> bool:
-    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+def _skip_if_no_real_key() -> None:
+    if os.getenv("INTEGRATION_OPENAI_API_KEY") != "1":
+        pytest.skip("INTEGRATION_OPENAI_API_KEY != 1 (skipping real-API integration tests)")
+
+
+def _skip_if_ws_disabled() -> None:
+    if os.getenv("RELAY_REALTIME_WS_ENABLED") != "1":
+        pytest.skip("RELAY_REALTIME_WS_ENABLED != 1 (realtime WS disabled)")
 
 
 def _auth_headers(extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-    headers: Dict[str, str] = {}
-    if RELAY_TOKEN:
-        headers["Authorization"] = f"Bearer {RELAY_TOKEN}"
+    headers = {"Authorization": f"Bearer {RELAY_TOKEN}"}
     if extra:
         headers.update(extra)
     return headers
 
 
-def _ws_headers() -> list[tuple[str, str]]:
-    headers: list[tuple[str, str]] = []
-    if RELAY_TOKEN:
-        headers.append(("Authorization", f"Bearer {RELAY_TOKEN}"))
-    return headers
+def _must_ok(r: requests.Response, *, hint: str = "") -> None:
+    if r.ok:
+        return
+    body = r.text
+    if len(body) > 4000:
+        body = body[:4000] + "…(truncated)"
+    raise AssertionError(f"{hint}HTTP {r.status_code} {r.reason}: {body}")
 
 
-def _skip_if_realtime_disabled() -> None:
-    if not _bool_env("RELAY_REALTIME_WS_ENABLED"):
-        pytest.skip("Set RELAY_REALTIME_WS_ENABLED=1 to run realtime WS integration tests")
+def _extract_client_secret(payload: Dict[str, Any]) -> Optional[str]:
+    candidates = [
+        payload.get("client_secret"),
+        payload.get("client_secret_value"),
+        payload.get("clientSecret"),
+        payload.get("secret"),
+        payload.get("token"),
+    ]
 
+    for value in candidates:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, dict):
+            nested = value.get("value") or value.get("secret") or value.get("token")
+            if isinstance(nested, str) and nested.strip():
+                return nested.strip()
 
-def _skip_if_missing_integration_key() -> None:
-    if not _bool_env(INTEGRATION_ENV_VAR):
-        pytest.skip(f"Set {INTEGRATION_ENV_VAR}=1 to run realtime WS integration tests")
-
-
-def _get_health() -> Dict[str, Any]:
-    response = requests.get(
-        f"{RELAY_BASE_URL}/v1/health",
-        timeout=DEFAULT_TIMEOUT_S,
-    )
-    if response.status_code != 200:
-        pytest.skip(f"Relay health check failed: {response.status_code}")
-    return response.json()
-
-
-def _skip_if_missing_credentials(health: Dict[str, Any]) -> None:
-    relay_info = health.get("relay", {})
-    auth_enabled = bool(relay_info.get("auth_enabled"))
-    if auth_enabled and not RELAY_TOKEN:
-        pytest.skip("Relay auth is enabled but no RELAY_TOKEN/RELAY_KEY provided")
-
-    openai_info = health.get("openai", {})
-    if not bool(openai_info.get("api_key_configured")):
-        pytest.skip("Relay is missing OPENAI_API_KEY; realtime sessions unavailable")
-
-
-def _extract_client_secret(data: Dict[str, Any]) -> str:
-    secret = data.get("client_secret")
-    if isinstance(secret, str) and secret:
-        return secret
-    if isinstance(secret, dict):
-        for key in ("value", "secret", "token"):
-            value = secret.get(key)
-            if isinstance(value, str) and value:
-                return value
-    for key in ("client_secret", "secret", "token"):
-        value = data.get(key)
-        if isinstance(value, str) and value:
-            return value
-    raise AssertionError("No client_secret (or equivalent token) returned from realtime session")
+    return None
 
 
 def _build_ws_url(model: str, session_id: Optional[str]) -> str:
-    parsed = urlparse(RELAY_BASE_URL)
-    scheme = "wss" if parsed.scheme == "https" else "ws"
-    base_path = parsed.path.rstrip("/")
-    ws_base = f"{scheme}://{parsed.netloc}{base_path}"
-    params = {"model": model}
+    parts = urlsplit(RELAY_BASE_URL)
+    scheme = "wss" if parts.scheme == "https" else "ws"
+    base = urlunsplit((scheme, parts.netloc, "", "", ""))
+
+    query_params = {"model": model}
     if session_id:
-        params["session_id"] = session_id
-    return f"{ws_base}/v1/realtime/ws?{urlencode(params)}"
+        query_params["session_id"] = session_id
+
+    return f"{base}/v1/realtime/ws?{urlencode(query_params)}"
 
 
-async def _probe_ws(ws_url: str) -> Dict[str, Any]:
-    event: Dict[str, Any] = {}
-    try:
-        async with websockets.connect(
-            ws_url,
-            extra_headers=_ws_headers(),
-            subprotocols=["openai-realtime-v1"],
-            open_timeout=DEFAULT_TIMEOUT_S,
-        ) as websocket:
-            init_event = {"type": "session.update", "session": {"modalities": ["text"]}}
-            await websocket.send(json.dumps(init_event))
+@pytest.mark.asyncio
+async def test_realtime_session_and_ws_connect_smoke() -> None:
+    _skip_if_no_real_key()
+    _skip_if_ws_disabled()
 
-            try:
-                raw = await asyncio.wait_for(websocket.recv(), timeout=5)
-            except asyncio.TimeoutError:
-                await asyncio.sleep(0.5)
-                if websocket.closed:
-                    raise AssertionError(
-                        f"Realtime WS closed early with code {websocket.close_code}"
-                    )
-                return {}
-
-            if isinstance(raw, bytes):
-                raw = raw.decode("utf-8", errors="ignore")
-            try:
-                event = json.loads(raw)
-            except json.JSONDecodeError:
-                event = {"raw": raw}
-
-            return event
-    except ConnectionClosed as exc:
-        raise AssertionError(f"Realtime WS connection closed with code {exc.code}") from exc
-
-
-@pytest.mark.integration
-def test_realtime_ws_session_smoke() -> None:
-    _skip_if_realtime_disabled()
-    _skip_if_missing_integration_key()
-
-    health = _get_health()
-    _skip_if_missing_credentials(health)
-
-    payload = {"model": REALTIME_MODEL}
-    response = requests.post(
+    r = requests.post(
         f"{RELAY_BASE_URL}/v1/realtime/sessions",
         headers=_auth_headers({"Content-Type": "application/json"}),
-        json=payload,
+        json={"model": REALTIME_MODEL},
         timeout=DEFAULT_TIMEOUT_S,
     )
-    assert response.status_code == 200, (
-        f"/v1/realtime/sessions returned {response.status_code}: {response.text[:400]}"
-    )
+    _must_ok(r, hint="Create realtime session failed. ")
+    payload = r.json()
 
-    data = response.json()
-    client_secret = _extract_client_secret(data)
-    assert client_secret
+    session_id = payload.get("id")
+    assert isinstance(session_id, str) and session_id.strip(), "Missing session id in response"
 
-    session_id = data.get("id") or data.get("session_id")
-    ws_url = _build_ws_url(REALTIME_MODEL, session_id if isinstance(session_id, str) else None)
+    client_secret = _extract_client_secret(payload)
+    ws_url = _build_ws_url(REALTIME_MODEL, session_id)
 
-    event = asyncio.run(_probe_ws(ws_url))
-    if event:
-        event_type = event.get("type")
-        if event_type in {"error", "session.error"} or "error" in event:
-            raise AssertionError(f"Realtime WS error event: {event}")```
+    headers: Dict[str, str] = {}
+    if client_secret:
+        headers["Authorization"] = f"Bearer {client_secret}"
 
-## FILE: tests/test_realtime_ws_local.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+    async with ws_connect(ws_url, extra_headers=headers) as websocket:
+        await websocket.send(json.dumps({"type": "session.update", "session": {}}))
+        first_msg = await asyncio.wait_for(websocket.recv(), timeout=10)
+        assert first_msg is not None
+```
+
+## FILE: tests/test_realtime_ws_local.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -7032,7 +7054,7 @@ def test_realtime_ws_disabled_closes(client: TestClient) -> None:
     assert exc.value.code == 1008
 ```
 
-## FILE: tests/test_relay_auth_guard.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/test_relay_auth_guard.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 # tests/test_relay_auth_guard.py
 """Relay auth middleware guardrails.
@@ -7115,7 +7137,7 @@ def test_relay_auth_requires_valid_key_for_v1_paths(monkeypatch: pytest.MonkeyPa
         assert body.get("object") == "list"
 ```
 
-## FILE: tests/test_remaining_routes_smoke_integration.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/test_remaining_routes_smoke_integration.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -7164,7 +7186,7 @@ def test_remaining_route_families_smoke_no_5xx() -> None:
         assert r.status_code < 500, f"{method} {path} returned {r.status_code}: {r.text[:400]}"
 ```
 
-## FILE: tests/test_success_gates_integration.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: tests/test_success_gates_integration.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 from __future__ import annotations
 
@@ -7368,11 +7390,11 @@ def test_gate_d_content_endpoints_wiring_negative_ids() -> None:
 
 ## BASELINE (static/)
 
-## FILE: static/.well-known/__init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: static/.well-known/__init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 ```
 
-## FILE: static/.well-known/ai-plugin.json @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: static/.well-known/ai-plugin.json @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 {
   "schema_version": "v1",
@@ -7401,11 +7423,11 @@ def test_gate_d_content_endpoints_wiring_negative_ids() -> None:
 
 ## BASELINE (schemas/)
 
-## FILE: schemas/__init__.py @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: schemas/__init__.py @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 ```
 
-## FILE: schemas/openapi.yaml @ 321e4bfe4223f32a8009241cc7103707db4e9d59
+## FILE: schemas/openapi.yaml @ 89cb5e4b4ff70a57ed50322136140888ea1f23c0
 ```
 openapi: 3.1.0
 info:

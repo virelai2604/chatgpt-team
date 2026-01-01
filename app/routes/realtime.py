@@ -371,7 +371,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
         await websocket.close(code=1008, reason="Missing session_id")
         return
 
-    client_auth = websocket.headers.get("authorization")
+    client_auth = websocket.headers.get("authorization") or websocket.headers.get("Authorization")
     if not client_auth and not OPENAI_API_KEY:
         await websocket.close(code=1008, reason="Missing Authorization header or OPENAI_API_KEY")
         return
@@ -385,6 +385,13 @@ async def realtime_ws(websocket: WebSocket) -> None:
         "OpenAI-Beta": OPENAI_REALTIME_BETA,
     }
 
+    upstream_context = {
+        "openai_api_base": OPENAI_API_BASE,
+        "upstream_url": url,
+        "model": model,
+        "session_id": session_id,
+    }
+    
     try:
         async with ws_connect(
             url,
@@ -404,7 +411,15 @@ async def realtime_ws(websocket: WebSocket) -> None:
             await asyncio.gather(client_to_upstream(), upstream_to_client())
     except WebSocketDisconnect:
         return
-    except ConnectionClosed:
+    except ConnectionClosed as exc:
+        logger.warning(
+            "Realtime WS upstream closed: %s",
+            {"exception": repr(exc), **upstream_context},
+        )
         await websocket.close(code=1011, reason="Upstream websocket closed")
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "Realtime WS proxy error: %s",
+            {"exception": repr(exc), **upstream_context},
+        )
         await websocket.close(code=1011, reason="Realtime websocket proxy error")
