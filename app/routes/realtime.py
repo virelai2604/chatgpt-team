@@ -229,6 +229,17 @@ def _ws_open(websocket: WebSocket) -> bool:
     )
 
 
+def _select_client_subprotocol(websocket: WebSocket) -> Optional[str]:
+    requested = websocket.scope.get("subprotocols") or []
+    requested_set = {str(value).strip() for value in requested if str(value).strip()}
+
+    if CLIENT_WS_SUBPROTOCOL in requested_set:
+        return CLIENT_WS_SUBPROTOCOL
+    if "realtime" in requested_set:
+        return "realtime"
+    return None
+
+
 async def _safe_close(websocket: WebSocket, code: int = 1000) -> None:
     if not _ws_open(websocket):
         return
@@ -249,7 +260,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
     Relay connects to:
       wss://api.openai.com/v1/realtime?model=...&session_id=...
     """
-    await websocket.accept(subprotocol=CLIENT_WS_SUBPROTOCOL)
+    await websocket.accept(subprotocol=_select_client_subprotocol(websocket))
 
     settings = get_settings()
     if not settings.RELAY_REALTIME_WS_ENABLED:
