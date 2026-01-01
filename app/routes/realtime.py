@@ -371,11 +371,17 @@ async def realtime_ws(websocket: WebSocket) -> None:
         await websocket.close(code=1008, reason="Missing session_id")
         return
 
+    client_auth = websocket.headers.get("authorization")
+    if not client_auth and not OPENAI_API_KEY:
+        await websocket.close(code=1008, reason="Missing Authorization header or OPENAI_API_KEY")
+        return
+        
     ws_base = _build_ws_base()
-    url = f"{ws_base}/v1/realtime?model={model}"
+    url = f"{ws_base}/v1/realtime?model={model}&session_id={session_id}"
 
+    auth_header = client_auth or f"Bearer {OPENAI_API_KEY}"
     headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Authorization": auth_header,
         "OpenAI-Beta": OPENAI_REALTIME_BETA,
     }
 
