@@ -31,6 +31,9 @@ ALLOWED_REALTIME_MODELS = {
     "gpt-realtime-mini-2025-10-06",
 }
 
+UPSTREAM_WS_SUBPROTOCOLS = ["realtime"]
+CLIENT_WS_SUBPROTOCOL = "openai-realtime-v1"
+
 router = APIRouter(
     prefix="/v1",
     tags=["realtime"],
@@ -229,7 +232,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
     Relay connects to:
       wss://api.openai.com/v1/realtime?model=...&session_id=...
     """
-    await websocket.accept(subprotocol="openai-realtime-v1")
+    await websocket.accept(subprotocol=CLIENT_WS_SUBPROTOCOL)
 
     settings = get_settings()
     if not settings.RELAY_REALTIME_WS_ENABLED:
@@ -261,7 +264,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
         async with ws_connect(
             url,
             extra_headers=headers,
-            subprotocols=["openai-realtime-v1"],
+            subprotocols=UPSTREAM_WS_SUBPROTOCOLS,
         ) as upstream_ws:
 
             async def _client_to_openai() -> None:
