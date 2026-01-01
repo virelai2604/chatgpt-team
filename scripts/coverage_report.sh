@@ -57,33 +57,6 @@ detect_proxy_import_path() {
 
 PROXY_MOD="$(detect_proxy_import_path)"
 
-# Instantiate OpenAPI template parameters (e.g., /v1/files/{file_id}) into representative concrete values
-# so proxy allowlist regex checks reflect runtime behavior.
-instantiate_openapi_path() {
-  local p="$1"
-
-  # Most common OpenAI-style IDs in your proxy allowlist
-  p="$(echo "$p" | sed -E \
-    -e 's/\{file_id\}/file-EXAMPLE123/g' \
-    -e 's/\{batch_id\}/batch_EXAMPLE123/g' \
-    -e 's/\{video_id\}/video-EXAMPLE123/g' \
-    -e 's/\{image_id\}/image-EXAMPLE123/g' \
-    -e 's/\{vector_store_id\}/vs_EXAMPLE123/g' \
-    -e 's/\{assistant_id\}/asst_EXAMPLE123/g' \
-    -e 's/\{thread_id\}/thread_EXAMPLE123/g' \
-    -e 's/\{message_id\}/msg_EXAMPLE123/g' \
-    -e 's/\{run_id\}/run_EXAMPLE123/g' \
-    -e 's/\{upload_id\}/upload_EXAMPLE123/g' \
-    -e 's/\{chunk_id\}/chunk_EXAMPLE123/g' \
-  )"
-
-  # Generic safe fallback: replace any remaining {param} with a token that contains no slashes.
-  # This prevents template-literal mismatches while still letting allowlist enforcement do real work.
-  p="$(echo "$p" | sed -E 's/\{[^\/}]+\}/EXAMPLE123/g')"
-
-  echo "$p"
-}
-
 proxy_decision() {
   local method="$1"
   local path="$2"
@@ -130,6 +103,24 @@ else:
 PY
 }
 
+concretize_path() {
+  local path="$1"
+  local concrete
+  concrete="$path"
+  concrete="${concrete//\{file_id\}/file_dummy}"
+  concrete="${concrete//\{batch_id\}/batch_dummy}"
+  concrete="${concrete//\{video_id\}/video_dummy}"
+  concrete="${concrete//\{upload_id\}/upload_dummy}"
+  concrete="${concrete//\{vector_store_id\}/vs_dummy}"
+  concrete="${concrete//\{container_id\}/cntr_dummy}"
+  concrete="${concrete//\{conversation_id\}/conv_dummy}"
+  concrete="${concrete//\{response_id\}/resp_dummy}"
+  concrete="${concrete//\{model\}/gpt-5.1}"
+  concrete="${concrete//\{path\}/path_dummy}"
+  concrete="$(echo "$concrete" | sed -E 's/\{[^}]+\}/dummy/g')"
+  echo "$concrete"
+}
+
 heuristic_bucket() {
   local method="$1"
   local path="$2"
@@ -138,12 +129,6 @@ heuristic_bucket() {
   # Legacy duplicates (prefer /v1/* in Actions)
   if [[ "$path" == "/health" || "$path" == "/actions/ping" || "$path" == "/actions/relay_info" ]]; then
     echo "EXCLUDE_LEGACY"
-    return
-  fi
-
-  # Actions wrappers (explicit)
-  if [[ "$path" == /v1/actions/uploads* || "$path" == "/v1/actions/videos" ]]; then
-    echo "ACTIONS_DIRECT"
     return
   fi
 
@@ -281,20 +266,17 @@ main() {
 
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
-
-    # Parse: "METHOD /path"
     local method path
     method="${line%% *}"
     path="${line#* }"
 
-    local bucket detail pd path_for_proxy
+    local bucket detail pd concrete_path
     if grep -Fxq "$line" "$TMPDIR_CLEANUP/actions_ops.txt" && [[ "$path" == /v1/* ]]; then
       bucket="ACTIONS_DIRECT"
       detail="in_openapi.actions.json"
     else
-      # Instantiate template params before proxy allowlist evaluation (keeps report aligned with runtime).
-      path_for_proxy="$(instantiate_openapi_path "$path")"
-      pd="$(proxy_decision "$method" "$path_for_proxy")"
+      concrete_path="$(concretize_path "$path")"
+      pd="$(proxy_decision "$method" "$concrete_path")"
       if [[ "$pd" == "ALLOW" ]]; then
         bucket="PROXY_HARNESS"
         detail="allowlisted_by_proxy"
