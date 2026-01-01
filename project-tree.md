@@ -4,8 +4,11 @@
   📄 .gitignore
   📄 .gitleaks.toml
   📄 AGENTS.md
+  📄 CONTRIBUTING.md
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
+  📄 Governence.md
   📄 P4_Cross_Domain_Analogy_Hybrid_Developer_v2_3_3.json
+  📄 README.md
   📄 RELAY_CHECKLIST_v19.md
   📄 RELAY_PROGRESS_SUMMARY_v14.md
   📄 __init__.py
@@ -139,6 +142,8 @@
     📄 test_files_and_batches_integration.py
     📄 test_images_variations_integration.py
     📄 test_local_e2e.py
+    📄 test_realtime_ws_integration.py
+    📄 test_realtime_ws_local.py
     📄 test_relay_auth_guard.py
     📄 test_remaining_routes_smoke_integration.py
     📄 test_success_gates_integration.py

@@ -127,6 +127,7 @@ async def create_realtime_session(request: Request) -> JSONResponse:
         payload = {}
 
     payload.setdefault("model", DEFAULT_REALTIME_MODEL)
+    payload.setdefault("expires_at", int(time.time()) + 10)
     model = payload.get("model")
 
     if model not in ALLOWED_REALTIME_MODELS:
