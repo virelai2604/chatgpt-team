@@ -7,7 +7,7 @@ import json
 import os
 import time
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -171,7 +171,7 @@ async def _post_realtime_sessions(
     """
     _validate_realtime_upstream(request)
     url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
-    
+
     headers = _build_headers(request)
     timeout = httpx.Timeout(PROXY_TIMEOUT)
 
@@ -350,9 +350,12 @@ async def realtime_ws(websocket: WebSocket) -> None:
     Relay connects to:
       wss://api.openai.com/v1/realtime?model=...&session_id=...
     """
-    subprotocols = websocket.headers.get("sec-websocket-protocol")
-    if subprotocols and "openai-realtime-v1" in subprotocols:
+    raw_subprotocols = websocket.headers.get("sec-websocket-protocol", "")
+    client_subprotocols = [value.strip() for value in raw_subprotocols.split(",") if value.strip()]
+    if "openai-realtime-v1" in client_subprotocols:
         await websocket.accept(subprotocol="openai-realtime-v1")
+    elif "realtime" in client_subprotocols:
+        await websocket.accept(subprotocol="realtime")
     else:
         await websocket.accept()
 
@@ -371,34 +374,31 @@ async def realtime_ws(websocket: WebSocket) -> None:
         await websocket.close(code=1008, reason="Missing session_id")
         return
 
-    client_auth = websocket.headers.get("authorization") or websocket.headers.get("Authorization")
-    if not client_auth and not OPENAI_API_KEY:
-        await websocket.close(code=1008, reason="Missing Authorization header or OPENAI_API_KEY")
-        return
-        
     ws_base = _build_ws_base()
-    url = f"{ws_base}/v1/realtime?model={model}&session_id={session_id}"
+    query = urlencode({"model": model, "session_id": session_id})
+    url = f"{ws_base}/v1/realtime?{query}"
 
-    auth_header = client_auth or f"Bearer {OPENAI_API_KEY}"
+    client_auth = websocket.headers.get("authorization")
+    if client_auth:
+        upstream_auth = client_auth
+    elif OPENAI_API_KEY:
+        upstream_auth = f"Bearer {OPENAI_API_KEY}"
+    else:
+        await websocket.close(code=1008, reason="Missing realtime authorization")
+        return
+
     headers = {
-        "Authorization": auth_header,
+        "Authorization": upstream_auth,
         "OpenAI-Beta": OPENAI_REALTIME_BETA,
     }
+    upstream_subprotocols = list(dict.fromkeys(client_subprotocols + ["openai-realtime-v1", "realtime"]))
 
-    upstream_context = {
-        "openai_api_base": OPENAI_API_BASE,
-        "upstream_url": url,
-        "model": model,
-        "session_id": session_id,
-    }
-    
     try:
         async with ws_connect(
             url,
             extra_headers=headers,
-            subprotocols=["openai-realtime-v1"],
+            subprotocols=upstream_subprotocols,
         ) as upstream:
-
             async def client_to_upstream() -> None:
                 while True:
                     message = await websocket.receive_text()
@@ -411,15 +411,17 @@ async def realtime_ws(websocket: WebSocket) -> None:
             await asyncio.gather(client_to_upstream(), upstream_to_client())
     except WebSocketDisconnect:
         return
-    except ConnectionClosed as exc:
-        logger.warning(
-            "Realtime WS upstream closed: %s",
-            {"exception": repr(exc), **upstream_context},
-        )
+    except ConnectionClosed:
         await websocket.close(code=1011, reason="Upstream websocket closed")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error(
             "Realtime WS proxy error: %s",
-            {"exception": repr(exc), **upstream_context},
+            {
+                "exception": repr(exc),
+                "openai_api_base": OPENAI_API_BASE,
+                "upstream_url": url,
+                "model": model,
+                "session_id": session_id,
+            },
         )
         await websocket.close(code=1011, reason="Realtime websocket proxy error")

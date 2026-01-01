@@ -5,7 +5,7 @@ Base commit (merge-base): 46737c8de920dc877599c4194c301fa4a0659a0b
 Dirs: app tests static schemas src scripts/src
 Root files: project-tree.md pyproject.toml chatgpt_sync.sh AGENTS.md __init__.py generate_tree.py
 Mode: baseline
-Generated: 2026-01-01T19:14:59+07:00
+Generated: 2026-01-01T19:15:21+07:00
 
 ## TREE (repo root at 46737c8de920dc877599c4194c301fa4a0659a0b)
 ```
