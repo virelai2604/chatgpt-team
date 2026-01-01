@@ -171,6 +171,7 @@ async def _post_realtime_sessions(
     """
     _validate_realtime_upstream(request)
     url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
+    
     headers = _build_headers(request)
     timeout = httpx.Timeout(PROXY_TIMEOUT)
 
@@ -349,7 +350,11 @@ async def realtime_ws(websocket: WebSocket) -> None:
     Relay connects to:
       wss://api.openai.com/v1/realtime?model=...&session_id=...
     """
-    await websocket.accept(subprotocol="openai-realtime-v1")
+    subprotocols = websocket.headers.get("sec-websocket-protocol")
+    if subprotocols and "openai-realtime-v1" in subprotocols:
+        await websocket.accept(subprotocol="openai-realtime-v1")
+    else:
+        await websocket.accept()
 
     settings = get_settings()
     if not settings.RELAY_REALTIME_WS_ENABLED:
