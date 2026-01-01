@@ -6,8 +6,8 @@
   📄 AGENTS.md
   📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
   📄 P4_Cross_Domain_Analogy_Hybrid_Developer_v2_3_3.json
-  📄 RELAY_CHECKLIST_v16.md
-  📄 RELAY_PROGRESS_SUMMARY_v12.md
+  📄 RELAY_CHECKLIST_v19.md
+  📄 RELAY_PROGRESS_SUMMARY_v14.md
   📄 __init__.py
   📄 chatgpt_baseline.md
   📄 chatgpt_changes.md
