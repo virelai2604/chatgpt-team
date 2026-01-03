@@ -99,7 +99,13 @@ def configure_logging(level: Optional[str] = None) -> None:
         error_log_dir = os.path.dirname(error_log_path)
         if error_log_dir:
             os.makedirs(error_log_dir, exist_ok=True)
+        try:
+            with open(error_log_path, "a", encoding="utf-8"):
+                pass
+        except OSError:
+            error_log_path = ""
 
+    if error_log_path:
         error_handler = RotatingFileHandler(
             error_log_path,
             maxBytes=int(os.getenv("ERROR_LOG_MAX_BYTES", str(5 * 1024 * 1024))),
