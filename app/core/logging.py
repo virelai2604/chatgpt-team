@@ -25,6 +25,7 @@ from typing import Any
 
 # Importing from app.utils.logger will trigger root logger configuration on
 # first call. See app/utils/logger.py for environment-driven behaviour.
+from app.utils.logger import configure_logging as setup_logging
 from app.utils.logger import get_logger
 
 
@@ -32,15 +33,14 @@ def configure_logging(settings: Any) -> None:
     """
     Initialise relay logging based on environment variables.
 
-    This function calls into :func:`app.utils.logger.get_logger` which will
-    configure the root logger exactly once using the environment variables
-    ``LOG_LEVEL``, ``LOG_FORMAT``, and ``LOG_COLOR``. It accepts a
-    ``settings`` parameter for interface compatibility, but does not use it
-    directly.
+    This function calls into :func:`app.utils.logger.configure_logging` which
+    configures the root logger using the environment variables ``LOG_LEVEL``,
+    ``ERROR_LOG_PATH``, ``ERROR_LOG_MAX_BYTES``, and ``ERROR_LOG_BACKUP_COUNT``.
+    It accepts a ``settings`` parameter for interface compatibility, but does
+    not use it directly.
 
     Args:
         settings: settings object (unused but required for API compatibility).
     """
-    # Ensure that the root logger is configured. The get_logger call sets up
-    # formatting and levels on first invocation.
+    setup_logging()
     get_logger("relay")

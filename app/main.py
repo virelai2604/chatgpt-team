@@ -7,6 +7,7 @@ from app.api.sse import actions_router as sse_actions_router
 from app.api.sse import router as sse_router
 from app.api.tools_api import router as tools_router
 from app.core.config import get_settings
+from app.core.logging import configure_logging
 from app.middleware.relay_auth import RelayAuthMiddleware
 from app.routes.register_routes import register_routes
 from app.utils.logger import relay_log as logger
@@ -26,6 +27,7 @@ def _get_bool_setting(value: object, default: bool = False) -> bool:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_logging(settings)
 
     app = FastAPI(
         title="chatgpt-team-relay",
