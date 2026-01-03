@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 from typing import Any, Optional
+from logging.handlers import RotatingFileHandler
 
 _LOGGER_ROOT_NAME = "chatgpt_team_relay"
 
@@ -92,6 +93,27 @@ def configure_logging(level: Optional[str] = None) -> None:
     )
 
     root_logger.addHandler(handler)
+
+    error_log_path = os.getenv("ERROR_LOG_PATH", "data/logs/errors.log").strip()
+    if error_log_path:
+        error_log_dir = os.path.dirname(error_log_path)
+        if error_log_dir:
+            os.makedirs(error_log_dir, exist_ok=True)
+
+        error_handler = RotatingFileHandler(
+            error_log_path,
+            maxBytes=int(os.getenv("ERROR_LOG_MAX_BYTES", str(5 * 1024 * 1024))),
+            backupCount=int(os.getenv("ERROR_LOG_BACKUP_COUNT", "5")),
+        )
+        error_handler.setLevel(logging.ERROR)
+        error_handler.setFormatter(
+            logging.Formatter(
+                fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+        root_logger.addHandler(error_handler)
+
     setattr(root_logger, "_relay_configured", True)
 
 
