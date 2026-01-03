@@ -14,6 +14,7 @@ from app.api.forward_openai import (
     forward_openai_request,
 )
 from app.core.http_client import get_async_httpx_client
+from app.models.error import ErrorResponse
 from app.utils.logger import info
 
 router = APIRouter(prefix="/v1", tags=["videos"])
@@ -140,6 +141,20 @@ def _filter_response_headers(headers: httpx.Headers) -> dict:
     return out
 
 
+def _error_response(
+    message: str,
+    *,
+    status_code: int = 400,
+    param: Optional[str] = None,
+    code: Optional[str] = None,
+) -> Response:
+    return ErrorResponse.from_message(
+        message,
+        param=param,
+        code=code,
+    ).to_response(status_code=status_code)
+
+
 @actions_router.post(
     "",
     operation_id="actionsVideosCreateV1Actions",
@@ -167,22 +182,39 @@ async def actions_remix_video(video_id: str, request: Request) -> Response:
 )
 async def actions_generate_video(payload: ActionsVideoGenerationRequest, request: Request) -> Response:
     if payload.duration_seconds is not None and payload.duration_seconds > _MAX_DURATION_SECONDS:
-        raise HTTPException(status_code=400, detail=f"duration_seconds exceeds {_MAX_DURATION_SECONDS}")
+        return _error_response(
+            f"duration_seconds exceeds {_MAX_DURATION_SECONDS}",
+            param="duration_seconds",
+        )
     if payload.frames is not None and payload.frames > _MAX_FRAMES:
-        raise HTTPException(status_code=400, detail=f"frames exceeds {_MAX_FRAMES}")
+        return _error_response(
+            f"frames exceeds {_MAX_FRAMES}",
+            param="frames",
+        )
 
     raw: bytes | None = None
-    if payload.data_base64:
+    if payload.data_base64 is not None:
         try:
             raw = base64.b64decode(payload.data_base64, validate=True)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid data_base64: {exc}") from exc
+            return _error_response(
+                f"Invalid data_base64: {exc}",
+                param="data_base64",
+            )
 
     if raw is not None:
         if len(raw) == 0:
-            raise HTTPException(status_code=400, detail="Empty input video is not allowed")
+            return _error_response(
+                "Empty input video is not allowed",
+                param="data_base64",
+            )
         if len(raw) > _MAX_VIDEO_BYTES:
-            raise HTTPException(status_code=413, detail=f"Input video too large (>{_MAX_VIDEO_BYTES} bytes)")
+            return _error_response(
+                f"Input video too large (>{_MAX_VIDEO_BYTES} bytes)",
+                status_code=413,
+                param="data_base64",
+                code="input_too_large",
+            )
 
     upstream_path = "/v1/videos/generations"
     upstream_url = build_upstream_url(upstream_path, request=request)

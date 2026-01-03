@@ -77,6 +77,26 @@ def _build_ws_url(model: str, session_id: Optional[str]) -> str:
     return f"{base}/v1/realtime/ws?{urlencode(query_params)}"
 
 
+async def _recv_json(websocket) -> Dict[str, Any]:
+    raw = await websocket.recv()
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="replace")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        data = {"raw": raw}
+    if not isinstance(data, dict):
+        data = {"raw": data}
+    return data
+
+
+def _is_response_event(message: Dict[str, Any]) -> bool:
+    event_type = message.get("type")
+    if not isinstance(event_type, str):
+        return False
+    return event_type.startswith("response.") or event_type == "response"
+
+
 @pytest.mark.asyncio
 async def test_realtime_session_and_ws_connect_smoke() -> None:
     _skip_if_no_real_key()
@@ -103,5 +123,27 @@ async def test_realtime_session_and_ws_connect_smoke() -> None:
 
     async with ws_connect(ws_url, extra_headers=headers) as websocket:
         await websocket.send(json.dumps({"type": "session.update", "session": {}}))
-        first_msg = await asyncio.wait_for(websocket.recv(), timeout=10)
-        assert first_msg is not None
+        await websocket.send(
+            json.dumps(
+                {
+                    "type": "response.create",
+                    "response": {
+                        "modalities": ["text"],
+                        "instructions": "OK only",
+                    },
+                }
+            )
+        )
+
+        response_events: list[Dict[str, Any]] = []
+        deadline_s = 12
+        start = asyncio.get_running_loop().time()
+
+        while asyncio.get_running_loop().time() - start < deadline_s:
+            remaining = deadline_s - (asyncio.get_running_loop().time() - start)
+            message = await asyncio.wait_for(_recv_json(websocket), timeout=remaining)
+            if _is_response_event(message):
+                response_events.append(message)
+                break
+
+        assert response_events, "Expected at least one response.* event after response.create"
