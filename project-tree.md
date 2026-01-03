@@ -146,3 +146,4 @@
     📄 test_relay_auth_guard.py
     📄 test_remaining_routes_smoke_integration.py
     📄 test_success_gates_integration.py
+    📄 test_videos_actions_integration.py
