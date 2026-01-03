@@ -23,6 +23,9 @@ actions_router = APIRouter(prefix="/v1/actions/videos", tags=["videos_actions"])
 _MAX_VIDEO_BYTES = 25 * 1024 * 1024
 _MAX_DURATION_SECONDS = 30
 _MAX_FRAMES = 300
+_ALLOWED_VIDEO_MODELS = {"sora-2", "sora-2-pro"}
+_ALLOWED_VIDEO_SECONDS = {4, 8, 12}
+_ALLOWED_VIDEO_SIZES = {"720x1280", "1280x720", "1024x1792", "1792x1024"}
 
 
 # Canonical Videos API (per OpenAI API reference)
@@ -112,10 +115,15 @@ class ActionsVideoGenerationRequest(BaseModel):
 
     prompt: Optional[str] = Field(default=None, description="Text prompt for video generation")
     model: Optional[str] = Field(default=None, description="Model name")
-    size: Optional[str] = Field(default=None, description="Output size")
-    duration_seconds: Optional[int] = Field(default=None, description="Duration in seconds")
-    frames: Optional[int] = Field(default=None, description="Frame count")
+    size: Optional[str] = Field(default=None, description="Output size (e.g., 720x1280)")
+    seconds: Optional[int] = Field(default=None, description="Clip duration in seconds")
+    duration_seconds: Optional[int] = Field(default=None, description="Duration in seconds (legacy)")
+    frames: Optional[int] = Field(default=None, description="Frame count (legacy)")
     data_base64: Optional[str] = Field(default=None, description="Optional base64-encoded input video")
+    input_reference_base64: Optional[str] = Field(
+        default=None,
+        description="Optional base64-encoded input reference (alias for data_base64)",
+    )
     filename: Optional[str] = Field(default="input.mp4", description="Input filename")
     mime_type: Optional[str] = Field(default="video/mp4", description="Input MIME type")
 
@@ -181,6 +189,31 @@ async def actions_remix_video(video_id: str, request: Request) -> Response:
     summary="Actions wrapper for /v1/videos/generations (multipart)",
 )
 async def actions_generate_video(payload: ActionsVideoGenerationRequest, request: Request) -> Response:
+    if not payload.prompt:
+        return _error_response(
+            "prompt is required",
+            param="prompt",
+        )
+
+    if payload.model is not None and payload.model not in _ALLOWED_VIDEO_MODELS:
+        return _error_response(
+            f"model must be one of: {', '.join(sorted(_ALLOWED_VIDEO_MODELS))}",
+            param="model",
+        )
+
+    if payload.size is not None and payload.size not in _ALLOWED_VIDEO_SIZES:
+        return _error_response(
+            f"size must be one of: {', '.join(sorted(_ALLOWED_VIDEO_SIZES))}",
+            param="size",
+        )
+
+    seconds_value = payload.seconds if payload.seconds is not None else payload.duration_seconds
+    if seconds_value is not None and seconds_value not in _ALLOWED_VIDEO_SECONDS:
+        return _error_response(
+            f"seconds must be one of: {', '.join(str(s) for s in sorted(_ALLOWED_VIDEO_SECONDS))}",
+            param="seconds",
+        )
+
     if payload.duration_seconds is not None and payload.duration_seconds > _MAX_DURATION_SECONDS:
         return _error_response(
             f"duration_seconds exceeds {_MAX_DURATION_SECONDS}",
@@ -193,9 +226,10 @@ async def actions_generate_video(payload: ActionsVideoGenerationRequest, request
         )
 
     raw: bytes | None = None
-    if payload.data_base64 is not None:
+    base64_source = payload.data_base64 if payload.data_base64 is not None else payload.input_reference_base64
+    if base64_source is not None:
         try:
-            raw = base64.b64decode(payload.data_base64, validate=True)
+            raw = base64.b64decode(base64_source, validate=True)
         except Exception as exc:
             return _error_response(
                 f"Invalid data_base64: {exc}",
@@ -234,6 +268,8 @@ async def actions_generate_video(payload: ActionsVideoGenerationRequest, request
         data["size"] = payload.size
     if payload.duration_seconds is not None:
         data["duration_seconds"] = str(payload.duration_seconds)
+    if payload.seconds is not None:
+        data["seconds"] = str(payload.seconds)
     if payload.frames is not None:
         data["frames"] = str(payload.frames)
 

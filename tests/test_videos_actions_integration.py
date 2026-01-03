@@ -7,7 +7,14 @@ from typing import Any, Dict
 import httpx
 import pytest
 
-from app.routes.videos import _MAX_DURATION_SECONDS, _MAX_FRAMES, _MAX_VIDEO_BYTES
+from app.routes.videos import (
+    _ALLOWED_VIDEO_MODELS,
+    _ALLOWED_VIDEO_SECONDS,
+    _ALLOWED_VIDEO_SIZES,
+    _MAX_DURATION_SECONDS,
+    _MAX_FRAMES,
+    _MAX_VIDEO_BYTES,
+)
 
 
 pytestmark = pytest.mark.integration
@@ -41,23 +48,36 @@ def _payload_over_max_bytes() -> str:
 @pytest.mark.asyncio
 async def test_actions_videos_generations_rejects_invalid_inputs(client: httpx.AsyncClient) -> None:
     url = "/v1/actions/videos/generations"
+    base_payload = {"prompt": "A test prompt"}
 
-    invalid_base64 = {"data_base64": "not-base64!!"}
+    invalid_base64 = {**base_payload, "data_base64": "not-base64!!"}
     r = await client.post(url, json=invalid_base64)
     _assert_4xx_openai_error(r)
 
-    empty_bytes = {"data_base64": ""}
+    empty_bytes = {**base_payload, "data_base64": ""}
     r = await client.post(url, json=empty_bytes)
     _assert_4xx_openai_error(r)
 
-    oversized = {"data_base64": _payload_over_max_bytes()}
+    oversized = {**base_payload, "data_base64": _payload_over_max_bytes()}
     r = await client.post(url, json=oversized)
     _assert_4xx_openai_error(r)
 
-    too_many_frames = {"frames": _MAX_FRAMES + 1}
+    too_many_frames = {**base_payload, "frames": _MAX_FRAMES + 1}
     r = await client.post(url, json=too_many_frames)
     _assert_4xx_openai_error(r)
 
-    too_long_duration = {"duration_seconds": _MAX_DURATION_SECONDS + 1}
+    too_long_duration = {**base_payload, "duration_seconds": _MAX_DURATION_SECONDS + 1}
     r = await client.post(url, json=too_long_duration)
+    _assert_4xx_openai_error(r)
+
+    invalid_model = {**base_payload, "model": "invalid-model"}
+    r = await client.post(url, json=invalid_model)
+    _assert_4xx_openai_error(r)
+
+    invalid_seconds = {**base_payload, "seconds": max(_ALLOWED_VIDEO_SECONDS) + 1}
+    r = await client.post(url, json=invalid_seconds)
+    _assert_4xx_openai_error(r)
+
+    invalid_size = {**base_payload, "size": "999x999"}
+    r = await client.post(url, json=invalid_size)
     _assert_4xx_openai_error(r)
