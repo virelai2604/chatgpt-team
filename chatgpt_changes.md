@@ -1,21 +1,218 @@
 # ChatGPT Sync
 Repo: chatgpt-team
 Base: origin/main
-Base commit (merge-base): e8d24ae18503dd47f8f7a6338b1da78f3bf2ceec
+Base commit (merge-base): 3896cd6f44a7da6c58071c889574a3d5723c4363
 Dirs: app tests static schemas src scripts/src
 Root files: project-tree.md pyproject.toml chatgpt_sync.sh AGENTS.md __init__.py generate_tree.py
 Mode: changes
-Generated: 2026-01-04T13:36:15+07:00
+Generated: 2026-01-04T18:27:46+07:00
 
-## CHANGE SUMMARY (since e8d24ae18503dd47f8f7a6338b1da78f3bf2ceec, includes worktree)
+## CHANGE SUMMARY (since 3896cd6f44a7da6c58071c889574a3d5723c4363, includes worktree)
 
-> No changes detected in scope.
+```
+M	project-tree.md
+```
 
-## PATCH (since e8d24ae18503dd47f8f7a6338b1da78f3bf2ceec, includes worktree)
+## PATCH (since 3896cd6f44a7da6c58071c889574a3d5723c4363, includes worktree)
 
-> (empty)
+```diff
+diff --git a/project-tree.md b/project-tree.md
+index 2537a3c..0b49e59 100755
+--- a/project-tree.md
++++ b/project-tree.md
+@@ -67,6 +67,8 @@
+       📄 uploads.py
+       📄 vector_stores.py
+       📄 videos.py
++      📁 data
++        📁 logs
+     📁 utils
+       📄 __init__.py
+       📄 authy.py
+@@ -89,6 +91,8 @@
+       📄 images.db
+     📁 jobs
+       📄 jobs.db
++    📁 logs
++      📄 errors
+     📁 models
+       📄 models.db
+       📄 openai_models_categorized.csv
+@@ -113,6 +117,7 @@
+   📁 scripts
+     📄 README.md
+     📄 batch_download_test.sh
++    📄 chain_wait_routes_test.sh
+     📄 content_endpoints_smoke.sh
+     📄 coverage_report.sh
+     📄 eval_p4_specs.py
+@@ -145,5 +150,6 @@
+     📄 test_realtime_ws_local.py
+     📄 test_relay_auth_guard.py
+     📄 test_remaining_routes_smoke_integration.py
++    📄 test_sse_stream_open.py
+     📄 test_success_gates_integration.py
+     📄 test_videos_actions_integration.py
+\ No newline at end of file
+```
 
 ## CURRENT CONTENT OF CHANGED FILES (WORKTREE)
 
-> No non-deleted changed files to embed.
+## FILE: project-tree.md @ WORKTREE
+```
+  📄 .env.env
+  📄 .env.example.env
+  📄 .gitattributes
+  📄 .gitignore
+  📄 .gitleaks.toml
+  📄 AGENTS.md
+  📄 CONTRIBUTING.md
+  📄 ChatGPT-API_reference_ground_truth-2025-10-29.pdf
+  📄 Governence.md
+  📄 P4_Cross_Domain_Analogy_Hybrid_Developer_v2_3_3.json
+  📄 README.md
+  📄 RELAY_CHECKLIST_v19.md
+  📄 RELAY_PROGRESS_SUMMARY_v14.md
+  📄 __init__.py
+  📄 chatgpt_baseline.md
+  📄 chatgpt_changes.md
+  📄 chatgpt_sync.sh
+  📄 generate_tree.py
+  📄 openai_models_2025-11.csv
+  📄 project-tree.md
+  📄 pytest.ini
+  📄 render.yaml
+  📄 requirements.txt
+  📁 .codex
+  📁 app
+    📄 __init__.py
+    📄 http_client.py
+    📄 main.py
+    📁 api
+      📄 __init__.py
+      📄 forward_openai.py
+      📄 routes.py
+      📄 sse.py
+      📄 tools_api.py
+    📁 core
+      📄 __init__.py
+      📄 config.py
+      📄 http_client.py
+      📄 logging.py
+      📄 settings.py
+    📁 manifests
+      📄 __init__.py
+      📄 tools_manifest.json
+    📁 middleware
+      📄 __init__.py
+      📄 p4_orchestrator.py
+      📄 relay_auth.py
+      📄 validation.py
+    📁 models
+      📄 __init__.py
+      📄 error.py
+    📁 routes
+      📄 __init__.py
+      📄 actions.py
+      📄 batches.py
+      📄 containers.py
+      📄 conversations.py
+      📄 embeddings.py
+      📄 files.py
+      📄 health.py
+      📄 images.py
+      📄 models.py
+      📄 proxy.py
+      📄 realtime.py
+      📄 register_routes.py
+      📄 responses.py
+      📄 uploads.py
+      📄 vector_stores.py
+      📄 videos.py
+      📁 data
+        📁 logs
+    📁 utils
+      📄 __init__.py
+      📄 authy.py
+      📄 error_handler.py
+      📄 http_client.py
+      📄 logger.py
+  📁 chatgpt_team_relay.egg-info
+    📄 PKG-INFO
+    📄 SOURCES.txt
+    📄 dependency_links.txt
+    📄 requires.txt
+    📄 top_level.txt
+  📁 data
+    📁 conversations
+    📁 embeddings
+      📄 embeddings.db
+    📁 files
+      📄 files.db
+    📁 images
+      📄 images.db
+    📁 jobs
+      📄 jobs.db
+    📁 logs
+      📄 errors
+    📁 models
+      📄 models.db
+      📄 openai_models_categorized.csv
+      📄 openai_models_categorized.json
+    📁 uploads
+      📄 attachments.db
+      📄 file_9aa498e1dbb0
+    📁 usage
+      📄 usage.db
+    📁 vector_stores
+      📄 vectors.db
+    📁 videos
+      📄 videos.db
+  📁 docs
+    📄 README.md
+  📁 path
+    📁 to
+      📄 input.png
+  📁 schemas
+    📄 __init__.py
+    📄 openapi.yaml
+  📁 scripts
+    📄 README.md
+    📄 batch_download_test.sh
+    📄 chain_wait_routes_test.sh
+    📄 content_endpoints_smoke.sh
+    📄 coverage_report.sh
+    📄 eval_p4_specs.py
+    📄 images_variations_smoke.sh
+    📄 make_sample_png.py
+    📄 make_test_png.py
+    📄 openapi_operationid_check.sh
+    📄 run_success_gates.sh
+    📄 smoke_images_variations.sh
+    📄 sse_smoke_test.sh
+    📄 test_31_endpoints.sh
+    📄 test_local.sh
+    📄 test_render.sh
+    📄 test_success_gates_integration.py
+    📄 uploads_e2e_test.sh
+  📁 static
+    📁 .well-known
+      📄 __init__.py
+      📄 ai-plugin.json
+  📁 tests
+    📄 __init__.py
+    📄 client.py
+    📄 conftest.py
+    📄 relay_client_example.py
+    📄 test_extended_routes_smoke_integration.py
+    📄 test_files_and_batches_integration.py
+    📄 test_images_variations_integration.py
+    📄 test_local_e2e.py
+    📄 test_realtime_ws_integration.py
+    📄 test_realtime_ws_local.py
+    📄 test_relay_auth_guard.py
+    📄 test_remaining_routes_smoke_integration.py
+    📄 test_sse_stream_open.py
+    📄 test_success_gates_integration.py
+    📄 test_videos_actions_integration.py```
 

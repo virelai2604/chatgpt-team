@@ -67,6 +67,8 @@
       📄 uploads.py
       📄 vector_stores.py
       📄 videos.py
+      📁 data
+        📁 logs
     📁 utils
       📄 __init__.py
       📄 authy.py
@@ -89,6 +91,8 @@
       📄 images.db
     📁 jobs
       📄 jobs.db
+    📁 logs
+      📄 errors
     📁 models
       📄 models.db
       📄 openai_models_categorized.csv
@@ -113,6 +117,7 @@
   📁 scripts
     📄 README.md
     📄 batch_download_test.sh
+    📄 chain_wait_routes_test.sh
     📄 content_endpoints_smoke.sh
     📄 coverage_report.sh
     📄 eval_p4_specs.py
@@ -145,5 +150,6 @@
     📄 test_realtime_ws_local.py
     📄 test_relay_auth_guard.py
     📄 test_remaining_routes_smoke_integration.py
+    📄 test_sse_stream_open.py
     📄 test_success_gates_integration.py
     📄 test_videos_actions_integration.py
