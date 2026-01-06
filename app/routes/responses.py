@@ -26,23 +26,34 @@ def _header_truthy(value: Optional[str]) -> bool:
 
 def _load_tools_manifest() -> List[Dict[str, Any]]:
     """
-    Loads a list of tool definitions (dicts) from tools_manifest.json.
+    Load tool definitions from tools_manifest.json in a production-safe way.
 
-    Priority:
-    1) Package-relative path: app/manifests/tools_manifest.json (common in this repo)
-    2) CWD-relative path: tools_manifest.json (dev convenience)
-    3) CWD-relative path: app/manifests/tools_manifest.json (dev convenience)
+    Priority order:
+      1) importlib.resources (works when packaged/deployed)
+      2) repo filesystem fallbacks for dev
     """
-    candidates: List[Path] = []
+    # 1) Prefer importlib.resources to avoid "file missing" in Render packaging
+    try:
+        import importlib.resources as ir  # py3.9+
 
-    # 1) Repo-style: app/manifests/tools_manifest.json next to code
-    here = Path(__file__).resolve()
-    # app/api/responses.py -> app/api -> app -> (siblings) manifests
-    candidates.append(here.parents[1] / "manifests" / "tools_manifest.json")
+        # Expected location: app/manifests/tools_manifest.json
+        pkg = "app.manifests"
+        name = "tools_manifest.json"
+        raw = ir.files(pkg).joinpath(name).read_text(encoding="utf-8")
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return [x for x in data if isinstance(x, dict)]
+        if isinstance(data, dict) and isinstance(data.get("tools"), list):
+            return [x for x in data["tools"] if isinstance(x, dict)]
+    except Exception:
+        pass
 
-    # 2) CWD fallback
-    candidates.append(Path(os.getcwd()) / "tools_manifest.json")
-    candidates.append(Path(os.getcwd()) / "app" / "manifests" / "tools_manifest.json")
+    # 2) Filesystem fallbacks (dev convenience)
+    candidates: List[Path] = [
+        Path(os.getcwd()) / "tools_manifest.json",
+        Path(os.getcwd()) / "app" / "manifests" / "tools_manifest.json",
+        Path(__file__).resolve().parents[1] / "manifests" / "tools_manifest.json",  # app/routes -> app
+    ]
 
     for p in candidates:
         try:
@@ -50,13 +61,9 @@ def _load_tools_manifest() -> List[Dict[str, Any]]:
                 raw = p.read_text(encoding="utf-8")
                 data = json.loads(raw)
                 if isinstance(data, list):
-                    # list of tool dicts
                     return [x for x in data if isinstance(x, dict)]
-                if isinstance(data, dict):
-                    # tolerate {"tools":[...]} or similar
-                    maybe = data.get("tools")
-                    if isinstance(maybe, list):
-                        return [x for x in maybe if isinstance(x, dict)]
+                if isinstance(data, dict) and isinstance(data.get("tools"), list):
+                    return [x for x in data["tools"] if isinstance(x, dict)]
         except Exception:
             continue
 
@@ -76,15 +83,12 @@ def _should_inject_tools(request: Request) -> bool:
 
 def _inject_tools_if_missing(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
     """
-    Inject tool definitions into a /v1/responses request only if:
-    - injection is enabled, and
-    - caller did NOT provide a "tools" field (or tools is None)
+    Inject tool definitions only when caller didn't provide tools.
     """
     if not _should_inject_tools(request):
         return payload
     if "tools" in payload and payload["tools"] is not None:
         return payload
-
     out = dict(payload)
     out["tools"] = TOOLS_MANIFEST
     return out
@@ -94,9 +98,8 @@ def _inject_tools_if_missing(payload: Dict[str, Any], request: Request) -> Dict[
 async def create_response(request: Request):
     """
     POST /v1/responses
-    - Parses JSON body if present.
-    - Injects tools_manifest.json definitions if caller did not provide tools.
-    - For non-JSON bodies, falls back to passthrough.
+    - Injects tools from tools_manifest.json if caller omitted tools.
+    - For non-JSON bodies, passthrough unchanged.
     """
     raw = await request.body()
     if not raw:
@@ -124,8 +127,7 @@ async def create_response(request: Request):
 async def retrieve_response(response_id: str, request: Request):
     """
     GET /v1/responses/{response_id}
-    Pure passthrough to upstream.
-    This endpoint must exist to prevent relay-level 404.
+    Must exist in the relay to avoid relay-level 404.
     """
     return await forward_openai_request(request)
 
@@ -134,7 +136,6 @@ async def retrieve_response(response_id: str, request: Request):
 async def cancel_response(response_id: str, request: Request):
     """
     POST /v1/responses/{response_id}/cancel
-    Pure passthrough to upstream.
     """
     return await forward_openai_request(request)
 
@@ -143,7 +144,6 @@ async def cancel_response(response_id: str, request: Request):
 async def list_response_input_items(response_id: str, request: Request):
     """
     GET /v1/responses/{response_id}/input_items
-    Pure passthrough to upstream.
     """
     return await forward_openai_request(request)
 
@@ -151,12 +151,7 @@ async def list_response_input_items(response_id: str, request: Request):
 class ResponsesCompactRequest(BaseModel):
     """
     Action-friendly /responses wrapper.
-
-    - Accepts simplified schema used by Actions.
-    - Forwards to /v1/responses.
-    - Injects tools manifest if caller didn't provide tools.
     """
-
     model: Optional[str] = Field(default=None)
     input: Any = Field(...)
     instructions: Optional[str] = Field(default=None)
@@ -164,7 +159,7 @@ class ResponsesCompactRequest(BaseModel):
     temperature: Optional[float] = Field(default=None)
     top_p: Optional[float] = Field(default=None)
 
-    # Pass-through support (optional)
+    # Allow pass-through if Actions explicitly provide these
     tools: Optional[Any] = Field(default=None)
     tool_choice: Optional[Any] = Field(default=None)
 
@@ -185,7 +180,6 @@ async def responses_compact(payload: ResponsesCompactRequest, request: Request):
         req["temperature"] = payload.temperature
     if payload.top_p is not None:
         req["top_p"] = payload.top_p
-
     if payload.tools is not None:
         req["tools"] = payload.tools
     if payload.tool_choice is not None:
@@ -200,6 +194,7 @@ async def responses_compact(payload: ResponsesCompactRequest, request: Request):
         inbound_headers=request.headers,
         request=request,
     )
+
     if upstream_response.status_code != 200:
         return upstream_response
 
