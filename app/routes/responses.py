@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +15,9 @@ router = APIRouter(prefix="/v1", tags=["responses"])
 
 _DISABLE_TOOLS_HEADER = "x-relay-disable-tools"
 
+# Cached at module load (safe + fast). If you want hot reload, move inside handler.
+_SETTINGS = get_settings()
+
 
 def _header_truthy(value: Optional[str]) -> bool:
     if value is None:
@@ -24,50 +26,76 @@ def _header_truthy(value: Optional[str]) -> bool:
     return v in {"1", "true", "yes", "on"}
 
 
+def _project_root() -> Path:
+    """
+    Best-effort project root.
+    If this file is app/api/responses.py, then:
+      parents[0] = app/api
+      parents[1] = app
+      parents[2] = <repo root>
+    """
+    here = Path(__file__).resolve()
+    # Defensive: if structure changes, fall back to two levels up.
+    return here.parents[2] if len(here.parents) >= 3 else here.parents[1]
+
+
+def _resolve_tools_manifest_path() -> Optional[Path]:
+    """
+    Resolve settings.TOOLS_MANIFEST into an actual file path.
+
+    Handles:
+      - absolute paths
+      - repo-relative paths like "app/manifests/tools_manifest.json"
+      - relative paths like "tools_manifest.json"
+    """
+    raw = getattr(_SETTINGS, "TOOLS_MANIFEST", "") or ""
+    raw = str(raw).strip()
+    if not raw:
+        return None
+
+    p = Path(raw)
+    if p.is_absolute():
+        return p
+
+    root = _project_root()
+    # If it starts with "app/", interpret from repo root
+    if raw.startswith("app/") or raw.startswith("app\\"):
+        return root / raw
+
+    # Otherwise treat as root-relative
+    return root / raw
+
+
 def _load_tools_manifest() -> List[Dict[str, Any]]:
     """
-    Load tool definitions from tools_manifest.json in a production-safe way.
+    Load tool definitions from the configured manifest.
 
-    Priority order:
-      1) importlib.resources (works when packaged/deployed)
-      2) repo filesystem fallbacks for dev
+    Accepts either:
+      - a JSON list:      [ {tool1}, {tool2}, ... ]
+      - a JSON object:    { "tools": [ ... ] }
+    Returns [] on any failure (non-fatal).
     """
-    # 1) Prefer importlib.resources to avoid "file missing" in Render packaging
-    try:
-        import importlib.resources as ir  # py3.9+
+    path = _resolve_tools_manifest_path()
+    if not path:
+        return []
 
-        # Expected location: app/manifests/tools_manifest.json
-        pkg = "app.manifests"
-        name = "tools_manifest.json"
-        raw = ir.files(pkg).joinpath(name).read_text(encoding="utf-8")
+    try:
+        if not path.is_file():
+            return []
+        raw = path.read_text(encoding="utf-8")
         data = json.loads(raw)
+
         if isinstance(data, list):
             return [x for x in data if isinstance(x, dict)]
-        if isinstance(data, dict) and isinstance(data.get("tools"), list):
-            return [x for x in data["tools"] if isinstance(x, dict)]
+
+        if isinstance(data, dict):
+            maybe = data.get("tools")
+            if isinstance(maybe, list):
+                return [x for x in maybe if isinstance(x, dict)]
+
+        return []
     except Exception:
-        pass
-
-    # 2) Filesystem fallbacks (dev convenience)
-    candidates: List[Path] = [
-        Path(os.getcwd()) / "tools_manifest.json",
-        Path(os.getcwd()) / "app" / "manifests" / "tools_manifest.json",
-        Path(__file__).resolve().parents[1] / "manifests" / "tools_manifest.json",  # app/routes -> app
-    ]
-
-    for p in candidates:
-        try:
-            if p.is_file():
-                raw = p.read_text(encoding="utf-8")
-                data = json.loads(raw)
-                if isinstance(data, list):
-                    return [x for x in data if isinstance(x, dict)]
-                if isinstance(data, dict) and isinstance(data.get("tools"), list):
-                    return [x for x in data["tools"] if isinstance(x, dict)]
-        except Exception:
-            continue
-
-    return []
+        return []
 
 
 TOOLS_MANIFEST: List[Dict[str, Any]] = _load_tools_manifest()
@@ -82,13 +110,12 @@ def _should_inject_tools(request: Request) -> bool:
 
 
 def _inject_tools_if_missing(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
-    """
-    Inject tool definitions only when caller didn't provide tools.
-    """
+    # Only inject when caller omitted tools (or set to null)
     if not _should_inject_tools(request):
         return payload
     if "tools" in payload and payload["tools"] is not None:
         return payload
+
     out = dict(payload)
     out["tools"] = TOOLS_MANIFEST
     return out
@@ -98,8 +125,11 @@ def _inject_tools_if_missing(payload: Dict[str, Any], request: Request) -> Dict[
 async def create_response(request: Request):
     """
     POST /v1/responses
-    - Injects tools from tools_manifest.json if caller omitted tools.
-    - For non-JSON bodies, passthrough unchanged.
+
+    Behavior:
+      - If request JSON is an object and tools are missing, inject configured tools manifest
+        unless X-Relay-Disable-Tools is truthy.
+      - Otherwise pass through unchanged.
     """
     raw = await request.body()
     if not raw:
@@ -127,7 +157,7 @@ async def create_response(request: Request):
 async def retrieve_response(response_id: str, request: Request):
     """
     GET /v1/responses/{response_id}
-    Must exist in the relay to avoid relay-level 404.
+    Pure passthrough. Required so the relay never returns FastAPI 404 for this route.
     """
     return await forward_openai_request(request)
 
@@ -136,14 +166,16 @@ async def retrieve_response(response_id: str, request: Request):
 async def cancel_response(response_id: str, request: Request):
     """
     POST /v1/responses/{response_id}/cancel
+    Pure passthrough.
     """
     return await forward_openai_request(request)
 
 
 @router.get("/responses/{response_id}/input_items")
-async def list_response_input_items(response_id: str, request: Request):
+async def response_input_items(response_id: str, request: Request):
     """
     GET /v1/responses/{response_id}/input_items
+    Pure passthrough.
     """
     return await forward_openai_request(request)
 
@@ -151,7 +183,11 @@ async def list_response_input_items(response_id: str, request: Request):
 class ResponsesCompactRequest(BaseModel):
     """
     Action-friendly /responses wrapper.
+
+    - Accepts a simplified schema commonly used by ChatGPT custom actions.
+    - Produces a standard Responses API call to /v1/responses.
     """
+
     model: Optional[str] = Field(default=None)
     input: Any = Field(...)
     instructions: Optional[str] = Field(default=None)
@@ -159,7 +195,7 @@ class ResponsesCompactRequest(BaseModel):
     temperature: Optional[float] = Field(default=None)
     top_p: Optional[float] = Field(default=None)
 
-    # Allow pass-through if Actions explicitly provide these
+    # Optional pass-through knobs if caller provides them
     tools: Optional[Any] = Field(default=None)
     tool_choice: Optional[Any] = Field(default=None)
 
@@ -194,7 +230,6 @@ async def responses_compact(payload: ResponsesCompactRequest, request: Request):
         inbound_headers=request.headers,
         request=request,
     )
-
     if upstream_response.status_code != 200:
         return upstream_response
 
