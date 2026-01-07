@@ -506,24 +506,35 @@ run_step_json "List conversations" "GET" "${BASE_URL}/v1/conversations?limit=1" 
 # 9) Responses create + poll retrieve (if enabled)
 if [[ "${ENABLE_RESPONSES}" == "true" ]]; then
   run_step_json "Responses create" "POST" "${BASE_URL}/v1/responses" \
-    "{\"model\":\"${TEXT_MODEL}\",\"input\":\"say ok\"}"
+    '{"model":"'"${TEXT_MODEL}"'","input":"say ok"}'
   if is_2xx "${LAST_STATUS}"; then
     chain_from_responses_create
     if [[ -n "${RESPONSE_ID}" ]]; then
       poll_until_2xx "Response retrieve" "${BASE_URL}/v1/responses/${RESPONSE_ID}" || true
     fi
   fi
+  run_step_json "Responses create (tools)" "POST" "${BASE_URL}/v1/responses" \
+    '{"model":"'"${TEXT_MODEL}"'","input":"say ok","tool_choice":"none","tools":[{"type":"function","function":{"name":"noop","description":"No-op tool","parameters":{"type":"object","properties":{}}}}]}'
 else
   record_skip "Responses create"
 fi
 
 # 10) Realtime sessions (non-5xx expected)
 run_step_json "Realtime sessions" "POST" "${BASE_URL}/v1/realtime/sessions" \
-  "{\"model\":\"${REALTIME_MODEL}\"}" true
+  '{"model":"'"${REALTIME_MODEL}"'"}' true
 
-# 11) Actions upload flow (non-5xx expected)
+# 11) Actions videos (non-5xx expected)
+if [[ "${ENABLE_VIDEO}" == "true" ]]; then
+  run_step_json "Actions video generations" "POST" "${BASE_URL}/v1/actions/videos/generations" \
+    '{"prompt":"'"${VIDEO_PROMPT}"'","model":"__invalid_model__","size":"720x1280","seconds":4}' \
+    true
+else
+  record_skip "Actions video generations"
+fi
+
+# 12) Actions upload flow (non-5xx expected)
 run_step_json "Actions upload create" "POST" "${BASE_URL}/v1/actions/uploads" \
-  "{\"purpose\":\"${UPLOAD_PURPOSE}\",\"filename\":\"test.txt\",\"bytes\":5,\"mime_type\":\"text/plain\"}" \
+  '{"purpose":"'"${UPLOAD_PURPOSE}"'","filename":"test.txt","bytes":5,"mime_type":"text/plain"}' \
   true
 if is_non_5xx "${LAST_STATUS}"; then
   chain_from_upload_create
@@ -531,7 +542,7 @@ fi
 
 if [[ -n "${UPLOAD_ID}" ]]; then
   run_step_json "Actions upload parts" "POST" "${BASE_URL}/v1/actions/uploads/${UPLOAD_ID}/parts" \
-    "{\"filename\":\"test.txt\",\"mime_type\":\"text/plain\",\"data_base64\":\"SGVsbG8=\"}" \
+    '{"filename":"test.txt","mime_type":"text/plain","data_base64":"SGVsbG8="}' \
     true
   if is_non_5xx "${LAST_STATUS}"; then
     chain_from_upload_part
@@ -539,7 +550,12 @@ if [[ -n "${UPLOAD_ID}" ]]; then
 
   if [[ -n "${PART_ID}" ]]; then
     run_step_json "Actions upload complete" "POST" "${BASE_URL}/v1/actions/uploads/${UPLOAD_ID}/complete" \
-      "{\"part_ids\":[\"${PART_ID}\"]}" \
+      '{"part_ids":["'"${PART_ID}"'"]}' \
       true
   else
-    record_skip "Actions upload_
+    record_skip "Actions upload complete"
+  fi
+else
+  record_skip "Actions upload parts"
+  record_skip "Actions upload complete"
+fi

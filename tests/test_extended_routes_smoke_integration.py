@@ -42,7 +42,10 @@ _PNG_1X1_BYTES = base64.b64decode(_PNG_1X1_B64)
 
 
 def _auth_headers(extra: Dict[str, str] | None = None) -> Dict[str, str]:
-    headers = {"Authorization": f"Bearer {RELAY_TOKEN}"}
+    headers = {
+        "Authorization": f"Bearer {RELAY_TOKEN}",
+        "X-Relay-Key": RELAY_TOKEN,
+    }
     if extra:
         headers.update(extra)
     return headers
@@ -241,6 +244,36 @@ def test_conversations_list_no_5xx() -> None:
 
 
 @pytest.mark.integration
+def test_responses_create_with_tools_no_5xx() -> None:
+    """Responses create should accept tool definitions without relay 5xxs."""
+
+    _skip_if_no_real_key()
+
+    payload = {
+        "model": "__invalid_model__",
+        "input": "say ok",
+        "tool_choice": "none",
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "noop",
+                    "description": "No-op tool",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ],
+    }
+    r = requests.post(
+        f"{RELAY_BASE_URL}/v1/responses",
+        headers=_auth_headers({"Content-Type": "application/json"}),
+        json=payload,
+        timeout=DEFAULT_TIMEOUT_S,
+    )
+    assert r.status_code < 500, f"responses tools returned {r.status_code}: {r.text[:400]}"
+
+
+@pytest.mark.integration
 def test_realtime_sessions_create_no_5xx() -> None:
     """Realtime sessions should route; we only gate on non-5xx."""
 
@@ -254,3 +287,22 @@ def test_realtime_sessions_create_no_5xx() -> None:
         timeout=DEFAULT_TIMEOUT_S,
     )
     assert r.status_code < 500, f"realtime sessions returned {r.status_code}: {r.text[:400]}"
+
+
+@pytest.mark.integration
+def test_actions_videos_generations_invalid_model_no_5xx() -> None:
+    """Actions videos should validate and never 5xx for invalid payloads."""
+
+    payload = {
+        "prompt": "ping",
+        "model": "__invalid_model__",
+        "size": "720x1280",
+        "seconds": 4,
+    }
+    r = requests.post(
+        f"{RELAY_BASE_URL}/v1/actions/videos/generations",
+        headers=_auth_headers({"Content-Type": "application/json"}),
+        json=payload,
+        timeout=DEFAULT_TIMEOUT_S,
+    )
+    assert r.status_code < 500, f"actions videos returned {r.status_code}: {r.text[:400]}"

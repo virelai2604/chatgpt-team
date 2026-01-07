@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
+from fastapi.responses import JSONResponse
 
 from app.api.forward_openai import forward_openai_request
 from app.utils.logger import relay_log as logger
@@ -16,7 +17,17 @@ async def _forward(request: Request) -> Response:
 # ---- /v1/conversations ----
 @router.get("/conversations")
 async def conversations_root_get(request: Request) -> Response:
-    return await _forward(request)
+    response = await _forward(request)
+    if response.status_code == 405:
+        return JSONResponse(
+            content={
+                "object": "list",
+                "data": [],
+                "warning": "Upstream does not support conversations list.",
+            },
+            status_code=200,
+        )
+    return response
 
 
 @router.post("/conversations")
