@@ -7,37 +7,42 @@ name = "chatgpt-team-relay"
 version = "0.1.0"
 description = "OpenAI-compatible relay server for ChatGPT Team (FastAPI + OpenAI Python SDK)."
 readme = "docs/README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 
 dependencies = [
-  "fastapi>=0.115,<1.0",
-  "uvicorn[standard]>=0.32,<1.0",
-  "httpx>=0.27,<1.0",
+  "fastapi>=0.138,<1.0",
+  "uvicorn[standard]>=0.49,<1.0",
+  "httpx>=0.28,<1.0",
 
-  "openai>=2.11.0,<3.0",
+  # Official OpenAI Python SDK. The relay forwards via httpx (transparent proxy),
+  # so the SDK is used only for the OpenAIError exception type in error handling.
+  # Track the current 2.x line; stay below 3.0 to avoid an unreviewed major bump.
+  "openai>=2.44,<3.0",
 
-  "python-dotenv>=1.0,<2.0",
-  "pydantic>=2.5,<3.0",
-  "pydantic-settings>=2.2,<3.0",
+  "python-dotenv>=1.2,<2.0",
+  "pydantic>=2.13,<3.0",
+  "pydantic-settings>=2.14,<3.0",
 
-  "python-multipart>=0.0.18,<0.1.0",
-  "sse-starlette>=2.1,<3.0",
+  "python-multipart>=0.0.20,<0.1.0",
+  # sse-starlette moved to a 3.x line; allow it (the relay uses Starlette's
+  # StreamingResponse for SSE, so this dep is conservative headroom).
+  "sse-starlette>=2.1,<5.0",
 
-  "orjson>=3.9,<4.0",
+  "orjson>=3.11,<4.0",
   "pyyaml>=6.0,<7.0",
   "loguru>=0.7,<1.0",
 
-  # Realtime WS proxy client
-  "websockets>=12,<14",
+  # Realtime WS proxy client. websockets 14+ uses the new asyncio client
+  # (additional_headers instead of extra_headers); realtime.py targets that API.
+  "websockets>=15,<17",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.3,<9.0",
-  "pytest-asyncio>=0.23,<1.0",
+  "pytest>=8.3,<10.0",
+  "pytest-asyncio>=0.23,<2.0",
   "pytest-env>=1.1,<2.0",
-  "pytest-dotenv>=0.5,<1.0",
-  "pytest-httpx>=0.30,<1.0",
+  "pytest-httpx>=0.35,<1.0",
   "pytest-mock>=3.14,<4.0",
   "requests>=2.32,<3.0",
   "requests-mock>=1.12,<2.0",

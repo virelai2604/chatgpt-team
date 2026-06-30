@@ -1,0 +1,8 @@
+# Client-side deps for the agents example. Kept separate from the relay's own
+# runtime requirements — agents are consumers of the relay, not part of it.
+openai-agents>=0.17,<0.18
+openai>=2.44,<3.0
+
+# Only needed for agent_server.py (exposing the agent over HTTP).
+fastapi>=0.138,<1.0
+uvicorn[standard]>=0.49,<1.0

@@ -41,7 +41,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: "pip"
           cache-dependency-path: |
             requirements.txt
@@ -69,7 +69,10 @@ jobs:
           RELAY_AUTH_ENABLED: "false"
         run: |
           set -euo pipefail
-          pytest -q
+          # Integration tests require a live relay (local uvicorn or Render);
+          # they are exercised separately by the smoke-prod job. The unit gate
+          # runs everything else in-process against the FastAPI app.
+          pytest -q -m "not integration"
 
   deploy-render:
     name: Deploy Render (Deploy Hook)

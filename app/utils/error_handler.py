@@ -7,7 +7,7 @@ from typing import Any, Optional, Type
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from openai._exceptions import OpenAIError
+from openai import OpenAIError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import ClientDisconnect
 
