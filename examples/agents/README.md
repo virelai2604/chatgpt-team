@@ -55,5 +55,12 @@ the math itself, then answers in one line.
   DB queries, calling other relay endpoints like images or files).
 - **Multiple agents:** the SDK supports handoffs between specialized agents and
   guardrails — see the official docs.
-- **Expose it:** wrap `Runner.run` in a small FastAPI route if you want the
-  agent reachable over HTTP too.
+- **Expose it over HTTP:** see `agent_server.py` — a small standalone FastAPI
+  app that serves `POST /agent/run`, so you can call the agent like an API:
+
+  ```bash
+  uvicorn agent_server:app --port 8001
+  curl -s localhost:8001/agent/run \
+    -H 'content-type: application/json' \
+    -d '{"prompt":"What is 23 * 19, and is it prime?"}'
+  ```
