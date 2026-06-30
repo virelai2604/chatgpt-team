@@ -396,7 +396,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
     try:
         async with ws_connect(
             url,
-            extra_headers=headers,
+            additional_headers=headers,
             subprotocols=upstream_subprotocols,
         ) as upstream:
             async def client_to_upstream() -> None:

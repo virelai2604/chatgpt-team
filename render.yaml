@@ -75,7 +75,7 @@ services:
 
       # Render uses this env var to select Python version (must be fully qualified here).
       - key: PYTHON_VERSION
-        value: "3.12.5"
+        value: "3.13.14"
 
       # -------- Streaming / orchestration --------
       - key: ENABLE_STREAM
