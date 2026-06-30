@@ -202,16 +202,29 @@ async def test_tools_manifest_has_responses_endpoints(async_client: httpx.AsyncC
     assert "/v1/responses/compact" in data["endpoints"]["responses_compact"]
 
 
+def _registered_paths() -> set[str]:
+    """
+    Return the set of registered paths from the generated OpenAPI schema.
+
+    We introspect ``app.openapi()["paths"]`` rather than iterating
+    ``app.routes`` because newer FastAPI versions (>=0.135) keep included
+    routers as nested router objects instead of flattening their routes onto
+    ``app.routes``. The OpenAPI schema is the source of truth for what
+    ChatGPT Actions actually sees, so it is the correct thing to assert on.
+    """
+    return set(fastapi_app.openapi().get("paths", {}))
+
+
 @pytest.mark.asyncio
 async def test_actions_images_routes_registered() -> None:
-    paths = {route.path for route in fastapi_app.routes if hasattr(route, "path")}
+    paths = _registered_paths()
     assert "/v1/actions/images/variations" in paths
     assert "/v1/actions/images/edits" in paths
 
 
 @pytest.mark.asyncio
 async def test_actions_uploads_videos_routes_registered() -> None:
-    paths = {route.path for route in fastapi_app.routes if hasattr(route, "path")}
+    paths = _registered_paths()
     assert "/v1/actions/uploads" in paths
     assert "/v1/actions/uploads/{upload_id}/parts" in paths
     assert "/v1/actions/uploads/{upload_id}/complete" in paths

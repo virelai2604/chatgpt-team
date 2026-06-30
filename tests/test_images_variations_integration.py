@@ -52,6 +52,7 @@ def _make_rgba_png_bytes(width: int, height: int, rgba=(0, 0, 0, 0)) -> bytes:
     )
 
 
+@pytest.mark.integration
 def test_openapi_has_images_variations_path() -> None:
     r = requests.get(f"{RELAY_BASE_URL}/openapi.json", timeout=DEFAULT_TIMEOUT_S)
     assert r.status_code == 200
