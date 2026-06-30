@@ -7,7 +7,7 @@ name = "chatgpt-team-relay"
 version = "0.1.0"
 description = "OpenAI-compatible relay server for ChatGPT Team (FastAPI + OpenAI Python SDK)."
 readme = "docs/README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 
 dependencies = [
   "fastapi>=0.138,<1.0",
