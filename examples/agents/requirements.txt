@@ -1,0 +1,4 @@
+# Client-side deps for the agents example. Kept separate from the relay's own
+# runtime requirements — agents are consumers of the relay, not part of it.
+openai-agents>=0.17,<0.18
+openai>=2.44,<3.0
