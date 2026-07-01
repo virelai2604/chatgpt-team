@@ -1,3 +1,4 @@
+#Requires -RunAsAdministrator
 # --- Unhide every processor power setting so powercfg /query returns all of them ---
 # (attributes are global per-setting; run once. Re-hide later with the same command but WITHOUT removing -ATTRIB_HIDE if you want the GUI clean again.)
 powercfg -attributes 54533251-82be-4824-96c1-47b60b740d00 06cadf0e-64ed-448a-8927-ce7bf90eb35d -ATTRIB_HIDE
