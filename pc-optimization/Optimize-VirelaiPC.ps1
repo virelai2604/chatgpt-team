@@ -639,7 +639,9 @@ if ($FixRAMMapElevation) {
         $verb = if ($existingTask) { "Re-register existing" } else { "CREATE missing" }
         if ($PSCmdlet.ShouldProcess($ramMapTask, "$verb task with RunLevel Highest + LogonType S4U (fully silent elevation)")) {
             $action = New-ScheduledTaskAction -Execute $RAMMapPath -Argument "-Et"
-            $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration ([TimeSpan]::MaxValue)
+            # 10-year duration = effectively indefinite; avoids the TimeSpan::MaxValue
+            # "task XML incorrectly formatted" bug seen on some Windows builds.
+            $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Days 3650)
             $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Highest
             $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 
@@ -657,31 +659,20 @@ if ($FixRAMMapElevation) {
 }
 
 # ---------------------------------------------------------------------------
-Write-Section "Scheduled maintenance (extends your existing PCMaint_* tasks)"
-# Mirrors the style of PCMaint_RestartExplorer / PCMaint_FlushDNS / PCMaint_RAMMap_EmptyStandby
-# already on this machine: small, frequent, low-risk tasks.
-$taskName = "PCMaint_LowDiskAlert"
-$existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if (-not $existing) {
-    if ($PSCmdlet.ShouldProcess($taskName, "Create scheduled task: alert when C: drops below 10% free")) {
-        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument (
-            '-NoProfile -WindowStyle Hidden -Command "' +
-            '$d = Get-PSDrive C; $pctFree = $d.Free / ($d.Free + $d.Used) * 100; ' +
-            'if ($pctFree -lt 10) { ' +
-            "New-BurntToastNotification -Text 'Low disk space', ('C: drive at {0:N1}% free' -f `$pctFree) -ErrorAction SilentlyContinue; " +
-            "if (-not (Get-Module -ListAvailable BurntToast)) { [System.Windows.Forms.MessageBox]::Show('C: drive low on space: ' + [math]::Round(`$pctFree,1) + '% free') } }" +
-            '"'
-        )
-        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 6) -RepetitionDuration ([TimeSpan]::MaxValue)
-        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Description "Warn when C: free space drops below 10%" -Force | Out-Null
-        Write-Host "Registered $taskName (checks every 6h)."
-    }
-} else {
-    Write-Host "$taskName already exists — left untouched."
-}
+Write-Section "Recurring maintenance -> use Setup-VirelaiAutomation.ps1"
+# This optimizer is on-demand only; it deliberately does NOT install background
+# scheduled tasks (that would be a surprising side effect of a default run).
+# Recurring maintenance — ensure-RX-plan at logon, hourly RAMMap empty-standby,
+# conditional Explorer restart, low-disk alert — lives in a dedicated installer so
+# it's opt-in and manageable in one place:
+#     .\Setup-VirelaiAutomation.ps1          # install (all silently elevated via S4U)
+#     .\Setup-VirelaiAutomation.ps1 -Remove  # uninstall every PCMaint_* task
+Write-Host "Run Setup-VirelaiAutomation.ps1 to install the recurring PCMaint_* tasks (RX-plan guard, RAMMap, Explorer health, low-disk alert)." -ForegroundColor DarkGray
 
 # ---------------------------------------------------------------------------
 Write-Section "Done"
 Write-Host "Re-run with -All for every pass, or pick individual switches:" -ForegroundColor Green
 Write-Host "-CleanDiskSpace / -AddDevExclusions / -RelocateDevCaches / -FixRAMMapElevation" -ForegroundColor Green
+Write-Host "-FindDuplicateFiles / -FindStaleFolders / -ReportDevCacheSizes (report-only)" -ForegroundColor Green
+Write-Host "-DisableSearchIndexing / -RestartExplorerIfBloated (opt-in, not in -All)" -ForegroundColor Green
 Write-Host "Add -WhatIf to any of them to preview without changing anything." -ForegroundColor Green
