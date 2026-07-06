@@ -83,6 +83,12 @@ _ALLOWLIST: Tuple[Tuple[Set[str], re.Pattern[str]], ...] = (
     ({"GET"}, re.compile(r"^/v1/responses/[A-Za-z0-9_-]+/input_items$")),
     ({"POST"}, re.compile(r"^/v1/responses/input_tokens$")),
 
+    # ---- Chat Completions (JSON, supports streaming) ----
+    ({"POST"}, re.compile(r"^/v1/chat/completions$")),
+
+    # ---- Moderations (JSON) ----
+    ({"POST"}, re.compile(r"^/v1/moderations$")),
+
     # ---- Embeddings (JSON) ----
     ({"POST"}, re.compile(r"^/v1/embeddings$")),
 

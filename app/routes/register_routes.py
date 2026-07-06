@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from . import (
     actions,
     batches,
+    chat,
     containers,
     conversations,
     embeddings,
@@ -57,6 +58,7 @@ def register_routes(app: _RouterLike) -> None:
 
     # Core OpenAI resource families
     app.include_router(responses.router)   # /v1/responses
+    app.include_router(chat.router)        # /v1/chat/completions (OpenAI SDK)
     app.include_router(embeddings.router)  # /v1/embeddings
     app.include_router(images.router)      # /v1/images
     app.include_router(videos.router)      # /v1/videos
