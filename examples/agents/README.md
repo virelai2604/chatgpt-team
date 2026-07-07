@@ -1,8 +1,21 @@
 # Agents example — build agents on top of your relay
 
-This is a minimal [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)
-agent that routes its model calls **through your relay** instead of straight to
-OpenAI.
+Two agents here:
+
+- **`relay_agent.py`** — minimal starter: two function tools, relay/direct routing.
+- **`agent_pro.py`** — upgraded: native RAG (`FileSearchTool` over an OpenAI
+  Vector Store), optional `WebSearchTool`, a custom function tool, and **streaming**
+  output. Turn features on with env vars:
+  ```bash
+  export BIFL_VECTOR_STORE_ID="vs_..."   # enables file_search (RAG grounding)
+  export ENABLE_WEB_SEARCH=1             # enables web_search
+  python agent_pro.py "What are the top complaints about our tire sealant?"
+  ```
+  Hosted tools (web/file search) are most reliable pointing straight at OpenAI
+  (`OPENAI_API_KEY`) rather than through the relay.
+
+Both route their model calls **through your relay** (if `RELAY_KEY` is set)
+instead of straight to OpenAI.
 
 ```
 your agent  ──►  relay (ai.lafiel.me)  ──►  OpenAI
