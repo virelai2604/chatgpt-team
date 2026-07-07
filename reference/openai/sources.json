@@ -1,0 +1,25 @@
+{
+  "catalog": "openai_reference_pull_priority",
+  "note": "Reference catalog only. Libraries pinned via pip; docs referenced by URL; specific files pulled to reference/openai/ when offline durability is needed.",
+  "docs_top10": [
+    {"rank": 1, "source": "Workspace Agents - Trigger runs", "purpose": "Canonical API trigger behavior for published Workspace Agents", "db_category": "workspace_agent_api_trigger", "url": "https://developers.openai.com/workspace-agents/trigger-runs"},
+    {"rank": 2, "source": "Workspace Agent API trigger Cookbook", "purpose": "Working API example for triggering agents from code", "db_category": "workspace_agent_cookbook", "url": "https://github.com/openai/openai-cookbook/blob/main/examples/chatgpt/workspace_agents/workspace-agents-api-trigger.ipynb"},
+    {"rank": 3, "source": "Workspace Agent access token / auth", "purpose": "Separate token from OPENAI_API_KEY; trigger-only scope", "db_category": "workspace_agent_auth", "url": "https://developers.openai.com/workspace-agents/authentication"},
+    {"rank": 4, "source": "Apps SDK - Build MCP server", "purpose": "Build the ai.lafiel.me MCP/API bridge and ChatGPT app tools", "db_category": "apps_sdk_mcp", "url": "https://developers.openai.com/apps-sdk/build/mcp-server"},
+    {"rank": 5, "source": "Apps SDK - MCP Apps in ChatGPT", "purpose": "Defines the ChatGPT app/MCP surface (UI, auth, state, deploy)", "db_category": "chatgpt_apps", "url": "https://developers.openai.com/apps-sdk/mcp-apps-in-chatgpt"},
+    {"rank": 6, "source": "OpenAI API - Skills (Tools)", "purpose": "Skill behavior and tool layer", "db_category": "skills", "url": "https://developers.openai.com/api/docs/guides/tools-skills"},
+    {"rank": 7, "source": "OpenAI - File Search", "purpose": "Hosted retrieval / Vector Store pattern for distilled knowledge", "db_category": "file_search_vector_store", "url": "https://developers.openai.com/api/docs/guides/tools-file-search"},
+    {"rank": 8, "source": "OpenAI Agents SDK", "purpose": "Agent workflow design, orchestration, results/state, evals", "db_category": "agents_sdk", "url": "https://developers.openai.com/api/docs/guides/agents"},
+    {"rank": 9, "source": "Codex / ChatGPT Sites", "purpose": "Public/demo/status pages only, never secret storage", "db_category": "codex_sites", "url": "https://developers.openai.com/codex"},
+    {"rank": 10, "source": "Codex Plugins / Build plugins", "purpose": "Current plugin examples (openai/skills deprecated)", "db_category": "codex_plugins_skills", "url": "https://github.com/openai/plugins"}
+  ],
+  "github_repos": [
+    {"rank": 1, "repo": "openai/openai-cookbook", "why": "Official examples and guides", "priority": "P0", "vendor": false, "use": "link; pull specific notebooks only"},
+    {"rank": 2, "repo": "openai/plugins", "why": "Current Codex plugin examples (.codex-plugin/plugin.json + skills)", "priority": "P0", "vendor": false, "use": "reference structure to package tools"},
+    {"rank": 3, "repo": "openai/skills", "why": "Deprecated; historical skill patterns; points to openai/plugins", "priority": "P1", "vendor": false, "use": "reference only"},
+    {"rank": 4, "repo": "openai/openai-node", "why": "JS/TS SDK for Render/Cloudflare/n8n", "priority": "P1", "vendor": false, "use": "npm install openai"},
+    {"rank": 5, "repo": "openai/openai-python", "why": "Python SDK for WSL scripts, embeddings, file search", "priority": "P1", "vendor": false, "use": "pip install openai (pinned 2.44)", "fetched": false},
+    {"rank": 6, "repo": "openai/openai-openapi", "why": "API schema source for endpoint modeling", "priority": "P2", "vendor": false, "use": "reference for the relay OpenAPI", "fetched": false},
+    {"rank": 7, "repo": "openai/evals", "why": "Evaluation patterns / regression gates", "priority": "P2", "vendor": false, "use": "add later for quality gates", "fetched": false}
+  ]
+}
