@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from . import (
     actions,
     batches,
+    bifl,
     chat,
     containers,
     conversations,
@@ -50,6 +51,9 @@ def register_routes(app: _RouterLike) -> None:
 
     # Relay diagnostics / metadata for Actions
     app.include_router(actions.router)
+
+    # BIFL retriever bridge (read-only first milestone: health, search, fetch)
+    app.include_router(bifl.router)
 
     # Actions wrappers (JSON-friendly routes used by ChatGPT Actions)
     app.include_router(images.actions_router)   # /v1/actions/images/*
