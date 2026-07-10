@@ -25,8 +25,10 @@ Rules:
   - If a file is not present in baseline scope and not mentioned in changes, ask for the exact path.
 
 Scope that matters long-term:
-- repo root: `project-tree.md`, `pyproject.toml` (and optionally root `__init__.py`)
+- repo root: `project-tree.md`, `pyproject.toml`, `OPENAI_REFERENCES.md`
 - directories: `app/`, `tests/`, `static/`, `schemas/`
+- runnable examples (NOT part of the relay app): `examples/agents/`, `examples/bifl/`, `examples/mone/`
+- OpenAI reference catalog: `reference/openai/` (`SOURCES.md`, `sources.json`, `openai-reference-manifest.jsonl`, snapshots)
 Ignore everything else unless explicitly requested.
 
 ---
@@ -34,15 +36,22 @@ Ignore everything else unless explicitly requested.
 ## Repo, Deployment & Environment
 
 - GitHub (source of truth): https://github.com/virelai2604/chatgpt-team
-- Primary deployment (Render): https://chatgpt-team-relay.onrender.com
-- Primary workspace (WSL): `/home/user/code/chatgpt-team`
-- Hosted relay endpoint (OpenAI-compatible): `https://chatgpt-team-relay.onrender.com/v1`
+- Primary deployment (Render, auto-deploy on push to `main`): https://chatgpt-team-relay.onrender.com
+- Public URL (custom domain, use this to call the relay): https://ai.lafiel.me
+- Hosted relay endpoint (OpenAI-compatible): `https://ai.lafiel.me/v1`
+- Local workspace path varies (Windows: `...\Agent\Openclaw\chatgpt-team`; WSL/cloud: `/home/user/chatgpt-team`) — the GitHub repo is the source of truth.
 
 Runtime:
-- Relay implements an OpenAI-compatible REST API.
-- Default FastAPI app entrypoint: `app/main.py`.
-- Primary routing and action logic lives in `app/routes/` and `app/api/`.
-- Data files (SQLite, JSONL, temp artifacts) are under `data/` by convention and are not part of the long-term “action relay” scope unless explicitly needed.
+- Python 3.12+ ; dependencies pinned in `pyproject.toml` (fastapi, uvicorn, httpx, openai 2.x, pydantic 2.x). OpenAI SDK is used only for the `OpenAIError` type; forwarding is transparent httpx pass-through.
+- Relay implements an OpenAI-compatible REST API. Default FastAPI entrypoint: `app/main.py`.
+- Primary routing/action logic lives in `app/routes/` and `app/api/`.
+- Data files (SQLite, JSONL, temp artifacts) under `data/` are not part of the long-term "action relay" scope unless explicitly needed.
+
+Current endpoint surface (as of 2026-07):
+- OpenAI SDK parity: `/v1/chat/completions`, `/v1/embeddings`, `/v1/responses`, `/v1/models`, `/v1/images/*`, `/v1/files`, `/v1/batches`, `/v1/vector_stores`.
+- BIFL retriever (read-only): `/v1/bifl/health`, `/v1/bifl/search`, `/v1/bifl/fetch` (search needs `BIFL_VECTOR_STORE_ID`).
+- Actions-safe OpenAPI subset served at `/openapi.actions.json` (for Custom GPT import).
+- Health at `/v1/health`. Auth is relay-key based (`RELAY_KEY`); the real `OPENAI_API_KEY` stays server-side.
 
 Assumptions:
 - This repository is a private glue layer between ChatGPT and OpenAI APIs on behalf of the owner.
@@ -63,9 +72,12 @@ When generating or checking anything related to OpenAI APIs, models, tools, SDKs
 - Python SDK: https://github.com/openai/openai-python
 - OpenAPI spec: https://github.com/openai/openai-openapi
 
-3) Local PDF snapshot (tertiary, dated reference):
-- `/home/user/code/chatgpt-team/ChatGPT-API_reference_ground_truth-2025-10-29.pdf`
-- `\\wsl.localhost\\Ubuntu\\home\\user\\code\\chatgpt-team\\ChatGPT-API_reference_ground_truth-2025-10-29.pdf`
+3) In-repo reference catalog (tertiary, provenance-stamped, preferred over the PDF):
+- `reference/openai/SOURCES.md` + `sources.json` — top-20 sources (docs + repos).
+- `reference/openai/openai-reference-manifest.jsonl` — accession ledger (`pull_status`: `fetched` vs `summary_only`).
+- Snapshots under `reference/openai/{workspace-agents,cookbook,apps-sdk,file-search,agents-sdk,tools-skills,github-openai}/`.
+- Older PDF (dated, lowest priority): `ChatGPT-API_reference_ground_truth-2025-10-29.pdf` at repo root.
+- Note: `summary_only` snapshots are NOT authoritative — `developers.openai.com` blocks automated fetch; verify against the live URL before relying on exact fields.
 
 Conflict rule:
 1) Website
