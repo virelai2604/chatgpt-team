@@ -19,17 +19,8 @@ verify: open each source_url in a browser and split into full snapshots when nee
   operations (triggering runs). Keep it **separate from `OPENAI_API_KEY`**.
 - Use a **service account** for agent-owned accounts; least privilege.
 
-## #5 — Apps SDK: MCP Apps in ChatGPT
-`https://developers.openai.com/apps-sdk/mcp-apps-in-chatgpt`
-- Defines the ChatGPT app / MCP surface: MCP server, UX principles, UI
-  guidelines, auth, state, deploy, test, submit.
-- UI components invoke tools via `tools/call`; `_meta.ui.visibility` = `["model","app"]` or `["app"]`.
-
-## #6 — OpenAI API: Skills (Tools)
-`https://developers.openai.com/api/docs/guides/tools-skills`
-- Skills = reusable procedures the model can use; live under the Tools section.
-- Current packaging is via **Codex plugins** (`openai/plugins`), since
-  `openai/skills` is deprecated.
+> #5 (MCP Apps in ChatGPT) and #6 (Skills/Tools) now have dedicated snapshots:
+> `apps-sdk/mcp-apps-in-chatgpt.md` and `tools-skills/openai-tools-skills.md`.
 
 ## #9 — Codex / ChatGPT Sites
 `https://developers.openai.com/codex`
