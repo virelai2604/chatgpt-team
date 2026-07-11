@@ -16,8 +16,9 @@ services:
     plan: starter
 
     # BIFL: Use the current Blueprint field (replaces deprecated autoDeploy).
-    # off = do not redeploy on commits automatically.
-    autoDeployTrigger: off
+    # commit = redeploy on every push to the tracked branch (matches the live
+    # dashboard setting "Auto-Deploy: On Commit").
+    autoDeployTrigger: commit
 
     buildCommand: |
       pip install --upgrade pip
@@ -58,7 +59,7 @@ services:
 
       # -------- Default models --------
       - key: DEFAULT_MODEL
-        value: gpt-5.1
+        value: gpt-5.5
       - key: REALTIME_MODEL
         value: gpt-realtime
 
@@ -74,8 +75,11 @@ services:
         value: "120"
 
       # Render uses this env var to select Python version (must be fully qualified here).
+      # This mirrors the live dashboard value. The manually-created service reads
+      # PYTHON_VERSION from the dashboard, not this file — to change the runtime,
+      # edit the env var in Render (Environment tab), not just here.
       - key: PYTHON_VERSION
-        value: "3.13.14"
+        value: "3.12.5"
 
       # -------- Streaming / orchestration --------
       - key: ENABLE_STREAM
