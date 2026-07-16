@@ -60,11 +60,13 @@ durable local snapshot.
 - **Resolved:** `workspace_agent_auth` — `summary_only` → **`fetched`** (2026-07-16);
   snapshot at `workspace-agents/workspace-agent-authentication.md`, `docs_page_fetched:true`
   (live official page supplied via browser). Token rotation/lifetime still not documented on the page.
-- **Open GAPs (4)** — pull priority order:
-  1. `gh_openai_apps_sdk_examples` — not yet pulled (example MCP servers + UI).
-  2. `gh_openai_agents_js` — not yet pulled (JS SDK 0.13.2).
-  3. `gh_openai_cookbook` — selected notebooks only (Responses / File Search / Agents / Evals).
-  4. `gh_openai_node` — README/changelog metadata only.
+- **Open GAPs (3)** — pull priority order:
+  1. `gh_openai_agents_js` — not yet pulled (JS SDK 0.13.2).
+  2. `gh_openai_cookbook` — selected notebooks only (Responses / File Search / Agents / Evals).
+  3. `gh_openai_node` — README/changelog metadata only.
+
+  _Resolved:_ `gh_openai_apps_sdk_examples` → `fetched` (2026-07-16),
+  snapshot at `apps-sdk/openai-apps-sdk-examples.md`.
 
 ## Fetchability note (this environment)
 
