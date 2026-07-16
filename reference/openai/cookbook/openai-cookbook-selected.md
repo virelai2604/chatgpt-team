@@ -5,8 +5,12 @@ category: cookbook_selected
 source_urls:
   - https://github.com/openai/openai-cookbook
   - https://raw.githubusercontent.com/openai/openai-cookbook/main/registry.yaml
+  - https://raw.githubusercontent.com/openai/openai-cookbook/main/examples/File_Search_Responses.ipynb
+  - https://raw.githubusercontent.com/openai/openai-cookbook/main/examples/responses_api/responses_example.ipynb
+  - https://raw.githubusercontent.com/openai/openai-cookbook/main/examples/agents_sdk/parallel_agents.ipynb
+  - https://raw.githubusercontent.com/openai/openai-cookbook/main/examples/evaluation/use-cases/responses-evaluation.ipynb
 retrieved_at: 2026-07-16
-fetch_method: WebFetch of registry.yaml + four selected notebooks on raw.githubusercontent.com (GitHub is fetchable)
+fetch_method: WebFetch of registry.yaml + the four selected notebooks (all listed above) on raw.githubusercontent.com (GitHub is fetchable)
 pull_status: fetched
 verify: notebooks evolve; re-pull the specific .ipynb before building against it, and confirm current model IDs / tool schemas
 ---
