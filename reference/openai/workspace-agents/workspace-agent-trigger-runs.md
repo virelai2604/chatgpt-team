@@ -3,54 +3,99 @@ source_id: oa_workspace_agents_trigger_runs
 source_url: https://developers.openai.com/workspace-agents/trigger-runs
 category: workspace_agent_api_trigger
 priority: P0
-fetched: 2026-07-07
-fetch_method: developers.openai.com returns HTTP 403 to automated fetch; reconstructed from the official Cookbook notebook (fetched) + web search of the same docs.
+fetched: 2026-07-16
+fetch_method: Official page content provided verbatim via user browser 2026-07-16 (developers.openai.com returns HTTP 403 to automated fetch; content is the live page, superseding the 2026-07-07 cookbook reconstruction)
 pull_status: fetched
+docs_page_fetched: true
+verify: page-accurate as of 2026-07-16; "retrieve agent responses" marked coming soon on the page
 ---
 
-# Workspace Agents — Trigger runs (API)
+# Trigger Workspace Agent Runs
 
-Trigger a **published** Workspace Agent's API channel from your own code
-(backend / n8n / scheduled job).
+> Provenance: `fetched` (2026-07-16) — content is the **live official page**,
+> supplied via browser because `developers.openai.com` 403s automated fetch.
+> Supersedes the 2026-07-07 cookbook-reconstructed version.
+
+## What it is
+
+Programmatically trigger a **published** ChatGPT workspace agent via API — for
+workflows where an **external system** needs to trigger an agent outside the
+ChatGPT UI (and the third-party triggers offered).
 
 ## Endpoint
 
 ```
 POST https://api.chatgpt.com/v1/workspace_agents/{id}/trigger
 ```
-- `{id}` = the API trigger id from the agent's **API channel**, format `agtch_...`.
 
-## Headers
+- `{id}` = the **stable public API trigger identifier** for the published API
+  channel, in `agtch_XXX` format.
 
-| Header | Value |
-|---|---|
-| `Authorization` | `Bearer <WORKSPACE_AGENT_ACCESS_TOKEN>` (NOT an OpenAI Platform API key) |
-| `Content-Type` | `application/json` |
-| `Idempotency-Key` | stable id for the source event, so retries don't double-fire |
+## Authentication
+
+Bearer **Workspace Agent access token** (see `workspace-agent-authentication.md`):
+
+```
+Authorization: Bearer $AGENT_ACCESS_TOKEN
+```
 
 ## Request body
 
 ```json
 {
-  "input": "Summarize the customer escalation and recommend a response.",
-  "conversation_key": "email_thread_abc"
+  "conversation_key": "email_thread_abc",
+  "input": "Summarize the customer escalation and recommend a response."
 }
 ```
-- `input` (required) — plain-text message passed to the agent.
-- `conversation_key` (optional) — caller-defined stable id to continue the same agent conversation.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `input` | string | **Yes** | Message text passed to the agent as trigger input. |
+| `conversation_key` | string | No | Caller-defined stable id to **continue the same agent conversation** across multiple trigger events. |
+
+**Idempotency:** send an optional **`Idempotency-Key`** header to safely retry the
+same event. Reuse the same key **only** when retrying the same event — a repeat
+request with the same key returns the **original accepted outcome** instead of
+enqueueing a second trigger.
 
 ## Response
 
-- **`202 Accepted`, no body.** The run is **queued asynchronously**. The API does
-  **not** return a run id and the agent's response **cannot** be retrieved
-  through the API. Verify output at the agent's configured destination (Slack,
-  Drive, etc.), keyed by a request id you put in the input.
-- Errors: `401` invalid/expired token · `403` no permission · `404` trigger id
-  unknown · `409` agent/API channel not runnable.
+- **`202 Accepted`**, **no response body**.
+- The event is **durably queued**.
+- **No public run ID** is returned, and the **agent response cannot currently be
+  retrieved through the API** ("coming soon").
 
-## BIFL notes
+## Example
 
-- Keep the **Workspace Agent access token separate** from `OPENAI_API_KEY`
-  (different scope, secret-only).
-- Because runs are fire-and-forget (202, no response), design for async: put a
-  request id in `input`, then read the result from the destination.
+```bash
+curl -i https://api.chatgpt.com/v1/workspace_agents/agtch_complaints_123/trigger \
+  -X POST \
+  -H "Authorization: Bearer $AGENT_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_key": "email_thread_abc",
+    "input": "Summarize the newest escalation and recommend next steps."
+  }'
+# -> HTTP/1.1 202 Accepted
+```
+
+## Errors
+
+| Status | When returned |
+|---|---|
+| `401 Unauthorized` | Bearer credential missing, expired, revoked, or invalid. |
+| `403 Forbidden` | Token valid but not permitted to trigger the requested agent. |
+| `404 Not Found` | `id` does not exist or is not visible to the caller's workspace. |
+| `409 Conflict` | Channel/agent is not in a runnable state. |
+
+## Relevance to this repo (ChatGPT Team Relay / BIFL)
+
+If the relay/backend triggers a published workspace agent, it `POST`s to
+`api.chatgpt.com/.../{id}/trigger` with a **Workspace Agent access token** (a
+credential separate from `OPENAI_API_KEY`/`RELAY_KEY`). The agent `id` and token
+belong in **env / Render `sync:false`** — never in code or the repo. The call is
+fire-and-forget (`202`, no retrievable response yet), so don't block on a result.
+
+## Verify / TODO
+
+- Re-check when "retrieve agent responses" ships (currently "coming soon").
