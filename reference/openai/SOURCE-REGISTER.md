@@ -24,7 +24,7 @@ The old files are **retained, not deleted** (reconciliation-review rule). Treat
 
 ```
 source_id            stable key
-source_url           canonical URL
+source_url           canonical URL (may be a docs page that is NOT itself fetchable here)
 source_type          official_docs | official_github | official_cookbook
 retrieved_at         ISO date the snapshot/verification was made
 pull_status          fetched | web_verified | summary_only | pointer_only
@@ -33,10 +33,24 @@ freshness_class      volatile | moderate | stable   (how fast it rots)
 local_snapshot       path to the in-repo file (or note)
 supersedes           [old source_ids this row replaces]
 verification_status  verified | web_verified | partial | GAP | deprecated
+docs_page_fetched    (optional) false when source_url is a 403 docs page that was NOT fetched
+fetched_from         (optional) the actual retrieved artifact backing a `fetched` row
 note                 optional
 ```
 
 **Status precedence on conflict:** `fetched` > `web_verified` > `summary_only` > `pointer_only`.
+
+**What `fetched` means here:** the row is derived from a genuinely retrieved artifact.
+When `source_url` is a **403-blocked docs page** (`platform`/`developers`/`help`/`openai.com`),
+that page itself was **not** fetched — the real artifact is a GitHub source (the OpenAPI
+spec, a repo README, a cookbook notebook), named in **`fetched_from`**, and the row carries
+**`docs_page_fetched: false`**. So a `fetched` status never implies the docs page is a
+durable local snapshot.
+
+**Gap-triage rule:** judge durability from **`fetched_from` / `local_snapshot`**, NOT from
+`source_url`. A row with `docs_page_fetched: false` still needs a browser pass to promote the
+*docs page* to a true snapshot, even though its underlying artifact is fetched.
+
 **Freshness rule:** `volatile` rows (pricing, models, availability) must be **re-verified before use** — never treated as durable truth.
 
 ## Coverage snapshot (2026-07-16)
