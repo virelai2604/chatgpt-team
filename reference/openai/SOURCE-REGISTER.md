@@ -57,9 +57,9 @@ durable local snapshot.
 
 - **27 canonical sources**; 17 docs, 8 GitHub, 2 cookbook.
 - **Fetched or web-verified:** 23.
-- **Resolved:** `workspace_agent_auth` — moved `summary_only` → `web_verified` (2026-07-16);
-  snapshot at `workspace-agents/workspace-agent-authentication.md`. `docs_page_fetched:false`
-  (page 403s) — a browser pass still promotes it to `fetched`.
+- **Resolved:** `workspace_agent_auth` — `summary_only` → **`fetched`** (2026-07-16);
+  snapshot at `workspace-agents/workspace-agent-authentication.md`, `docs_page_fetched:true`
+  (live official page supplied via browser). Token rotation/lifetime still not documented on the page.
 - **Open GAPs (4)** — pull priority order:
   1. `gh_openai_apps_sdk_examples` — not yet pulled (example MCP servers + UI).
   2. `gh_openai_agents_js` — not yet pulled (JS SDK 0.13.2).

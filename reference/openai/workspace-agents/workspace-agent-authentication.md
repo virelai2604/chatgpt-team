@@ -7,72 +7,72 @@ source_urls:
   - https://developers.openai.com/workspace-agents
   - https://help.openai.com/en/articles/20001143-chatgpt-workspace-agents-for-enterprise-and-business
 retrieved_at: 2026-07-16
-fetch_method: web search (developers.openai.com returns HTTP 403 to automated fetch; NOT page-snapshotted)
-pull_status: web_verified
-docs_page_fetched: false
-verify: open the source_urls in a browser, confirm the token flow + trigger endpoint, then set pull_status=fetched
+fetch_method: Official page content provided verbatim via user browser 2026-07-16 (developers.openai.com returns HTTP 403 to automated fetch; content is the live page, not a web-search reconstruction)
+pull_status: fetched
+docs_page_fetched: true
+verify: page-accurate as of 2026-07-16; token rotation/lifetime and idempotency/conversation_key are NOT on this page (see TODO)
 ---
 
 # Workspace Agent Authentication
 
-> Provenance: `web_verified` (2026-07-16). The official page
-> `developers.openai.com/workspace-agents/authentication` returns **HTTP 403** to
-> automated fetch, so this is a web-search summary — **not** a page snapshot.
-> Open the source_urls in a browser and reconcile before treating any exact
-> field/endpoint as durable. Token/scope details are security-sensitive; verify.
+> Provenance: `fetched` (2026-07-16) — content is the **live official page**,
+> supplied via browser because `developers.openai.com/.../authentication` 403s
+> automated fetch. Verbatim specifics below.
 
-## The key distinction (why this exists)
+## What it is
 
-- **Workspace Agent access token** → used to **trigger a published ChatGPT
-  workspace agent**. Scoped to Workspace Agents API operations only.
-- **Platform API key** (`OPENAI_API_KEY`, `sk-...`) → used for **general OpenAI
-  API calls** (`api.openai.com`). NOT interchangeable with the agent token.
+Workspace Agents API calls authenticate with **Workspace Agent access tokens**.
+These tokens are **provisioned from the ChatGPT admin access-token flow** and are
+**scoped for workspace use**.
 
-Keep them separate: an agent access token is **not** a substitute for the
-platform key, and the platform key does **not** trigger workspace agents.
+## Provision a token
 
-## Prerequisites (workspace admin)
+Prerequisite (workspace admin, in **Admin → Permissions & roles**): enable
+**Workspace agents** and turn on **"Allow users to create personal access tokens."**
 
-Before a user can create a Workspace Agent access token, a **workspace admin**
-must, in **Admin → Permissions & roles**:
-1. Enable **Workspace agents**.
-2. Turn on **"Allow users to create personal access tokens."**
-
-## Create a token
-
-In ChatGPT:
-1. **Admin → Access tokens** → create an access token.
-2. Select the **Workspace Agents** scope.
-3. Copy the token and **store it in a secrets manager** (never in code/repo).
+1. In ChatGPT, open **Admin → Access tokens**.
+2. Create an access token and select the **Workspace Agents** scope.
+3. Copy the token and **store it in your secrets manager**.
 
 ## Use the token (trigger a run)
 
-Bearer credential against **`api.chatgpt.com`** (note: NOT `api.openai.com`):
+Bearer credential on **`api.chatgpt.com`** (verbatim from the page):
 
 ```bash
-curl https://api.chatgpt.com/v1/workspace_agents/<AGENT_ID>/trigger \
+curl https://api.chatgpt.com/v1/workspace_agents/agtch_complaints_123/trigger \
   -H "Authorization: Bearer $AGENT_ACCESS_TOKEN" \
-  -H "content-type: application/json" \
-  -d '{ ... input per the agent's input schema ... }'
+  -H "Content-Type: application/json" \
+  -d '{"input":"Summarize the newest escalation."}'
 ```
 
-- Token scope: **Workspace Agents API operations only**.
-- Host: **`api.chatgpt.com`** (workspace agents) — distinct from `api.openai.com`.
+- Endpoint: `POST https://api.chatgpt.com/v1/workspace_agents/<AGENT_ID>/trigger`
+  (agent id form e.g. `agtch_complaints_123`).
+- Body: `{"input": "..."}`.
+
+## What this token can access
+
+Workspace Agent access tokens are **scoped to Workspace Agents API operations only**.
+
+## Key distinction (agent token vs API key)
+
+- **Workspace Agent access token** → trigger published workspace agents on
+  `api.chatgpt.com`. Scoped to Workspace Agents ops only.
+- **Platform API key** (`OPENAI_API_KEY`, `sk-...`) → general OpenAI API on
+  `api.openai.com`. **Not interchangeable** with the agent token.
 
 ## Relevance to this repo (ChatGPT Team Relay / BIFL)
 
-- The relay's `OPENAI_API_KEY` (server-side) and `RELAY_KEY` (client-facing) are
-  the **platform** side. A Workspace Agent access token is a **third, separate**
-  credential — do not conflate it with either.
-- If the relay or a backend triggers a published workspace agent, it must use a
-  **Workspace Agent access token** against `api.chatgpt.com`, stored `sync:false`
-  in Render (never committed), same discipline as the other secrets.
+A Workspace Agent access token is a **third credential**, separate from the relay's
+`OPENAI_API_KEY` (server-side) and `RELAY_KEY` (client-facing). If the relay/backend
+triggers a published workspace agent, it uses the **agent token** against
+`api.chatgpt.com`, stored `sync:false` in Render (never committed).
 
-## Verify / TODO (to promote to `fetched`)
+## Related (documented on the Trigger page, not here)
 
-- Open the source_urls in a browser and confirm:
-  - exact token-creation path and scope name,
-  - the exact trigger endpoint host/path and request/response shape,
-  - token lifetime/rotation and revocation behavior,
-  - any idempotency / conversation_key semantics on trigger.
-- Then set `pull_status: fetched` and `docs_page_fetched: true`.
+`conversation_key`, the `Idempotency-Key` header, the `202 Accepted` response, and
+the `401/403/404/409` error codes live on the **Trigger workspace agent runs** page
+→ see `workspace-agents/workspace-agent-trigger-runs.md`.
+
+## Verify / TODO (genuinely not on either page)
+
+- Token **lifetime / rotation / revocation** behavior (this auth page does not state it).
