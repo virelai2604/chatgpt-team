@@ -56,17 +56,17 @@ durable local snapshot.
 ## Coverage snapshot (2026-07-16)
 
 - **27 canonical sources**; 17 docs, 8 GitHub, 2 cookbook.
-- **Fetched or web-verified:** 24.
+- **Fetched or web-verified:** 25.
 - **Resolved:** `workspace_agent_auth` — `summary_only` → **`fetched`** (2026-07-16);
   snapshot at `workspace-agents/workspace-agent-authentication.md`, `docs_page_fetched:true`
   (live official page supplied via browser). Token rotation/lifetime still not documented on the page.
-- **Open GAPs (1)** — pull priority order:
-  1. `gh_openai_node` — README/changelog metadata only.
+- **Open GAPs (0)** — all reconciled gaps closed. 🎉
 
   _Resolved:_ `gh_openai_apps_sdk_examples` → `fetched` (2026-07-16), `apps-sdk/openai-apps-sdk-examples.md`;
   `gh_openai_agents_js` → `fetched` (2026-07-16), `agents-sdk/openai-agents-js.md`;
   `gh_openai_cookbook` → `fetched` (2026-07-16), `cookbook/openai-cookbook-selected.md`
-  (selected notebooks: File Search / Responses / Agents SDK / Evals).
+  (selected notebooks: File Search / Responses / Agents SDK / Evals);
+  `gh_openai_node` → `fetched` (2026-07-16), `node-sdk/openai-node.md` (README + changelog metadata).
 
 ## Fetchability note (this environment)
 
