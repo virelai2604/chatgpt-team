@@ -56,13 +56,15 @@ durable local snapshot.
 ## Coverage snapshot (2026-07-16)
 
 - **27 canonical sources**; 17 docs, 8 GitHub, 2 cookbook.
-- **Fetched or web-verified:** 22.
-- **Open GAPs (5)** — pull priority order:
-  1. `workspace_agent_auth` — official page still `summary_only` → `_pending_summaries.md`. **Pull first** (agent token vs API key, trigger scope, secret storage).
-  2. `gh_openai_apps_sdk_examples` — not yet pulled (example MCP servers + UI).
-  3. `gh_openai_agents_js` — not yet pulled (JS SDK 0.13.2).
-  4. `gh_openai_cookbook` — selected notebooks only (Responses / File Search / Agents / Evals).
-  5. `gh_openai_node` — README/changelog metadata only.
+- **Fetched or web-verified:** 23.
+- **Resolved:** `workspace_agent_auth` — moved `summary_only` → `web_verified` (2026-07-16);
+  snapshot at `workspace-agents/workspace-agent-authentication.md`. `docs_page_fetched:false`
+  (page 403s) — a browser pass still promotes it to `fetched`.
+- **Open GAPs (4)** — pull priority order:
+  1. `gh_openai_apps_sdk_examples` — not yet pulled (example MCP servers + UI).
+  2. `gh_openai_agents_js` — not yet pulled (JS SDK 0.13.2).
+  3. `gh_openai_cookbook` — selected notebooks only (Responses / File Search / Agents / Evals).
+  4. `gh_openai_node` — README/changelog metadata only.
 
 ## Fetchability note (this environment)
 
