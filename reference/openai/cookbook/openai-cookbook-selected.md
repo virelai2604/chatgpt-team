@@ -101,7 +101,17 @@ Primitives: `Agent`, `Runner.run()`, `.as_tool()`, `ModelSettings(parallel_tool_
 Same primitive set as the JS SDK snapshot (`agents-sdk/openai-agents-js.md`).
 
 ### 4. Evals — `examples/evaluation/use-cases/responses-evaluation.ipynb`
-**Evaluate new models against stored Responses API logs (Evals API).** Distilled:
+
+> ⚠️ **DEPRECATION (verified 2026-07-16).** OpenAI notified on **2026-06-03** that the
+> **Evals platform is being deprecated**: **read-only from 2026-10-31**, **full shutdown
+> 2026-11-30**. For **new** evaluation work OpenAI recommends **Datasets** instead
+> (migration path: "Moving from OpenAI Evals to Promptfoo"). **Do NOT build fresh
+> relay-grading automation on the Evals API** — treat the snapshot below as a record of
+> the retiring pattern, and target **Datasets** for anything new.
+> Refs: `developers.openai.com/api/docs/deprecations`,
+> `developers.openai.com/api/docs/guides/evaluation-getting-started` (Datasets).
+
+**Evaluate new models against stored Responses API logs (Evals API — retiring).** Distilled:
 
 ```python
 # define the eval over logged responses
@@ -127,8 +137,9 @@ client.evals.runs.create(
 )
 # results dashboard at run.report_url
 ```
-Key idea: reuse **production logs** as the eval dataset instead of hand-building one —
-directly applicable to grading relay traffic.
+Key idea: reuse **production logs** as the eval dataset instead of hand-building one.
+The *technique* is still sound; the *Evals API surface shown here is retiring* (see the
+deprecation banner) — port the same idea onto **Datasets** for new relay-grading work.
 
 ## Other notable entries in `registry.yaml` (pointers, not pulled)
 
@@ -148,7 +159,9 @@ directly applicable to grading relay traffic.
 - **Responses API** state model (`previous_response_id`) + hosted `web_search` mirror
   what the relay proxies.
 - **Agents parallel** patterns port to the Node path (`agents-sdk/openai-agents-js.md`).
-- **Evals-over-logs** is the way to grade relay output without building a bespoke dataset.
+- **Evals-over-logs** is a good pattern for grading relay output without a bespoke
+  dataset — but implement it on **Datasets**, since the Evals API is retiring (shutdown
+  2026-11-30). The stored-logs-as-eval-set idea carries over; the API surface changes.
 
 ## Verify / TODO
 
@@ -156,3 +169,6 @@ directly applicable to grading relay traffic.
   (`gpt-4o-mini`, `o3`, `gpt-4.1-mini`) and tool schemas that move.
 - `data_source` shape for regeneration runs (`item_reference`) is abbreviated here;
   confirm exact fields from the live notebook when wiring an eval.
+- **Before building any new eval automation:** confirm the current **Datasets** API
+  (the Evals platform goes read-only 2026-10-31, shuts down 2026-11-30) — do not pin new
+  work to the deprecated `client.evals.*` surface.
