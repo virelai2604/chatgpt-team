@@ -102,14 +102,24 @@ Same primitive set as the JS SDK snapshot (`agents-sdk/openai-agents-js.md`).
 
 ### 4. Evals — `examples/evaluation/use-cases/responses-evaluation.ipynb`
 
-> ⚠️ **DEPRECATION (verified 2026-07-16).** OpenAI notified on **2026-06-03** that the
-> **Evals platform is being deprecated**: **read-only from 2026-10-31**, **full shutdown
-> 2026-11-30**. For **new** evaluation work OpenAI recommends **Datasets** instead
-> (migration path: "Moving from OpenAI Evals to Promptfoo"). **Do NOT build fresh
+> ⚠️ **DEPRECATION — provenance `web_verified` (2026-07-16), NOT `fetched`.**
+> The official OpenAI pages below **403 to automated fetch** in this environment (same as
+> the rest of `developers.openai.com`), so these dates are **web-verified from
+> official-domain results, not a verbatim fetched snapshot** — browser-confirm to promote
+> to `fetched`.
+>
+> OpenAI is **deprecating the Evals platform**: **read-only 2026-10-31**, **shutdown
+> 2026-11-30**. **Datasets** is the recommended path for new work; a named
+> **"Moving from OpenAI Evals to Promptfoo"** migration guide exists. **Do NOT build fresh
 > relay-grading automation on the Evals API** — treat the snapshot below as a record of
-> the retiring pattern, and target **Datasets** for anything new.
-> Refs: `developers.openai.com/api/docs/deprecations`,
-> `developers.openai.com/api/docs/guides/evaluation-getting-started` (Datasets).
+> the retiring pattern; target **Datasets** for anything new.
+>
+> Official OpenAI sources (all on openai.com domains; all 403 automated fetch here):
+> - Read-only/shutdown dates: `https://developers.openai.com/api/docs/deprecations`
+>   · `https://community.openai.com/t/deprecation-notice-evals-will-be-shut-down-on-november-30th-2026/1385537`
+> - Datasets replacement: `https://developers.openai.com/api/docs/guides/evaluation-getting-started`
+> - Promptfoo migration: `https://developers.openai.com/cookbook/examples/evaluation/moving-from-openai-evals-to-promptfoo`
+> - Evals platform status: `https://developers.openai.com/api/docs/guides/evals`
 
 **Evaluate new models against stored Responses API logs (Evals API — retiring).** Distilled:
 
