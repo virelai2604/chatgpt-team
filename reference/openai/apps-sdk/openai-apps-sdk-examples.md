@@ -8,7 +8,6 @@ source_urls:
 retrieved_at: 2026-07-16
 fetch_method: WebFetch of the repo README on raw.githubusercontent.com (GitHub is fetchable)
 pull_status: fetched
-docs_page_fetched: true
 verify: repo evolves; re-pull README + example list when building an MCP app
 ---
 
