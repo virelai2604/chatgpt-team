@@ -138,7 +138,9 @@ $srcMap = Verify-Parity -Label "summaries" -Source $srcSummaries -Dest $dstSumma
 # --- Optional: full reference/openai tree -> separate sibling dir ---
 if ($MirrorFullReferenceTree) {
     $srcFull = Join-Path $RepoRoot "reference\openai"
-    $dstFull = Join-Path $MirrorRoot "01_OpenAI_Docs_Summaries\_reference_openai_full"
+    # TRUE sibling of 01_OpenAI_Docs_Summaries (NOT nested inside it), so the summaries
+    # parity walk never sees these files as "stale". Keeps the two corpora separate.
+    $dstFull = Join-Path $MirrorRoot "reference_openai_full"
     Write-Host "=== 2b. Mirror full reference/openai tree (separate sibling dir) ===" -ForegroundColor Cyan
     New-Item -ItemType Directory -Path $dstFull -Force | Out-Null
     robocopy $srcFull $dstFull /E /XO /NFL /NDL /NJH /NJS /NP | Out-Null
