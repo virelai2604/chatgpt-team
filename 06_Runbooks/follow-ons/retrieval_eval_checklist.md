@@ -1,79 +1,98 @@
-# Retrieval-Eval-Only Execution Checklist (from the clean 212 / 550 baseline)
+# Retrieval-Eval Execution Checklist (read-only, from the clean 212/550 baseline)
 
-_Run retrieval evaluations **against the existing index** to measure quality._
-_**Read-only.** This checklist performs **no rebuild, no re-index, no embedding, and no
-database mutation.** It only *queries* the current SQLite/FTS5 + Chroma stores and
-records metrics._
+_Runs the **existing** hybrid retrieval eval against the **frozen** index to confirm
+health and ranking. **Read-only:** no rebuild, no re-index, no embedding, no DB mutation._
+_This does **not** replace the accepted prior evaluation — it re-runs and re-scores it._
 
-> Provenance: written against the accepted baseline recorded in the runbook
-> (`212 files / 550 chunks`, `text-embedding-3-large` @ `1024` dims, collection
-> `openai_workspace_chunks_3large_1024`). The exact indexer/query commands live in your
-> local pipeline (not in this repo), so the command placeholders below are **Not proven**
-> against your scripts — fill them with your read-only query entry points.
+> Revised per review to use the **real** local workflow, not placeholders, and to preserve
+> the existing per-item status model (Done / Not done / Not proven).
 
-## 0. Baseline assertions (must all hold BEFORE evaluating)
+## Fixed inputs (the real artifacts — do not regenerate)
 
-Read-only integrity checks — if any fails, **stop** and do not proceed:
+- **Query entry point (read-only):** `06_Runbooks/scripts/query_openai_workspace_hybrid.py`
+  (invocation pattern is in `openai_workspace_hybrid_retrieval_runbook.md`).
+- **Eval set:** `.../07_Continuity/openai_workspace_recurring_retrieval_eval_set_2026-07-16.jsonl`
+  (keys per row include `eval_id`, `query`, **`expected_rank_1_source`**, `expected_checks`,
+  `baseline_evidence`, `cadence`, `notes`).
+- **Fixed run dir (WSL):** `.../07_Continuity/openai_workspace_eval_run_<DATE>/`
+  with `<eval_id>_report.txt` per query + a results CSV.
+
+## Accepted prior evaluation — carry these statuses forward
+
+Do **not** overwrite these with a fresh generic run; **carry them forward**:
+
+| Aspect | Status |
+|---|---|
+| Operational retrieval health (integrity, fts/semantic/merged > 0) | **10/10 Done** |
+| Accepted ranking outcomes | **7 Done** |
+| Two expected sources absent from the frozen index | **Not proven** (absence from frozen index — **not** a retrieval failure) |
+| **OW-RAG-EVAL-010 authority-ranking** | **Not done — UNRESOLVED GATE** |
+
+> **OW-RAG-EVAL-010 is the open authority-ranking gate.** It must stay flagged **Not done**
+> until explicitly resolved; a green health run does **not** clear it.
+
+## 0. Baseline assertions (read-only — must hold before scoring)
 
 - [ ] SQLite `PRAGMA integrity_check;` → `ok`
-- [ ] SQLite files = `212`, documents = `212`
-- [ ] SQLite chunks = `550`
-- [ ] FTS5 rows = `550`
-- [ ] chunk embeddings = `550`
-- [ ] Chroma document count = `212`, Chroma chunk/vector count = `550`
-- [ ] No orphaned chunk IDs (SQLite chunk IDs == Chroma vector IDs)
+- [ ] files = `212`, documents = `212`
+- [ ] chunks = `550`, FTS rows = `550`, embeddings = `550`
+- [ ] Chroma documents = `212`, Chroma vectors = `550`
+- [ ] no orphaned chunk IDs (SQLite chunk IDs == Chroma vector IDs)
 
-_All of the above are `SELECT`/`PRAGMA`/count operations — no writes._
+All `PRAGMA`/`SELECT`/count — no writes.
 
-## 1. Eval set
+## 1. Run the eval (read-only queries)
 
-- [ ] Use the existing retrieval evaluation question set (do not regenerate it here).
-- [ ] Each item = `{ query, expected_source_file(s) / expected_chunk_ids, note }`.
-- [ ] If no eval set exists yet, author it as a **separate** doc — authoring questions
-      is not indexing and does not touch the baseline.
+For each row in the eval set, invoke the hybrid query entry point (read-only) and
+capture its `<eval_id>_report.txt`:
 
-## 2. Run the three retrieval modes (read-only queries)
+```bash
+# parameterized; adjust flags to the script's actual signature (see the runbook)
+python3 "06_Runbooks/scripts/query_openai_workspace_hybrid.py" \
+    --query "<row.query>" \
+    --top-k 10 \
+    --report-out ".../openai_workspace_eval_run_<DATE>/<eval_id>_report.txt"
+```
 
-For each eval query, capture results from:
-- [ ] **Keyword (FTS5)** — `<LOCAL_FTS_QUERY_CMD>` (read-only `SELECT` against FTS table)
-- [ ] **Semantic (Chroma)** — `<LOCAL_CHROMA_QUERY_CMD>` (similarity search, no upsert)
-- [ ] **Hybrid** — `<LOCAL_HYBRID_QUERY_CMD>` (your existing hybrid ranker)
+The script performs retrieval only. It must not upsert, re-embed, or write to the index.
 
-Record top-k (k=5) hits: `rank, source_file, chunk_id, score`.
+## 2. Score (read the reports — do NOT re-query)
 
-## 3. Metrics (compute, do not persist into the index)
+> **Known scorer bug to avoid:** score against the eval key **`expected_rank_1_source`**,
+> NOT a key named `expected`. A prior scorer read `expected` (absent) → every row came back
+> empty and defaulted to **Not proven** (a false negative) even though the reports showed
+> correct rank-1. Read the correct key and parse each report's `rank: 1` → `source:` line.
 
-Per query and aggregate:
-- [ ] **Recall@5** — expected source appears in top-5
-- [ ] **MRR** — reciprocal rank of first correct hit
-- [ ] **Rank-1 hit rate** — expected source is the #1 result
-- [ ] latency per query (ms)
+Per `eval_id`, compute:
+- [ ] `sqlite_integrity_check == ok` (from report)
+- [ ] rank-1 `source:` in the report **== `expected_rank_1_source`** (normalize `\`↔`/`, case)
+- [ ] rank-1 source is **not** a generated eval/readiness artifact (see exclusion amendment)
+- [ ] classify: **Done** (rank-1 match + checks pass) / **Not done** (gate unresolved, e.g.
+      OW-RAG-EVAL-010) / **Not proven** (expected source absent from the frozen index, or
+      report unparseable)
 
-Write metrics to a **generated report file** that is **excluded from indexing**
-(see `index_exclusion_amendment.md`) — e.g. `retrieval_eval_out/eval_<date>.md`.
+## 3. Distinguish failure classes (do not conflate)
 
-## 4. Failure classification (diagnose, don't fix here)
+- **"expected source absent from frozen index"** → **Not proven**, *not* a retrieval failure.
+  The retriever can't rank a document that isn't indexed. Note it; do not fix by re-indexing
+  here (re-index is separately authorized).
+- **genuine ranking miss** (source is indexed but out-ranked) → the actionable case.
+- classify misses: keyword miss / semantic miss / ranking failure / synthesis / citation.
 
-Tag each miss (from the runbook's taxonomy):
-- [ ] keyword retrieval miss
-- [ ] semantic retrieval miss
-- [ ] ranking failure
-- [ ] synthesis failure
-- [ ] citation / provenance failure
+## 4. Exit gate
 
-## 5. Exit gate
-
-- [ ] Integrity still `ok`; counts still `212 / 550 / 550 / 550 / 212 / 550`
+- [ ] Integrity `ok`; counts still `212 / 212 / 550 / 550 / 550` (+ Chroma `212 / 550`)
 - [ ] **No rebuild, no re-index, no write to SQLite/Chroma occurred**
-- [ ] Rank-1 results did **not regress** vs. the last accepted eval run
-- [ ] Report saved to an **excluded** path (not ingested)
+- [ ] Operational health preserved (10/10)
+- [ ] **OW-RAG-EVAL-010 still carried as Not done** until explicitly resolved
+- [ ] Report(s) written to an **excluded** path (see `index_exclusion_amendment.md`)
 
-## 6. What this checklist deliberately does NOT do
+## 5. Deliberately NOT done here
 
-- ✗ rebuild the index
-- ✗ re-embed or re-chunk
+- ✗ rebuild / re-index / re-embed / re-chunk
 - ✗ mutate SQLite / FTS5 / Chroma
-- ✗ upload anything to hosted OpenAI Vector Stores
+- ✗ upload to hosted OpenAI Vector Stores
+- ✗ replace the accepted prior evaluation with a generic Recall@5/MRR run
 - ✗ change the accepted 212/550 baseline
 
 Any of those requires a **separate, explicit authorization** — this is measurement only.
