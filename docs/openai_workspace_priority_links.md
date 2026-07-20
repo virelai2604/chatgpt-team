@@ -53,9 +53,57 @@ This is a navigation document only. It does not replace live official documentat
 - https://developers.openai.com/api/docs/guides/rate-limits
 - https://developers.openai.com/api/docs/guides/cost-optimization
 
+## ChatGPT Workspace and Product Surface
+
+- https://help.openai.com/en/articles/10169521-projects-in-chatgpt
+- https://help.openai.com/en/collections/3742473-chatgpt
+- https://help.openai.com/en/collections/5688074-chatgpt-enterprise-and-edu
+- https://help.openai.com/en/articles/6825453-chatgpt-release-notes
+
+## Prompting and Model Guidance
+
+- https://developers.openai.com/api/docs/guides/prompting
+- https://developers.openai.com/api/docs/guides/latest-model
+- https://developers.openai.com/api/docs/guides/model-guidance
+
+## Platform and API Surface
+
+- https://developers.openai.com/api/docs/overview
+- https://developers.openai.com/api/docs/api-reference
+- https://platform.openai.com/docs/overview
+- https://platform.openai.com/docs/api-reference
+
+## Embeddings
+
+- https://developers.openai.com/api/docs/guides/embeddings
+- https://developers.openai.com/api/docs/api-reference/embeddings
+
+## Agents SDK
+
+- https://openai.github.io/openai-agents-python/
+- https://github.com/openai/openai-agents-python
+
+## Apps SDK
+
+- https://developers.openai.com/apps-sdk
+- https://developers.openai.com/apps-sdk/build
+- https://developers.openai.com/apps-sdk/reference
+
+## Realtime
+
+- https://developers.openai.com/api/docs/guides/realtime
+- https://developers.openai.com/api/docs/api-reference/realtime
+
+## API Keys, Projects, and Organizations
+
+- https://platform.openai.com/api-keys
+- https://platform.openai.com/settings/organization/general
+- https://platform.openai.com/settings/organization/projects
+
 ## Maintenance Rule
 
 - Verify links against live official documentation before implementation.
 - Do not infer API behavior from URL presence alone.
 - Do not add the complete raw URL inventory to this repository.
 - Do not use this file to trigger automatic RAG rebuilds or re-indexing.
+
