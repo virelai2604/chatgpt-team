@@ -91,7 +91,7 @@
 
 | Component | Part | Specification |
 |---|---|---|
-| **NAS** | Synology DS923+ ⚠️ | 4-bay · ECC memory · optional 10 GbE — **read [§5](#5-nas-compatibility-warning) first** |
+| **NAS** | Synology **DS923+** ⚠️ *(fallback: **DS1525+**, not DS925+)* | 4-bay · ECC · 10 GbE via PCIe — **🚨 read [§5.1](#51--the-ds925-cannot-do-10-gbe--do-not-treat-it-as-a-drop-in-successor) before ordering** |
 | **NAS drives** | WD Red Pro 12 TB `WD121KFGX` *or*<br>Seagate IronWolf Pro 12 TB `ST12000NT001` ⚠️ | 4 × 12 TB **CMR**, NAS-rated |
 | **Array** | Synology SHR-2 or RAID 6 | ≈24 TB usable · two-drive fault tolerance |
 | **Offline** | WD Elements *or* Seagate Expansion Desktop ⚠️ | 2 × 20 TB USB, rotated monthly |
@@ -239,20 +239,33 @@ Positive pressure — three filtered front intakes, fewer/slower exhausts · Cle
 
 ## 5. NAS Compatibility Warning
 
-> **🚨 Read before ordering the NAS.** Synology changed its drive-compatibility policy for 2025-generation Plus models, then partially reversed it. Which unit you buy determines which drives will work.
+> **🚨 Two separate issues here, and the second one breaks the build.** Do not substitute NAS models without reading both.
+
+### 5.1 ❌ The DS925+ cannot do 10 GbE — do not treat it as a drop-in successor
+
+The DS923+ dates to 2022 and its natural replacement, the **DS925+** (April 2025), **removed the PCIe expansion slot**. That slot is the only way a DS923+ reaches 10 GbE, via the optional `E10G22-T1-Mini`. Without it the DS925+ tops out at dual 2.5 GbE — about 5 Gbps with link aggregation, and only for multi-stream traffic.
+
+**This build specifies a 10 GbE workstation↔NAS link.** A DS925+ cannot deliver it at any price. Since the deferred archive NVMe ([§10.2](#102-archivestaging-nvme--deferred-not-deleted)) pushes staging traffic onto that link, the network speed is load-bearing here, not a nice-to-have.
+
+| Option | 10 GbE | Bays | Notes |
+|---|:--:|:--:|---|
+| **Synology DS923+** *(as specified)* | ✅ via PCIe `E10G22-T1-Mini` | 4 | 2022 model — **verify availability first** |
+| Synology DS925+ | ❌ **impossible** | 4 | PCIe slot removed. Dual 2.5 GbE only |
+| **Synology DS1525+** | ✅ 10 GbE upgrade slot | 5 | ≈+$160 over DS925+, adds a fifth bay. **Closest true successor** |
+| **UGREEN DXP4800 Plus** | ✅ **built-in** | 4 | Intel Pentium Gold 8505, 8 GB DDR5. Faster hardware, non-Synology software |
+
+**Decision:** if the DS923+ is unavailable at sensible pricing — likely, given its age — go to the **DS1525+**, not the DS925+. Budget the extra bay and cost, or accept the UGREEN if you're willing to leave the Synology ecosystem.
+
+### 5.2 ⚠️ Drive-compatibility policy on 2025-generation models
 
 | Generation | Third-party HDDs | Detail |
 |---|:--:|---|
-| **DS923+** (2022, as specified) | ✅ **Unaffected** | Pre-2025 models are exempt. WD Red Pro and IronWolf Pro work normally. |
+| **DS923+** (2022) | ✅ **Unaffected** | Pre-2025 models are exempt. WD Red Pro and IronWolf Pro work normally. |
 | **DS925+ / DS1525+** (2025 Plus) | ⚠️ **Needs DSM 7.3** | Launch policy blocked non-Synology drives at setup with *no bypass*. DSM 7.3 restored 3.5″ HDD and 2.5″ SATA SSD support from WD, Seagate and others. |
 | **M.2 NVMe, all 2025 models** | ❌ **Still restricted** | The reversal does **not** cover M.2. NVMe storage pools still require drives from Synology's official compatibility list. |
 
-**Action items**
-
-- The DS923+ remains the lowest-friction choice — if still available at sensible pricing, the specified 12 TB drives work without qualification.
-- Substituting a 2025-generation unit is likely (DS923+ dates to 2022). **Confirm DSM 7.3 or later before buying third-party drives.**
-- Planning an NVMe cache in the NAS? Budget for **Synology-branded M.2** regardless of model.
-- Check whether a DS923+ successor ships with 10 GbE built in — the specified unit needs the optional `E10G22-T1-Mini`, an extra line item.
+- Moving to a **DS1525+** means confirming **DSM 7.3 or later** before buying the 12 TB WD/Seagate drives.
+- Planning an NVMe cache in the NAS? Budget **Synology-branded M.2** regardless of model.
 
 ---
 
@@ -348,7 +361,13 @@ Positive pressure — three filtered front intakes, fewer/slower exhausts · Cle
 - [ ] UPS output **wattage**, not only VA, is adequate
 - [ ] GPU, board, SSDs and UPS carry **official Indonesian warranty**, not grey-market
 - [ ] Builder performs extended memory, CPU, GPU, SSD and power testing
-- [ ] No imminent Zen 6 / AM5 refresh before paying full price for the current flagship
+- [x] ~~No imminent Zen 6 / AM5 refresh~~ — ✅ **resolved, see below**
+
+> ### ✅ CPU timing is clear — buy now
+>
+> Zen 6 desktop (**"Olympic Ridge"**) is reported for **2027**, not 2026; AMD's published 2026 Zen 6 roadmap covers EPYC server parts, not Ryzen desktop. AMD has also extended **AM5 socket support through 2029**, with Zen 6 and reportedly even Zen 7 staying on the socket, and AM6 not expected until 2030.
+>
+> There is no near-term refresh to wait for, and the 800-series board bought today should accept a Zen 6 drop-in later. **The 9950X + X870E platform is a safe purchase.**
 
 ---
 
@@ -462,18 +481,29 @@ Not an error in the original — the policy change post-dates typical guidance a
 
 ### 💰 Budget Envelope — Indonesia
 
-*Planning ranges, **not** live quotations. All IDR figures ⚠️ unverified — re-check at purchase.*
+*Planning ranges, **not** live quotations. Re-check at purchase — Indonesian GPU pricing moves weekly.*
+
+#### 📉 GPU pricing reality check
+
+| Card | Launch SRP (ID) | Recent market | Trend |
+|---|---:|---:|---|
+| **RTX 5080** | Rp 20.3 juta | **≈Rp 24 juta**, premium models to ≈Rp 30 juta | Rose from Rp 20–21 juta through 2026 |
+| **RTX 5090** | Rp 40.8 juta | **Rp 46–65 juta** (ASUS ROG Astral at the top) | Rising; some forecasts to Rp 80+ juta |
+
+The original plan budgeted **Rp 27–32 juta** for the RTX 5080. Street pricing for a premium three-fan card sits nearer **Rp 24–30 juta**, so that line was over-provisioned by roughly Rp 3 juta. Corrected below.
 
 | Area | Original | **This revision** |
 |---|---:|---:|
-| Core tower — CPU, board, RAM, GPU, NVMe, PSU, cooler, case, fans | Rp 80–105 juta | **Rp 74–98 juta** |
+| Core tower — CPU, board, RAM, GPU, NVMe, PSU, cooler, case, fans | Rp 80–105 juta | **Rp 71–96 juta** |
 | APC Smart-UPS 2200 VA class | Rp 12–25 juta | Rp 12–25 juta |
-| Synology DS923+ · 4 × 12 TB | Rp 35–55 juta | Rp 35–55 juta |
+| NAS · 4 × 12 TB — *DS923+ or DS1525+, see [§5.1](#51--the-ds925-cannot-do-10-gbe--do-not-treat-it-as-a-drop-in-successor)* | Rp 35–55 juta | Rp 35–58 juta |
 | Two 20 TB offline drives | Rp 15–25 juta | Rp 15–25 juta |
 | 10 GbE switch / cabling *(optional)* | Rp 7–15 juta | Rp 7–15 juta |
-| **Complete 24-hour BIFL environment** | Rp 142–225 juta | **Rp 136–218 juta** |
+| **Complete 24-hour BIFL environment** | Rp 142–225 juta | **Rp 133–219 juta** |
 
-Difference is the deferred archive NVMe. Staged purchase is viable — tower and UPS first, then NAS, then offline rotation.
+Savings come from the deferred archive NVMe and the corrected GPU line; the NAS ceiling rises slightly to cover a DS1525+ substitution. Staged purchase is viable — tower and UPS first, then NAS, then offline rotation.
+
+> **On timing.** GPU prices in Indonesia trended *upward* through 2026 rather than down. If the RTX 5090 path in [§10.4](#104-gpu--dissent-recorded-decision-upheld) is genuinely likely, waiting is more likely to cost money than save it.
 
 > **⚠️ Do not remove the UPS or backup plan to afford a higher GPU.**
 
@@ -481,11 +511,11 @@ Difference is the deferred archive NVMe. Staged purchase is viable — tower and
 
 ## Verification Status
 
-**✅ Verified** against manufacturer or major-retailer sources
-Ryzen 9 9950X MPN and specifications · ASUS ProArt X870E-Creator WiFi feature set and M.2 topology · G.Skill Flare X5 128 GB MPN · Noctua NH-D15 G2 variant guidance · Samsung 990 PRO MPNs, performance and TBW · Seasonic VERTEX GX-1200 specifications · RTX 5080 specifications and AIB model names · Synology 2025 drive-compatibility policy and DSM 7.3 reversal
+**✅ Verified** against manufacturer, major-retailer or industry sources
+Ryzen 9 9950X MPN and specifications · ASUS ProArt X870E-Creator WiFi feature set and M.2 topology · G.Skill Flare X5 128 GB MPN · Noctua NH-D15 G2 variant guidance · Samsung 990 PRO MPNs, performance and TBW · Seasonic VERTEX GX-1200 specifications · RTX 5080 specifications and AIB model names · Synology 2025 drive-compatibility policy and DSM 7.3 reversal · **DS925+ loss of PCIe/10 GbE and DS1525+/UGREEN alternatives** · **Zen 6 desktop timing (2027) and AM5 support through 2029** · **Indonesian RTX 5080/5090 street pricing**
 
 **⚠️ Not verified — confirm before purchase**
-All IDR pricing (volatile; Indonesian GPU pricing moves weekly) · APC, Synology, WD/Seagate, Fractal and TP-Link availability in Indonesia · current DS923+ availability and successor models · RTX 5090 pricing · whether a Zen 6 / AM5 refresh is imminent
+Exact current IDR quotations (ranges above are indicative; GPU pricing moves weekly) · APC, Synology, WD/Seagate, Fractal and TP-Link stock and warranty terms in Indonesia · **current DS923+ availability in Indonesia** · DS1525+ Indonesian pricing · UPS model availability at 230 V
 
 ---
 
@@ -504,7 +534,13 @@ All IDR pricing (volatile; Indonesian GPU pricing moves weekly) · APC, Synology
 [Samsung 990 PRO datasheet](https://download.semiconductor.samsung.com/resources/data-sheet/samsung_nvme_ssd_990_pro_datasheet_rev.2.0.pdf) ·
 [Seasonic VERTEX GX ATX 3.1](https://seasonic.com/vertex-gx/) ·
 [Fractal Meshify 2 XL](https://support.fractal-design.com/support/solutions/articles/4000174747-meshify-2-xl) ·
-[Tom's Hardware — Synology restores third-party drive support in DSM 7.3](https://www.tomshardware.com/pc-components/nas/synology-walks-back-controversial-compatibility-policy-for-2025-nas-units-third-party-hdd-and-ssd-support-returns-with-diskstation-manager-7-3-update)
+[Tom's Hardware — Synology restores third-party drive support in DSM 7.3](https://www.tomshardware.com/pc-components/nas/synology-walks-back-controversial-compatibility-policy-for-2025-nas-units-third-party-hdd-and-ssd-support-returns-with-diskstation-manager-7-3-update) ·
+[Dong Knows Tech — DS925+ vs DS923+ (PCIe/10 GbE removal)](https://dongknows.com/synology-diskstation-ds925-review/) ·
+[iFeeltech — DS1525+ review, 10 GbE upgrade slot](https://ifeeltech.com/blog/synology-ds1525-plus-review) ·
+[VideoCardz — Zen 6 "Olympic Ridge" desktop set for 2027](https://videocardz.com/newz/amd-zen-6-desktop-ryzen-olympic-ridge-reportedly-set-to-launch-in-2027) ·
+[TweakTown — AM5 support through 2029, Zen 6 and Zen 7](https://www.tweaktown.com/news/111864/amds-am5-socket-support-for-ryzen-cpus-will-continue-through-2029-zen-6-and-zen-7/index.html) ·
+[Kompas Tekno — RTX 5080/5090 Indonesian launch pricing](https://tekno.kompas.com/read/2025/01/31/12060017/nvidia-mulai-jual-gpu-rtx-5080-dan-5090-di-indonesia-ini-harganya) ·
+[Murdockcruz — NVIDIA GPU price update, April 2026](https://www.murdockcruz.com/2026/04/01/update-harga-gpu-nvidia-april-tahun-2026-naik-lagi/)
 
 ---
 
