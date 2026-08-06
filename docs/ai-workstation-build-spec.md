@@ -47,6 +47,48 @@
 
 ---
 
+## ⚖️ Build Options — decide before buying
+
+The decision record specifies **Build B**. Two component choices in it are over-provisioned for the stated workload, and one architectural question is still open. All three builds below share the same CPU, board, storage, cooling, UPS, NAS and backup — **only memory and GPU differ.**
+
+| | **A · Cloud-primary** ⭐ | **B · As specified** | **C · Local-primary** |
+|---|---|---|---|
+| Heavy reasoning runs on | Cloud APIs | Cloud APIs | This machine |
+| GPU | RTX 5060 Ti 16 GB | RTX 5080 16 GB | RTX 5090 32 GB |
+| GPU cost | Rp 8–11 juta | Rp 24–30 juta | Rp 46–65 juta |
+| VRAM ceiling | 16 GB | 16 GB | **32 GB** |
+| Memory | 96 GB @ 6000 CL30 | 96 GB @ 6000 CL30 | 128 GB @ 5600 CL32 |
+| PSU | 850–1000 W | 1200 W | 1200 W |
+| **Tower total** | **Rp 52–72 juta** | **Rp 68–92 juta** | **Rp 95–125 juta** |
+| **Complete environment** | **Rp 114–195 juta** | **Rp 130–215 juta** | **Rp 157–248 juta** |
+
+> **⭐ Recommendation: Build A.** Builds A and B have the *identical* 16 GB VRAM ceiling — the RTX 5080 buys clock speed and bandwidth, not capacity, and the documented GPU workload (embeddings, OCR, Whisper, "moderate local inference") is not bandwidth-bound. That is ≈Rp 16–19 juta for no change in what will actually run.
+>
+> Build C is the only option that changes *which models fit*. If local inference is the real goal rather than the fallback, go to C directly — the 5080 is not a step toward it.
+
+### 🔑 Two swaps that apply to every build
+
+**1 · Memory: 96 GB @ DDR5-6000 CL30 beats 128 GB @ DDR5-5600 CL32**
+
+| | Specified: 2 × 64 GB | **Better: 2 × 48 GB** |
+|---|---|---|
+| Part | G.Skill Flare X5 `F5-6000J3244G64GX2-FX5` ✅ | **G.Skill Flare X5 `F5-6000J3036F48GX2-FX5`** ✅ |
+| Capacity | 128 GB | 96 GB |
+| Rated | DDR5-6000 **CL32-44-44-96** | DDR5-6000 **CL30-36-36-96** |
+| Voltage | 1.40 V | **1.35 V** |
+| Realistic stable speed | ≈5600 — 64 GB modules are exotic on AM5 | **6000 — a well-trodden AM5 configuration** |
+| Cost | Rp 7.5–11 juta | **Rp 4–6 juta** |
+
+Tighter timings, lower voltage, less heat, materially better odds of running at rated speed, and roughly **Rp 3–5 juta cheaper**. The only reason to prefer 128 GB is a workload that genuinely commits more than ~96 GB — and §11's own upgrade trigger sets that bar at 100–110 GB sustained, which the documented workload does not currently reach. Two DIMM slots stay free either way.
+
+**2 · Skip the archive NVMe** — covered in [§10.2](#102-archivestaging-nvme--deferred-not-deleted). Saves Rp 5.5–7.5 juta.
+
+Combined with the corrected GPU pricing, the two swaps take **Rp 9–13 juta** out of the build with no capability loss. Build A removes a further Rp 16–19 juta.
+
+> The specification below documents **Build B as decided**, with the memory swap noted inline. Substitute the GPU and PSU rows for Build A or C.
+
+---
+
 ## 1. Purchase Specification
 
 ### 1.1 Compute Core
@@ -56,7 +98,7 @@
 | **CPU** | AMD Ryzen 9 9950X · `100-100001277WOF` ✅ | 16C/32T · 4.3→5.7 GHz · 170 W · 80 MB cache · AM5 |
 | **Cooler** 🔧 | **Noctua NH-D15 G2 LBC** ✅ | 168 mm · 8 heatpipes · 2×140 mm · *Low Base Convexity* |
 | **Motherboard** | ASUS ProArt X870E-CREATOR WIFI ✅ | 4× M.2 (2× PCIe 5.0) · 10 GbE + 2.5 GbE · 2× USB4 · Wi-Fi 7 · 16+2+2 |
-| **Memory** | 2 × 64 GB DDR5-5600 EXPO, QVL-approved<br>Candidate: G.Skill Flare X5 `F5-6000J3244G64GX2-FX5` ✅ | 128 GB total · run at 5600 · non-ECC |
+| **Memory** 🔧 | **96 GB — G.Skill Flare X5 `F5-6000J3036F48GX2-FX5`** ✅<br>*(specified: 128 GB `F5-6000J3244G64GX2-FX5` ✅)* | 2 × 48 GB · DDR5-6000 **CL30-36-36-96** · 1.35 V · non-ECC |
 | **GPU** | ASUS TUF RTX 5080 16 GB OC `TUF-RTX5080-O16G-GAMING` ✅<br>*or* MSI RTX 5080 16G SUPRIM SOC | 16 GB GDDR7 · 10,752 CUDA · 960 GB/s · 360 W TGP |
 
 > **⚠️ Cooler variant matters.** Order `NH-D15 G2 **LBC**`, not the plain `NH-D15 G2`. Noctua documents LBC as the optimum for AM5's flat IHS. The variant is engraved on the base — verify on receipt. Same price. → [§10.1](#101-cooler-variant--standard-base--lbc)
