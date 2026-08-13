@@ -13,80 +13,7 @@ from app.core.config import get_settings
 
 router = APIRouter(prefix="/v1", tags=["responses"])
 
-_DISABLE_TOOLS_HEADER = "x-relay-disable-tools"
 _SETTINGS = get_settings()
-
-def _header_truthy(value: Optional[str]) -> bool:
-    if value is None:
-        return False
-    v = value.strip().lower()
-    return v in {"1", "true", "yes", "on"}
-
-def _project_root() -> Path:
-    """Locate project root (two levels above this module)."""
-    here = Path(__file__).resolve()
-    return here.parents[2] if len(here.parents) >= 3 else here.parents[1]
-
-def _resolve_tools_manifest_path() -> Optional[Path]:
-    """
-    Resolve settings.TOOLS_MANIFEST into an absolute path.
-    Supports absolute, repo-relative, and root-relative forms.
-    """
-    raw = (getattr(_SETTINGS, "TOOLS_MANIFEST", "") or "").strip()
-    if not raw:
-        return None
-    p = Path(raw)
-    if p.is_absolute():
-        return p
-    root = _project_root()
-    # If path starts with "app/", assume repo-relative
-    if raw.startswith("app/") or raw.startswith("app\\"):
-        return root / raw
-    return root / raw
-
-def _load_tools_manifest() -> List[Dict[str, Any]]:
-    """
-    Read JSON from the tools manifest file.
-    Accepts either a list of tool dicts or {"tools":[…]}.
-    Returns [] if file missing or malformed.
-    """
-    path = _resolve_tools_manifest_path()
-    if not path or not path.is_file():
-        return []
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, list):
-            return [x for x in data if isinstance(x, dict)]
-        if isinstance(data, dict):
-            maybe = data.get("tools")
-            if isinstance(maybe, list):
-                return [x for x in maybe if isinstance(x, dict)]
-    except Exception:
-        pass
-    return []
-
-TOOLS_MANIFEST: List[Dict[str, Any]] = _load_tools_manifest()
-
-def _should_inject_tools(request: Request) -> bool:
-    """Return True if tools should be auto-injected."""
-    if not TOOLS_MANIFEST:
-        return False
-    if _header_truthy(request.headers.get(_DISABLE_TOOLS_HEADER)):
-        return False
-    return True
-
-def _inject_tools_if_missing(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
-    """
-    Inject tools into the request only if caller omitted 'tools' (or set it to None)
-    and injection is enabled.
-    """
-    if not _should_inject_tools(request):
-        return payload
-    if "tools" in payload and payload["tools"] is not None:
-        return payload
-    out = dict(payload)
-    out["tools"] = TOOLS_MANIFEST
-    return out
 
 @router.post("/responses")
 async def create_response(request: Request):
@@ -104,7 +31,6 @@ async def create_response(request: Request):
     except Exception:
         return await forward_openai_request(request)
     if isinstance(body, dict):
-        body = _inject_tools_if_missing(body, request)
         return await forward_openai_method_path(
             "POST",
             "/v1/responses",
@@ -173,8 +99,6 @@ async def responses_compact(payload: ResponsesCompactRequest, request: Request):
         req["tools"] = payload.tools
     if payload.tool_choice is not None:
         req["tool_choice"] = payload.tool_choice
-
-    req = _inject_tools_if_missing(req, request)
 
     upstream_response = await forward_openai_method_path(
         "POST",

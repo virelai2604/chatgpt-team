@@ -148,10 +148,6 @@ class Settings:
     CORS_ALLOW_HEADERS: List[str]
     CORS_ALLOW_CREDENTIALS: bool
 
-    # Tools / validation
-    TOOLS_MANIFEST: str
-    VALIDATION_SCHEMA_PATH: str
-
     # HTTP client behavior
     timeout_seconds: int
     max_retries: int
@@ -266,22 +262,6 @@ class Settings:
         self.OPENAI_API_BASE = value
 
     @property
-    def tools_manifest(self) -> str:
-        return self.TOOLS_MANIFEST
-
-    @tools_manifest.setter
-    def tools_manifest(self, value: str) -> None:
-        self.TOOLS_MANIFEST = value
-
-    @property
-    def validation_schema_path(self) -> str:
-        return self.VALIDATION_SCHEMA_PATH
-
-    @validation_schema_path.setter
-    def validation_schema_path(self, value: str) -> None:
-        self.VALIDATION_SCHEMA_PATH = value
-
-    @property
     def cors_allow_origins(self) -> List[str]:
         return self.CORS_ALLOW_ORIGINS
 
@@ -349,8 +329,6 @@ def get_settings() -> Settings:
     cors_allow_headers = _get_list("CORS_ALLOW_HEADERS", default=["*"])
     cors_allow_credentials = _get_bool("CORS_ALLOW_CREDENTIALS", True)
 
-    tools_manifest = _get_env("TOOLS_MANIFEST", "app/manifests/tools_manifest.json") or "app/manifests/tools_manifest.json"
-    validation_schema_path = _get_env("VALIDATION_SCHEMA_PATH", "") or ""
 
     timeout_seconds = relay_timeout
     max_retries = _get_int("MAX_RETRIES", 3)
@@ -387,8 +365,6 @@ def get_settings() -> Settings:
         CORS_ALLOW_METHODS=cors_allow_methods,
         CORS_ALLOW_HEADERS=cors_allow_headers,
         CORS_ALLOW_CREDENTIALS=cors_allow_credentials,
-        TOOLS_MANIFEST=tools_manifest,
-        VALIDATION_SCHEMA_PATH=validation_schema_path,
         timeout_seconds=timeout_seconds,
         max_retries=max_retries,
     )

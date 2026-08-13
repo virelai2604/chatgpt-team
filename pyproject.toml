@@ -66,7 +66,3 @@ issues = "https://github.com/virelai2604/chatgpt-team/issues"
 where = ["."]
 include = ["app*"]
 exclude = ["tests*", "docs*", "render*"]
-
-# Include non-.py files needed at runtime (tools manifest, etc.)
-[tool.setuptools.package-data]
-app = ["manifests/*.json"]
