@@ -23,16 +23,42 @@ def _base_error_payload(
     message: str,
     status: int,
     code: Optional[str] = None,
+    param: Optional[str] = None,
+    details: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
-    return {
-        "error": {
-            "message": message,
-            "type": "relay_error",
-            "param": None,
-            "code": code,
-        },
-        "status": status,
+    error: dict[str, Any] = {
+        "message": message,
+        "type": "relay_error",
+        "param": param,
+        "code": code,
     }
+    if details:
+        error["details"] = details
+    return {"error": error, "status": status}
+
+
+def _location(loc: Any) -> str:
+    """Render a pydantic error location tuple as a dotted path, e.g. ("body", "count") -> "body.count"."""
+    return ".".join(str(part) for part in loc) if isinstance(loc, (list, tuple)) else str(loc)
+
+
+def _validation_details(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Field-level detail for a 422, as `loc` / `msg` / `type` triples.
+
+    Deliberately drops pydantic's `input` key, which FastAPI's default handler echoes
+    back. The relay forwards request bodies that can carry credentials and user content,
+    and reflecting them into an error response is a disclosure surface with no
+    diagnostic value the location and message do not already provide.
+    """
+    return [
+        {
+            "loc": _location(err.get("loc", ())),
+            "msg": str(err.get("msg", "")),
+            "type": str(err.get("type", "")),
+        }
+        for err in errors
+    ]
 
 
 # ExceptionGroup exists in Python 3.11+
@@ -73,10 +99,19 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        logger.warning("Validation error", extra={"errors": exc.errors()})
+        errors = exc.errors()
+        logger.warning("Validation error", extra={"errors": errors})
+        details = _validation_details(errors)
         return JSONResponse(
             status_code=422,
-            content=_base_error_payload("Validation error", 422),
+            content=_base_error_payload(
+                "Validation error",
+                422,
+                # `param` names the first offending field, matching how the OpenAI API
+                # reports a bad parameter; `details` carries the rest.
+                param=details[0]["loc"] if details else None,
+                details=details,
+            ),
         )
 
     @app.exception_handler(OpenAIError)
