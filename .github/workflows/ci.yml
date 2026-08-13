@@ -119,7 +119,43 @@ jobs:
           RELAY_AUTH_ENABLED: "false"
         run: |
           set -euo pipefail
-          # Integration tests require a live relay (local uvicorn or Render).
-          # Render auto-deploys on commit, so the unit gate here runs everything
-          # else in-process against the FastAPI app.
+          # In-process gate against the FastAPI app. The integration-marked tests
+          # need a relay listening on a socket; the job below boots one.
           pytest -q -m "not integration"
+
+      # These 37 tests were deselected on every CI run since the suite was
+      # written, so 14 of them had never executed anywhere. They do not need
+      # OpenAI credentials — only a relay on a socket — so boot one and run them.
+      # The other 23 self-skip on INTEGRATION_OPENAI_API_KEY and stay skipped;
+      # running those still requires a real key and a deliberate opt-in.
+      - name: Start a local relay
+        env:
+          RELAY_KEY: ci-integration-key
+          RELAY_AUTH_ENABLED: "true"
+        run: |
+          set -euo pipefail
+          nohup python -m uvicorn app.main:app \
+            --host 127.0.0.1 --port 8099 --log-level warning > uvicorn.log 2>&1 &
+          # Poll rather than sleep: /v1/health is unauthenticated by design.
+          for _ in $(seq 1 30); do
+            if curl -fs -o /dev/null http://127.0.0.1:8099/v1/health; then
+              echo "relay up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "relay did not come up in 30s"; cat uvicorn.log; exit 1
+
+      - name: Run integration tests against the local relay
+        env:
+          RELAY_BASE_URL: http://127.0.0.1:8099
+          RELAY_BASE: http://127.0.0.1:8099
+          RELAY_KEY: ci-integration-key
+          RELAY_TOKEN: ci-integration-key
+          RELAY_AUTH_TOKEN: ci-integration-key
+        run: |
+          set -euo pipefail
+          pytest -q -m integration -rs
+
+      - name: Relay log on failure
+        if: failure()
+        run: cat uvicorn.log || true
