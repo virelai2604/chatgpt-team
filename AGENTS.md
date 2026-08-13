@@ -4,28 +4,24 @@ This AGENTS.md applies to the entire `chatgpt-team` repo. The primary goal is to
 
 ---
 
-## Baseline + Changes Contract (How you must read repo context)
+## How you must read repo context
 
-I will provide you with two generated Markdown artifacts:
+Read the working tree directly. It is the only source of truth.
 
-1) `chatgpt_baseline.md`
-   - Authoritative baseline snapshot of the repo scope that matters.
-   - Treat it as the codebase unless overridden by changes.
-
-2) `chatgpt_changes.md`
-   - Delta overlay on top of the baseline.
-   - May include: change summary, unified diff patch, and full WORKTREE contents of changed files.
+This repo previously shipped two generated snapshots — `chatgpt_baseline.md` and
+`chatgpt_changes.md` — that agents were told to treat as the codebase. Both were
+pinned at merge-base `f267274` and had drifted badly: the baseline still showed
+`extra_headers` for the realtime websocket connect, a form that raises `TypeError`
+against the pinned `websockets>=15` (see
+`reference/openai/01_OpenAI_Docs_Summaries/14-realtime.md`). They have been removed,
+along with `chatgpt_sync.sh` and `generate_tree.py` which produced them.
 
 Rules:
-- If the same file appears in both baseline and changes:
-  - The version in `chatgpt_changes.md` is the latest truth.
-- If a patch conflicts with embedded changed-file content:
-  - Trust the embedded changed-file content and flag the inconsistency.
-- Never invent missing files:
-  - If a file is not present in baseline scope and not mentioned in changes, ask for the exact path.
+- Read files from the tree; never rely on a snapshot of them.
+- Never invent missing files. If a path you need does not exist, ask for it.
 
 Scope that matters long-term:
-- repo root: `project-tree.md`, `pyproject.toml`, `OPENAI_REFERENCES.md`
+- repo root: `pyproject.toml`, `render.yaml`, `OPENAI_REFERENCES.md`
 - directories: `app/`, `tests/`, `static/`, `schemas/`
 - runnable examples (NOT part of the relay app): `examples/agents/`, `examples/bifl/`, `examples/mone/`
 - OpenAI reference catalog: `reference/openai/` (`SOURCES.md`, `sources.json`, `openai-reference-manifest.jsonl`, snapshots)

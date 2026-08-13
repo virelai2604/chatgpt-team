@@ -2,8 +2,12 @@
 # Render Service Manifest
 # ChatGPT Team Relay — Ground Truth API v1.8
 # SDK Targets:
-#   - openai-python 2.11.x
-#   - openai-node 6.9.x
+#   - openai-python 3.x (HTTPX2)
+#
+# This file documents the live service. The service was created manually, so
+# Render reads the dashboard, not this manifest — keep them in step by hand.
+# Verified against the dashboard: Auto-Deploy "On Commit", branch main,
+# build `pip install -r requirements.txt`, start `uvicorn app.main:app`.
 # ==============================================================
 
 services:
@@ -79,7 +83,7 @@ services:
       # PYTHON_VERSION from the dashboard, not this file — to change the runtime,
       # edit the env var in Render (Environment tab), not just here.
       - key: PYTHON_VERSION
-        value: "3.12.5"
+        value: "3.13"
 
       # -------- Streaming / orchestration --------
       - key: ENABLE_STREAM
@@ -95,11 +99,22 @@ services:
       - key: CORS_ALLOW_HEADERS
         value: Authorization,Content-Type,Accept
 
-      # -------- Tools & validation schema --------
+      # -------- Tools manifest --------
+      # Read by app/routes/responses.py (app/manifests/__init__.py hardcodes its
+      # own path and ignores this value).
       - key: TOOLS_MANIFEST
         value: app/manifests/tools_manifest.json
-      - key: VALIDATION_SCHEMA_PATH
-        value: ChatGPT-API_reference_ground_truth-2025-10-29.pdf
+
+      # VALIDATION_SCHEMA_PATH removed: no code reads it and the PDF it pointed
+      # at is not in the repo.
+
+      # -------- Vector store (app/routes/bifl.py) --------
+      - key: BIFL_VECTOR_STORE_ID
+        sync: false
+
+      # -------- Realtime WS gate (app/routes/realtime.py) --------
+      - key: RELAY_REALTIME_WS_ENABLED
+        value: "1"
 
       # -------- Logging --------
       - key: LOG_LEVEL
