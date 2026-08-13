@@ -3,11 +3,16 @@
 openai-agents>=0.17,<0.18
 
 # Deliberately still on the 2.x line while the rest of the repo is on openai 3.x.
-# The Agents SDK has not migrated to the openai 3.0 / HTTPX2 release yet: every
-# published openai-agents up to 0.20.0 declares `openai>=2.45,<3`, so pinning 3.x
-# here makes the example unresolvable. Bump this in lockstep with openai-agents
-# once it allows openai 3.x. Install this file in its own virtualenv, separate
-# from the relay's.
+#
+# Upstream has since fixed this — openai/openai-agents-python `main` carries
+# "feat: support OpenAI Python 3 and HTTPX2" (#4380) and now declares
+# `openai>=3.0.0,<4`. It is NOT released yet: the latest published openai-agents
+# is still 0.20.0, whose metadata requires `openai<3,>=2.45.0`, so pinning 3.x
+# here would still make the example unresolvable.
+#
+# Unblock condition is now a release, not a migration. When openai-agents ships a
+# version declaring openai 3.x, bump both pins together. Install this file in its
+# own virtualenv, separate from the relay's.
 openai>=2.45,<3.0
 
 # Only needed for agent_server.py (exposing the agent over HTTP).
