@@ -56,12 +56,12 @@ CLOUDFLARE_ACCOUNT_ID=...
 curl -H "Authorization: Bearer <key>" 
      -H "Content-Type: application/json" 
      http://localhost:8000/v1/chat/completions 
-     -d '{"model": "gpt-4-turbo", "messages": [{"role": "user", "content": "Hello"}]}'
+     -d '{"model": "gpt-5.5", "messages": [{"role": "user", "content": "Hello"}]}'
 
 ### PowerShell 7+
 
 \{
-  "model": "gpt-4-turbo",
+  "model": "gpt-5.5",
   "messages": [
     {
       "role": "user",
@@ -69,15 +69,15 @@ curl -H "Authorization: Bearer <key>"
     }
   ]
 } = @{
-    model = "gpt-4-turbo"
+    model = "gpt-5.5"
     messages = @(@{ role = "user"; content = "Hello" })
 } | ConvertTo-Json
 
-\@{id=chatcmpl-CNKxci6YTElwu0iMnhOCN7tdiKd8r; object=chat.completion; created=1759678152; model=gpt-4-turbo-2024-04-09; choices=System.Object[]; usage=; service_tier=default; system_fingerprint=fp_de235176ee} = Invoke-RestMethod 
+\@{id=chatcmpl-CNKxci6YTElwu0iMnhOCN7tdiKd8r; object=chat.completion; created=1759678152; model=gpt-5.5; choices=System.Object[]; usage=; service_tier=default; system_fingerprint=fp_de235176ee} = Invoke-RestMethod 
     -Uri "http://localhost:8000/v1/chat/completions" 
     -Method Post 
     -Body \{
-  "model": "gpt-4-turbo",
+  "model": "gpt-5.5",
   "messages": [
     {
       "role": "user",
@@ -88,7 +88,7 @@ curl -H "Authorization: Bearer <key>"
     -ContentType "application/json" 
     -Headers @{ Authorization = "Bearer <key>" }
 
-\@{id=chatcmpl-CNKxci6YTElwu0iMnhOCN7tdiKd8r; object=chat.completion; created=1759678152; model=gpt-4-turbo-2024-04-09; choices=System.Object[]; usage=; service_tier=default; system_fingerprint=fp_de235176ee}
+\@{id=chatcmpl-CNKxci6YTElwu0iMnhOCN7tdiKd8r; object=chat.completion; created=1759678152; model=gpt-5.5; choices=System.Object[]; usage=; service_tier=default; system_fingerprint=fp_de235176ee}
 
 *No backticks or deprecated syntax. All PowerShell code is PS7+ ready.*
 

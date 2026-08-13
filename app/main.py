@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.sse import actions_router as sse_actions_router
 from app.api.sse import router as sse_router
@@ -67,6 +70,17 @@ def create_app() -> FastAPI:
     # SSE streaming endpoints (non-Actions + Actions wrapper)
     app.include_router(sse_router)
     app.include_router(sse_actions_router)
+
+    # Static assets. RelayAuthMiddleware has always exempted /static/ (relay_auth.py:46)
+    # but nothing ever mounted it, so every path under it 404'd — including the plugin
+    # manifest. /.well-known is mounted at the root because that is where clients look
+    # for ai-plugin.json.
+    static_dir = Path(__file__).resolve().parent.parent / "static"
+    if static_dir.is_dir():
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
+        well_known = static_dir / ".well-known"
+        if well_known.is_dir():
+            app.mount("/.well-known", StaticFiles(directory=well_known), name="well-known")
 
     return app
 
