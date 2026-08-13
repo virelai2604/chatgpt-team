@@ -43,7 +43,12 @@ def _extract_relay_key(request: Request) -> Optional[str]:
 class RelayAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Public endpoints (no auth).
-        if request.url.path in _PUBLIC_PATHS or request.url.path.startswith("/static/"):
+        if (
+            request.url.path in _PUBLIC_PATHS
+            or request.url.path.startswith("/static/")
+            # Plugin/Actions discovery must be readable before a client has a key.
+            or request.url.path.startswith("/.well-known/")
+        ):
             return await call_next(request)
 
         # If auth is disabled, do nothing.
