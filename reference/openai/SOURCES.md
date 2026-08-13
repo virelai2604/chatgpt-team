@@ -30,7 +30,7 @@ Machine-readable companion: `sources.json`.
 | 2 | openai/plugins | Current Codex plugin examples (`.codex-plugin/plugin.json` + `skills/`) | P0 | Reference structure to package your tools |
 | 3 | openai/skills | **Deprecated** — historical skill patterns; points to openai/plugins | P1 | Reference only; use plugins instead |
 | 4 | openai/openai-node | JS/TS SDK (Render/Cloudflare/n8n) | P1 | `npm i openai` when needed |
-| 5 | openai/openai-python | **Python SDK** (WSL scripts, embeddings, file search) | P1 | `pip install openai` (pinned 2.44) |
+| 5 | openai/openai-python | **Python SDK** (WSL scripts, embeddings, file search) | P1 | `pip install openai` (pinned `>=3.0,<4.0`; 3.0 moved to HTTPX2) |
 | 6 | openai/openai-openapi | API schema source for endpoint modeling | P2 | Reference for the relay's OpenAPI |
 | 7 | openai/evals | Evaluation patterns / regression gates | P2 | Add later for quality gates |
 

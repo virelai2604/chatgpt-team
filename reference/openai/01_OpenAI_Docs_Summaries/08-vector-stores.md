@@ -88,7 +88,7 @@ Related helpers on `client.vector_stores.file_batches`: `create()`, `create_and_
 - `client.vector_stores.file_batches.upload_and_poll(vector_store_id=vs_id, files=streams)` uploads distilled `.md` knowledge (line 80-82).
 - Prints `BIFL_VECTOR_STORE_ID=vs_...` to paste into Render env (line 92). That env var turns on `/v1/bifl/search`, `/v1/bifl/fetch`, and the `agent_pro.py` `FileSearchTool` RAG path.
 - App-side route lives at `app/routes/vector_stores.py`; local cache at `data/vector_stores/vectors.db`.
-- Doc string pins `openai>=2.44,<3.0` and reads `OPENAI_API_KEY` / `OPENAI_BASE_URL` from env.
+- Doc string pins `openai>=3.0,<4.0` and reads `OPENAI_API_KEY` / `OPENAI_BASE_URL` from env.
 
 ## Verify / TODO
 - Spec caps `file_ids` per store-create at 500 and file_batches at 2000; the older SDK helper docs sometimes cite 500 per batch — treat the spec's 2000 as authoritative but test large batches before relying on it.

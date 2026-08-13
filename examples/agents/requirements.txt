@@ -1,7 +1,14 @@
 # Client-side deps for the agents example. Kept separate from the relay's own
 # runtime requirements — agents are consumers of the relay, not part of it.
 openai-agents>=0.17,<0.18
-openai>=2.44,<3.0
+
+# Deliberately still on the 2.x line while the rest of the repo is on openai 3.x.
+# The Agents SDK has not migrated to the openai 3.0 / HTTPX2 release yet: every
+# published openai-agents up to 0.20.0 declares `openai>=2.45,<3`, so pinning 3.x
+# here makes the example unresolvable. Bump this in lockstep with openai-agents
+# once it allows openai 3.x. Install this file in its own virtualenv, separate
+# from the relay's.
+openai>=2.45,<3.0
 
 # Only needed for agent_server.py (exposing the agent over HTTP).
 fastapi>=0.138,<1.0

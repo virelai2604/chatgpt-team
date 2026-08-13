@@ -18,7 +18,7 @@
     {"rank": 2, "repo": "openai/plugins", "why": "Current Codex plugin examples (.codex-plugin/plugin.json + skills)", "priority": "P0", "vendor": false, "use": "reference structure to package tools"},
     {"rank": 3, "repo": "openai/skills", "why": "Deprecated; historical skill patterns; points to openai/plugins", "priority": "P1", "vendor": false, "use": "reference only"},
     {"rank": 4, "repo": "openai/openai-node", "why": "JS/TS SDK for Render/Cloudflare/n8n", "priority": "P1", "vendor": false, "use": "npm install openai"},
-    {"rank": 5, "repo": "openai/openai-python", "why": "Python SDK for WSL scripts, embeddings, file search", "priority": "P1", "vendor": false, "use": "pip install openai (pinned 2.44)", "fetched": false},
+    {"rank": 5, "repo": "openai/openai-python", "why": "Python SDK for WSL scripts, embeddings, file search", "priority": "P1", "vendor": false, "use": "pip install openai (pinned >=3.0,<4.0; 3.0 moved to HTTPX2)", "fetched": true},
     {"rank": 6, "repo": "openai/openai-openapi", "why": "API schema source for endpoint modeling", "priority": "P2", "vendor": false, "use": "reference for the relay OpenAPI", "fetched": false},
     {"rank": 7, "repo": "openai/evals", "why": "Evaluation patterns / regression gates", "priority": "P2", "vendor": false, "use": "add later for quality gates", "fetched": false}
   ]

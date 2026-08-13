@@ -4,7 +4,10 @@ Everything you need, pulled from OpenAI's GitHub and developer docs. Kept simple
 on purpose: single agent + function tools + file search. No guardrails/handoffs
 yet (add later if the project grows).
 
-Python note: the SDKs need **Python 3.9+**; you run 3.12/3.13. Pinned `openai==2.44`.
+Python note: `openai` 3.x needs **Python 3.10+**; you run 3.12/3.13. Pinned
+`openai>=3.0,<4.0`. Exception: `examples/agents/` stays on `openai>=2.45,<3.0`
+because `openai-agents` (through 0.20.0) still requires `openai<3` — install it
+in its own virtualenv.
 
 ---
 
