@@ -1,0 +1,6 @@
+# Development / CI dependencies: the runtime install plus the `dev` extra
+# (pytest and its plugins) from pyproject.toml.
+#
+# Render installs requirements.txt, not this file, so nothing added here reaches
+# the deployed service.
+-e .[dev]

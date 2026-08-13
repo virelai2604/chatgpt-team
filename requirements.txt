@@ -1,3 +1,6 @@
-# Install the relay project in editable mode with dev extras.
-# This keeps requirements.txt fully in sync with pyproject.toml.
--e .[dev]
+# Runtime dependencies only. This is what Render installs (see render.yaml:
+# buildCommand -> `pip install -r requirements.txt`), so it must NOT pull the
+# dev extra — pytest and friends have no business in the deployed service.
+#
+# For a development or CI environment, use requirements-dev.txt instead.
+-e .

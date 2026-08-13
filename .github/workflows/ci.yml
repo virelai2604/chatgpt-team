@@ -73,6 +73,7 @@ jobs:
           python-version: "3.13"
           cache: "pip"
           cache-dependency-path: |
+            requirements-dev.txt
             requirements.txt
             pyproject.toml
 
@@ -81,17 +82,16 @@ jobs:
           set -euo pipefail
           python -m pip install --upgrade pip
 
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
+          # requirements-dev.txt is `-e .[dev]`: the runtime install plus pytest and
+          # its plugins. requirements.txt is runtime-only because Render installs it.
+          if [ -f requirements-dev.txt ]; then
+            pip install -r requirements-dev.txt
           elif [ -f pyproject.toml ]; then
-            pip install .
+            pip install ".[dev]"
           else
-            echo "No requirements.txt or pyproject.toml found; cannot install deps."
+            echo "No requirements-dev.txt or pyproject.toml found; cannot install deps."
             exit 1
           fi
-
-          # Ensure pytest exists even if not included in runtime deps
-          pip install pytest
 
       - name: Run tests
         env:
