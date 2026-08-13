@@ -120,7 +120,9 @@ def configure_logging(level: Optional[str] = None) -> None:
         )
         root_logger.addHandler(error_handler)
 
-    setattr(root_logger, "_relay_configured", True)
+    # setattr, not direct assignment: logging.Logger declares no such attribute,
+    # so assigning it inline is a type error even though it works at runtime.
+    setattr(root_logger, "_relay_configured", True)  # noqa: B010
 
 
 def get_logger(name: str) -> logging.Logger:

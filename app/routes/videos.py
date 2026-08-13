@@ -282,8 +282,8 @@ async def actions_generate_video(payload: ActionsVideoGenerationRequest, request
     client = get_async_httpx_client()
     try:
         resp = await client.post(upstream_url, headers=headers, data=data, files=files)
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Upstream timeout while generating video")
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="Upstream timeout while generating video") from exc
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Upstream HTTP error while generating video: {exc!r}") from exc
 

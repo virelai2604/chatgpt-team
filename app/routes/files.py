@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from typing import Any, Dict, Optional
+from typing import Dict
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -121,8 +121,8 @@ async def actions_files_upload(payload: ActionsFileUploadRequest, request: Reque
     max_bytes = 10 * 1024 * 1024  # 10 MiB decoded
     try:
         raw = base64.b64decode(payload.data_base64, validate=True)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid base64 in data_base64")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid base64 in data_base64") from exc
 
     if len(raw) == 0:
         raise HTTPException(status_code=400, detail="Empty file upload is not allowed")
@@ -153,10 +153,10 @@ async def actions_files_upload(payload: ActionsFileUploadRequest, request: Reque
 
     try:
         resp = await client.post(upstream_url, headers=headers, data=data, files=files)
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Upstream timeout while uploading file")
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Upstream HTTP error while uploading file: {e!r}")
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="Upstream timeout while uploading file") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream HTTP error while uploading file: {exc!r}") from exc
 
     # Return upstream response as-is (JSON error bodies included)
     return Response(

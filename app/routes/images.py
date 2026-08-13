@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
@@ -112,17 +112,19 @@ async def _download_bytes(url: str) -> bytes:
     timeout = httpx.Timeout(20.0, connect=10.0)
     limits = httpx.Limits(max_keepalive_connections=5, max_connections=10)
 
-    async with httpx.AsyncClient(timeout=timeout, limits=limits, follow_redirects=False) as client:
-        async with client.stream("GET", url, headers={"Accept": "application/octet-stream"}) as resp:
-            if resp.status_code != 200:
-                raise HTTPException(status_code=400, detail=f"Failed to download file (HTTP {resp.status_code})")
+    async with (
+        httpx.AsyncClient(timeout=timeout, limits=limits, follow_redirects=False) as client,
+        client.stream("GET", url, headers={"Accept": "application/octet-stream"}) as resp,
+    ):
+        if resp.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Failed to download file (HTTP {resp.status_code})")
 
-            buf = bytearray()
-            async for chunk in resp.aiter_bytes():
-                buf.extend(chunk)
-                if len(buf) > _MAX_IMAGE_BYTES:
-                    raise HTTPException(status_code=400, detail="Image exceeds 4 MB limit")
-            return bytes(buf)
+        buf = bytearray()
+        async for chunk in resp.aiter_bytes():
+            buf.extend(chunk)
+            if len(buf) > _MAX_IMAGE_BYTES:
+                raise HTTPException(status_code=400, detail="Image exceeds 4 MB limit")
+        return bytes(buf)
 
 
 def _ensure_png(data: bytes, *, label: str) -> None:
@@ -160,7 +162,6 @@ async def _post_multipart_to_upstream(
     files: Dict[str, Tuple[str, bytes, str]],
     data: Dict[str, str],
 ) -> Response:
-    s = get_settings()
     upstream_url = build_upstream_url(endpoint_path)
     timeout = httpx.Timeout(60.0, connect=10.0)
     limits = httpx.Limits(max_keepalive_connections=10, max_connections=20)

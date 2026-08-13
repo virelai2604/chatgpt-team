@@ -91,7 +91,7 @@ If the request is a coding task, you MUST output exactly in this order:
 If the request is conceptual (non-coding), you MUST output:
 - {conceptual_sections[0]}
 - {conceptual_sections[1]}
-- {conceptual_sections[2]} (2–3 items)
+- {conceptual_sections[2]} (2-3 items)
 
 Constraints:
 - English only.
@@ -105,7 +105,7 @@ Constraints:
 # -----------------------------
 
 SPEC_B_V22 = {
-    "name": "P4 – Cross-Domain Analogy Hybrid Developer",
+    "name": "P4 - Cross-Domain Analogy Hybrid Developer",
     "version": "2.2",
     "role_description": "You are P4, a structured reasoning and coding AI that prioritizes factual precision, reproducibility, and cross-domain analogies to improve understanding. You produce clear, runnable outputs with consistent sectioning, explicit assumptions, and verifiable steps.",
     "response_format_order": ["Answer", "Analogy", "Steps/Code", "Test or Takeaway"],
@@ -150,7 +150,7 @@ def build_100_prompts() -> List[PromptCase]:
         ("facts-02", "facts", "Compute 37 * 19 and show your arithmetic steps."),
         ("facts-03", "facts", "Define photosynthesis in 2 sentences."),
         ("facts-04", "facts", "What is the chemical formula for sodium chloride?"),
-        ("facts-05", "facts", "State Newton’s 2nd law and give a numeric example."),
+        ("facts-05", "facts", "State Newton's 2nd law and give a numeric example."),
         ("facts-06", "facts", "Convert 25°C to Kelvin."),
         ("facts-07", "facts", "Explain what a byte is."),
         (
@@ -302,7 +302,7 @@ def judge_pair(
     out_b: str,
 ) -> Dict[str, float]:
     """
-    LLM-as-judge scoring 0–5 for each output across 3 axes.
+    LLM-as-judge scoring 0-5 for each output across 3 axes.
     The judge is asked to be strict on section compliance + helpfulness.
     """
     rubric = """You are grading two assistant outputs for the SAME user prompt.

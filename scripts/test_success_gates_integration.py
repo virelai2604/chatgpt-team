@@ -102,31 +102,30 @@ def test_gate_b_sse_smoke() -> None:
     payload = {"model": model, "input": "Write exactly: 12345678901234567890"}
     max_seconds = float(os.environ.get("SSE_MAX_TIME_SECONDS") or "15")
 
-    with httpx.Client(timeout=max_seconds + 10) as client:
-        with client.stream(
-            "POST",
-            f"{base}/v1/responses:stream",
-            headers=_headers(accept="text/event-stream", content_type="application/json"),
-            json=payload,
-        ) as r:
-            assert r.status_code == 200, r.read().decode("utf-8", errors="replace")
-            ctype = r.headers.get("content-type", "")
-            assert "text/event-stream" in ctype.lower(), ctype
+    with httpx.Client(timeout=max_seconds + 10) as client, client.stream(
+        "POST",
+        f"{base}/v1/responses:stream",
+        headers=_headers(accept="text/event-stream", content_type="application/json"),
+        json=payload,
+    ) as r:
+        assert r.status_code == 200, r.read().decode("utf-8", errors="replace")
+        ctype = r.headers.get("content-type", "")
+        assert "text/event-stream" in ctype.lower(), ctype
 
-            saw_data = False
-            buf = b""
-            start = time.time()
+        saw_data = False
+        buf = b""
+        start = time.time()
 
-            for chunk in r.iter_bytes():
-                if chunk:
-                    buf += chunk
-                    if b"data:" in buf:
-                        saw_data = True
-                        break
-                if time.time() - start > max_seconds:
+        for chunk in r.iter_bytes():
+            if chunk:
+                buf += chunk
+                if b"data:" in buf:
+                    saw_data = True
                     break
+            if time.time() - start > max_seconds:
+                break
 
-            assert saw_data, buf[:800].decode("utf-8", errors="replace")
+        assert saw_data, buf[:800].decode("utf-8", errors="replace")
 
 
 @pytest.mark.integration

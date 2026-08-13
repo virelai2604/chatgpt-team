@@ -223,7 +223,10 @@ def _detect_wants_stream(*, accept_header: str, content_type: Optional[str], bod
             obj = json.loads(body_bytes.decode("utf-8"))
             if isinstance(obj, dict) and obj.get("stream") is True:
                 return True
-        except Exception:
+        except Exception:  # noqa: S110
+            # Best-effort only. A body that is not valid JSON cannot declare
+            # "stream": true, so falling through to False is the correct answer;
+            # upstream is the one that gets to reject the malformed body.
             pass
 
     return False

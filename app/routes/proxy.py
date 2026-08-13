@@ -217,10 +217,7 @@ def _blocked_reason(method: str, path: str, body: Any) -> Optional[str]:
 
 
 def _is_allowlisted(method: str, path: str) -> bool:
-    for methods, rx in _ALLOWLIST:
-        if method in methods and rx.match(path):
-            return True
-    return False
+    return any(method in methods and rx.match(path) for methods, rx in _ALLOWLIST)
 
 
 @router.post("/proxy")

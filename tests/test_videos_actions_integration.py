@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import base64
-import os
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 import pytest
 
 from app.routes.videos import (
-    _ALLOWED_VIDEO_MODELS,
     _ALLOWED_VIDEO_SECONDS,
-    _ALLOWED_VIDEO_SIZES,
     _MAX_DURATION_SECONDS,
     _MAX_FRAMES,
     _MAX_VIDEO_BYTES,

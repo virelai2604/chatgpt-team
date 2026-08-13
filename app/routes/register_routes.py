@@ -44,7 +44,10 @@ def register_routes(app: _RouterLike) -> None:
     # Guard against double-registration (can happen in some import patterns/tests).
     if getattr(app, "_routes_registered", False):
         return
-    setattr(app, "_routes_registered", True)
+    # setattr, not `app._routes_registered = True`: `app` is typed as the
+    # _RouterLike Protocol, which declares no such attribute, so direct
+    # assignment is a type error even though it works at runtime.
+    setattr(app, "_routes_registered", True)  # noqa: B010
 
     # Health is special: exposes both `/health` and `/v1/health`
     app.include_router(health.router)

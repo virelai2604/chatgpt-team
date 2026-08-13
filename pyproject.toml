@@ -52,6 +52,7 @@ dev = [
   "requests>=2.32,<3.0",
   "requests-mock>=1.12,<2.0",
   "anyio>=4.4,<5.0",
+  "ruff>=0.15,<1.0",
 ]
 
 [project.urls]
@@ -66,3 +67,33 @@ issues = "https://github.com/virelai2604/chatgpt-team/issues"
 where = ["."]
 include = ["app*"]
 exclude = ["tests*", "docs*", "render*"]
+
+# -----------------------------------------
+# Ruff: bug-focused, not style-focused
+# -----------------------------------------
+# The selection is deliberately narrow. F/B/ASYNC/S/SIM/C4/PIE/RUF catch defects
+# (undefined names, dead locals, swallowed exception causes, blocking calls in
+# async paths, unsafe defaults); formatting rules are left out because nothing
+# here reformats code and a churny diff hides the findings that matter.
+#
+# Pinning the selection also makes `# noqa: S104` and friends meaningful. With no
+# config, the rule a noqa names is only enabled when someone passes --select for
+# it, so ruff reports every one of them as an unused directive.
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+# E402 is included for one reason: tests/client.py must set env vars before it
+# imports the app, and the `# noqa: E402` marking that is only meaningful if the
+# rule is on.
+select = ["F", "B", "ASYNC", "S", "SIM", "C4", "PIE", "RUF", "T20", "E402"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert; that is the whole point. S101 flags every one of them.
+"tests/**" = ["S101"]
+# Scripts are CLIs. print() is their output, not a stray debug statement.
+"scripts/**" = ["S101", "T201"]
+# A runnable client demo that happens to live under tests/.
+"tests/relay_client_example.py" = ["T201"]
+"examples/**" = ["S101", "T201"]

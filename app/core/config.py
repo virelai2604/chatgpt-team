@@ -79,7 +79,7 @@ def _parse_list(raw: str) -> List[str]:
             val = json.loads(raw)
             if isinstance(val, list):
                 return [str(x).strip() for x in val if str(x).strip() != ""]
-        except Exception:
+        except Exception:  # noqa: S110 - JSON is optional here; CSV is the documented format
             # fall back to CSV parsing
             pass
 
@@ -306,7 +306,10 @@ def get_settings() -> Settings:
     default_model = _get_env("DEFAULT_MODEL", "gpt-5.5") or "gpt-5.5"
     realtime_model = _get_env("REALTIME_MODEL", "gpt-realtime") or "gpt-realtime"
 
-    relay_host = _get_env("RELAY_HOST", "0.0.0.0") or "0.0.0.0"
+    # 0.0.0.0 is deliberate and required: Render (and any container runtime) routes
+    # to the published port, and a process bound to 127.0.0.1 is unreachable from
+    # outside the container. Override with RELAY_HOST when running on a host directly.
+    relay_host = _get_env("RELAY_HOST", "0.0.0.0") or "0.0.0.0"  # noqa: S104
     relay_port = _get_int("RELAY_PORT", 8000)
     relay_name = _get_env("RELAY_NAME", "ChatGPT Team Relay (local dev)") or "ChatGPT Team Relay (local dev)"
     relay_timeout = _get_int("RELAY_TIMEOUT", 120)

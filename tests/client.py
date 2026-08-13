@@ -14,7 +14,7 @@ os.environ.setdefault("RELAY_AUTH_ENABLED", "false")
 # Upstream base URL can stay default; override if you proxy:
 os.environ.setdefault("OPENAI_API_BASE", "https://api.openai.com/v1")
 
-from app.main import app  # noqa: E402  (import after env is set)
+from app.main import app
 
 
 def _build_client() -> TestClient:
