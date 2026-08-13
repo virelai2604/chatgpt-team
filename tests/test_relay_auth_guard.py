@@ -109,3 +109,24 @@ def test_relay_auth_misconfiguration_is_a_server_error(monkeypatch: pytest.Monke
 
         # Public paths stay reachable even when auth is misconfigured.
         assert client.get("/health").status_code == 200
+
+
+def test_request_id_is_stamped_even_on_auth_rejections(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Correlation IDs must survive the auth short-circuit.
+
+    Starlette builds the middleware stack in reverse, so P4OrchestratorMiddleware
+    has to be added AFTER RelayAuthMiddleware to end up outside it. Get that order
+    wrong and 401s ship with no x-request-id — exactly the responses you most need
+    to trace in production logs.
+    """
+    monkeypatch.setattr(settings, "RELAY_AUTH_ENABLED", True, raising=False)
+    monkeypatch.setattr(settings, "RELAY_KEY", "secret-relay-key", raising=False)
+
+    with TestClient(app) as client:
+        rejected = client.get("/v1/models")
+        assert rejected.status_code == 401
+        assert rejected.headers.get("x-request-id"), "401 responses must carry a correlation ID"
+
+        # An inbound id is honoured rather than replaced.
+        echoed = client.get("/health", headers={"x-request-id": "caller-supplied"})
+        assert echoed.headers.get("x-request-id") == "caller-supplied"
