@@ -1,3 +1,5 @@
 # M-One business tools use the official OpenAI Python SDK directly.
-openai>=2.44,<3.0
+# review_miner.py only constructs OpenAI(base_url=..., api_key=...) and calls
+# the generated resources, so it is unaffected by the 3.0 HTTPX2 migration.
+openai>=3.0,<4.0
 pydantic>=2.13,<3.0

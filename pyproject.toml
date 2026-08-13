@@ -12,12 +12,17 @@ requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.138,<1.0",
   "uvicorn[standard]>=0.49,<1.0",
+  # The relay's own outbound HTTP stack. This declaration is load-bearing: the
+  # OpenAI SDK used to pull httpx in transitively, but since openai 3.0 it ships
+  # httpx2 instead and installs neither httpx nor certifi.
   "httpx>=0.28,<1.0",
 
   # Official OpenAI Python SDK. The relay forwards via httpx (transparent proxy),
   # so the SDK is used only for the OpenAIError exception type in error handling.
-  # Track the current 2.x line; stay below 3.0 to avoid an unreviewed major bump.
-  "openai>=2.44,<3.0",
+  # openai 3.0 moved the SDK's own transport to HTTPX2. The relay never routes
+  # traffic through the SDK, so the migration is a no-op here: no custom
+  # http_client is injected, and no httpx object crosses an SDK boundary.
+  "openai>=3.0,<4.0",
 
   "python-dotenv>=1.2,<2.0",
   "pydantic>=2.13,<3.0",

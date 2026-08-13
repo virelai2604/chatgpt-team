@@ -12,7 +12,7 @@ prose files (.md / .txt / .pdf) work best.
 Auth: reads OPENAI_API_KEY / OPENAI_BASE_URL from the environment.
 
 Run:
-    pip install "openai>=2.44,<3.0"
+    pip install "openai>=3.0,<4.0"
     export OPENAI_API_KEY="sk-..."             # your real key
     python sync_vector_store.py --name bifl_distilled \
         --files ./_exports/distilled_knowledge.md ./_markdown/*.md
