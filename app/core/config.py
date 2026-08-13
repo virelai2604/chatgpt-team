@@ -318,7 +318,13 @@ def get_settings() -> Settings:
     chain_wait_mode = _get_env("CHAIN_WAIT_MODE", "sequential") or "sequential"
 
     relay_key = os.getenv("RELAY_KEY") or None
+
+    # NOT a credential. RelayAuthMiddleware only ever compares against RELAY_KEY;
+    # setting RELAY_AUTH_TOKEN will not let a caller authenticate. It survives
+    # solely as an enable-trigger below, so that a deployment carrying only this
+    # variable still turns auth on rather than failing open.
     relay_auth_token = os.getenv("RELAY_AUTH_TOKEN") or None
+
     chatgpt_actions_secret = os.getenv("CHATGPT_ACTIONS_SECRET")
 
     # Safer default: if RELAY_AUTH_ENABLED isn't set, enable it only when a key exists.
