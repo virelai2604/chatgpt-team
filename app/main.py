@@ -11,6 +11,7 @@ from app.api.sse import router as sse_router
 from app.api.tools_api import router as tools_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.middleware.p4_orchestrator import P4OrchestratorMiddleware
 from app.middleware.relay_auth import RelayAuthMiddleware
 from app.routes.register_routes import register_routes
 from app.utils.error_handler import register_exception_handlers
@@ -47,15 +48,22 @@ def create_app() -> FastAPI:
         allow_credentials=_get_bool_setting(settings.CORS_ALLOW_CREDENTIALS, default=True),
     )
 
-    # Always install relay auth middleware.
-    # Whether it enforces auth is controlled at request-time (settings flags),
-    # which is required for tests that monkeypatch settings without rebuilding the app.
     # Relay error payloads. Registered before the routers so every route below
     # returns the `relay_error` shape from app/utils/error_handler.py instead of
     # FastAPI's defaults ({"detail": ...} and a bare "Internal Server Error").
     register_exception_handlers(app)
 
+    # Always install relay auth middleware.
+    # Whether it enforces auth is controlled at request-time (settings flags),
+    # which is required for tests that monkeypatch settings without rebuilding the app.
     app.add_middleware(RelayAuthMiddleware)
+
+    # Correlation IDs. Starlette builds the middleware stack in reverse, so adding
+    # this AFTER RelayAuthMiddleware makes it the outer layer — which is what stamps
+    # x-request-id on auth rejections too, the responses you most want to trace.
+    # Honours an inbound x-request-id and echoes it back on every response.
+    app.add_middleware(P4OrchestratorMiddleware)
+
     if getattr(settings, "RELAY_AUTH_ENABLED", False) and getattr(settings, "RELAY_KEY", ""):
         logger.info("Relay auth enabled (RELAY_AUTH_ENABLED=true).")
     else:
