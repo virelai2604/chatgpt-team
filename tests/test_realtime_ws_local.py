@@ -67,7 +67,9 @@ def test_realtime_local_validation_and_introspection(client: TestClient) -> None
 
 
 def test_realtime_ws_disabled_closes(client: TestClient) -> None:
-    with client.websocket_connect("/v1/realtime/ws?model=gpt-realtime") as websocket:
-        with pytest.raises(WebSocketDisconnect) as exc:
-            websocket.receive_text()
+    with (
+        client.websocket_connect("/v1/realtime/ws?model=gpt-realtime") as websocket,
+        pytest.raises(WebSocketDisconnect) as exc,
+    ):
+        websocket.receive_text()
     assert exc.value.code == 1008

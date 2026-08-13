@@ -102,7 +102,11 @@ async def test_realtime_session_and_ws_connect_smoke() -> None:
     _skip_if_no_real_key()
     _skip_if_ws_disabled()
 
-    r = requests.post(
+    # Blocking `requests` inside an async test: nothing else is awaiting at this
+    # point, so stalling the loop here costs nothing, and the session must exist
+    # before the websocket below can be opened. Kept sync rather than rewritten
+    # to httpx purely to avoid churning a test that needs a real key to run.
+    r = requests.post(  # noqa: ASYNC210
         f"{RELAY_BASE_URL}/v1/realtime/sessions",
         headers=_auth_headers({"Content-Type": "application/json"}),
         json={"model": REALTIME_MODEL},

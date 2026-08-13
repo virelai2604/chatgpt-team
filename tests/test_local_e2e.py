@@ -1,7 +1,6 @@
 # tests/test_local_e2e.py
 from __future__ import annotations
 
-import json
 
 import httpx
 import pytest
@@ -170,7 +169,7 @@ async def test_models_retrieve_default_model(async_client: httpx.AsyncClient) ->
     assert body.get("object") == "model"
     assert body.get("id") == model_id
     # Optional extra checks if upstream includes them
-    # e.g. "created", "owned_by", etc. – but we do not require them here
+    # e.g. "created", "owned_by", etc. - but we do not require them here
 
 
 @pytest.mark.asyncio

@@ -93,7 +93,6 @@ def _resolve_port(scheme: Optional[str], port: Optional[int]) -> Optional[int]:
 
 
 def _validate_realtime_upstream(request: Request) -> None:
-    url = f"{OPENAI_API_BASE}/v1/realtime/sessions"
     parsed_base = urlparse(OPENAI_API_BASE)
     context = _realtime_upstream_context()
     settings = get_settings()
@@ -204,7 +203,7 @@ async def _post_realtime_sessions(
 @router.post("/realtime/sessions")
 async def create_realtime_session(request: Request) -> JSONResponse:
     """
-    POST /v1/realtime/sessions – create a Realtime session descriptor.
+    POST /v1/realtime/sessions - create a Realtime session descriptor.
 
     If the client omits `model`, we default to REALTIME_MODEL.
     """
@@ -391,7 +390,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
         "Authorization": upstream_auth,
         "OpenAI-Beta": OPENAI_REALTIME_BETA,
     }
-    upstream_subprotocols = list(dict.fromkeys(client_subprotocols + ["openai-realtime-v1", "realtime"]))
+    upstream_subprotocols = list(dict.fromkeys([*client_subprotocols, "openai-realtime-v1", "realtime"]))
 
     try:
         async with ws_connect(

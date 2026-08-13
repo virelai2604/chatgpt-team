@@ -18,7 +18,6 @@ import struct
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple
 
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"

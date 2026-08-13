@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from typing import Dict, Optional
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -134,8 +134,8 @@ async def actions_create_upload_part(upload_id: str, payload: ActionsUploadPartR
 
     try:
         resp = await client.post(upstream_url, headers=headers, files=files)
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Upstream timeout while uploading part")
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="Upstream timeout while uploading part") from exc
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Upstream HTTP error while uploading part: {exc!r}") from exc
 
