@@ -77,3 +77,35 @@ def test_relay_auth_requires_valid_key_for_v1_paths(monkeypatch: pytest.MonkeyPa
         body = r.json()
         assert isinstance(body, dict)
         assert body.get("object") == "list"
+
+
+def test_relay_auth_uses_constant_time_comparison() -> None:
+    """The key check must not short-circuit on the first differing byte.
+
+    A plain `!=` leaks the key one character at a time to a timing attack. This
+    asserts the implementation, not the timing — timing tests are flaky in CI.
+    """
+    import inspect
+
+    from app.middleware import relay_auth
+
+    src = inspect.getsource(relay_auth.RelayAuthMiddleware.dispatch)
+    assert "compare_digest" in src, "relay key comparison must use hmac.compare_digest"
+
+
+def test_relay_auth_misconfiguration_is_a_server_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Auth on with no key configured is a server fault, not a client one.
+
+    Returning 401 here would tell every caller their key is wrong when in fact
+    the deployment is broken.
+    """
+    monkeypatch.setattr(settings, "RELAY_AUTH_ENABLED", True, raising=False)
+    monkeypatch.setattr(settings, "RELAY_KEY", "", raising=False)
+
+    with TestClient(app) as client:
+        r = client.get("/v1/models", headers={"X-Relay-Key": "anything"})
+        assert r.status_code == 500
+        assert "misconfigured" in (r.json().get("detail") or "").lower()
+
+        # Public paths stay reachable even when auth is misconfigured.
+        assert client.get("/health").status_code == 200

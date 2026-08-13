@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 from typing import Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -58,11 +59,22 @@ class RelayAuthMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Authorization must be Bearer <relay_key> (or use X-Relay-Key)."},
             )
 
+        # Auth is on but no key is configured. Fail loudly as a server fault rather
+        # than 401ing every caller, which looks like a client problem.
+        expected = settings.RELAY_KEY or ""
+        if not expected:
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Relay auth misconfigured: RELAY_AUTH_ENABLED is true but RELAY_KEY is empty"},
+            )
+
         provided = _extract_relay_key(request)
         if not provided:
             return JSONResponse(status_code=401, content={"detail": "Missing relay key"})
 
-        if provided != settings.RELAY_KEY:
+        # Constant-time compare: a plain `!=` short-circuits on the first differing
+        # byte, which leaks the key one character at a time to a timing attack.
+        if not hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8")):
             return JSONResponse(status_code=401, content={"detail": "Invalid relay key"})
 
         return await call_next(request)

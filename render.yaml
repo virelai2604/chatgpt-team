@@ -99,12 +99,6 @@ services:
       - key: CORS_ALLOW_HEADERS
         value: Authorization,Content-Type,Accept
 
-      # -------- Tools manifest --------
-      # Read by app/routes/responses.py (app/manifests/__init__.py hardcodes its
-      # own path and ignores this value).
-      - key: TOOLS_MANIFEST
-        value: app/manifests/tools_manifest.json
-
       # VALIDATION_SCHEMA_PATH removed: no code reads it and the PDF it pointed
       # at is not in the repo.
 
