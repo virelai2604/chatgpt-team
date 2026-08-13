@@ -120,4 +120,10 @@ async def openapi_actions(request: Request) -> JSONResponse:
     info["title"] = f"{title} (Actions subset)"
     filtered["info"] = info
 
+    # FastAPI emits no `servers`, and ChatGPT Actions cannot dispatch a request
+    # without one. Derive it from the inbound request so the document is correct
+    # on whichever domain served it (ai.lafiel.me or the onrender.com subdomain)
+    # rather than hardcoding one and being wrong on the other.
+    filtered["servers"] = [{"url": str(request.base_url).rstrip("/")}]
+
     return JSONResponse(filtered)

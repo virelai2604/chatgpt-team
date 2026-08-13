@@ -82,3 +82,29 @@ def test_manifest_has_no_placeholder_urls() -> None:
     """example.com placeholders shipped in this file for months."""
     raw = MANIFEST_PATH.read_text(encoding="utf-8")
     assert "example.com" not in raw
+
+
+def test_actions_schema_declares_a_server() -> None:
+    """ChatGPT Actions cannot dispatch a request without `servers`.
+
+    FastAPI emits none, and the Actions subset shipped without one — so the schema
+    ai-plugin.json points clients at could not actually be called.
+    """
+    with TestClient(app, base_url="https://ai.lafiel.me") as client:
+        doc = client.get("/openapi.actions.json").json()
+
+    servers = doc.get("servers") or []
+    assert servers, "Actions subset must declare a server or the schema is uncallable"
+    # Derived from the request, so it is correct on whichever domain served it.
+    assert servers[0]["url"] == "https://ai.lafiel.me"
+
+
+def test_actions_schema_advertises_only_real_paths() -> None:
+    """A curated subset must not outlive the routes it curates."""
+    with TestClient(app) as client:
+        doc = client.get("/openapi.actions.json").json()
+
+    live = set(app.openapi().get("paths", {}))
+    phantom = sorted(set(doc.get("paths", {})) - live)
+    assert not phantom, f"Actions schema advertises paths the app does not serve: {phantom}"
+    assert doc["paths"], "Actions subset is empty — the curation filter matched nothing"
