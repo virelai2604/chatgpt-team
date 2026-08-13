@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.middleware.relay_auth import RelayAuthMiddleware
 from app.routes.register_routes import register_routes
+from app.utils.error_handler import register_exception_handlers
 from app.utils.logger import relay_log as logger
 
 
@@ -46,6 +47,11 @@ def create_app() -> FastAPI:
     # Always install relay auth middleware.
     # Whether it enforces auth is controlled at request-time (settings flags),
     # which is required for tests that monkeypatch settings without rebuilding the app.
+    # Relay error payloads. Registered before the routers so every route below
+    # returns the `relay_error` shape from app/utils/error_handler.py instead of
+    # FastAPI's defaults ({"detail": ...} and a bare "Internal Server Error").
+    register_exception_handlers(app)
+
     app.add_middleware(RelayAuthMiddleware)
     if getattr(settings, "RELAY_AUTH_ENABLED", False) and getattr(settings, "RELAY_KEY", ""):
         logger.info("Relay auth enabled (RELAY_AUTH_ENABLED=true).")
