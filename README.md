@@ -65,7 +65,7 @@ The Actions schema is **curated** (subset) to expose only Actions-safe endpoints
 ## Quickstart
 
 ### Requirements
-- Python 3.11+ recommended
+- Python 3.12+ (`pyproject.toml` requires `>=3.12`; production runs 3.13)
 - `uvicorn`, `fastapi`, and project dependencies installed
 
 ### Run locally

@@ -321,8 +321,10 @@ def get_settings() -> Settings:
     openai_organization = os.getenv("OPENAI_ORGANIZATION")
     openai_project = os.getenv("OPENAI_PROJECT")
 
-    default_model = _get_env("DEFAULT_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
-    realtime_model = _get_env("REALTIME_MODEL", "gpt-4o-realtime-preview") or "gpt-4o-realtime-preview"
+    # Defaults track the models the relay is actually deployed with, so a local run
+    # without env behaves like production rather than silently falling back a generation.
+    default_model = _get_env("DEFAULT_MODEL", "gpt-5.5") or "gpt-5.5"
+    realtime_model = _get_env("REALTIME_MODEL", "gpt-realtime") or "gpt-realtime"
 
     relay_host = _get_env("RELAY_HOST", "0.0.0.0") or "0.0.0.0"
     relay_port = _get_int("RELAY_PORT", 8000)
