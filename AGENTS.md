@@ -22,7 +22,7 @@ Rules:
 
 Scope that matters long-term:
 - repo root: `pyproject.toml`, `render.yaml`, `OPENAI_REFERENCES.md`
-- directories: `app/`, `tests/`, `static/`, `schemas/`
+- directories: `app/`, `tests/`, `static/`
 - runnable examples (NOT part of the relay app): `examples/agents/`, `examples/bifl/`, `examples/mone/`
 - OpenAI reference catalog: `reference/openai/` (`SOURCES.md`, `sources.json`, `openai-reference-manifest.jsonl`, snapshots)
 Ignore everything else unless explicitly requested.
@@ -38,7 +38,11 @@ Ignore everything else unless explicitly requested.
 - Local workspace path varies (Windows: `...\Agent\Openclaw\chatgpt-team`; WSL/cloud: `/home/user/chatgpt-team`) — the GitHub repo is the source of truth.
 
 Runtime:
-- Python 3.12+ ; dependencies pinned in `pyproject.toml` (fastapi, uvicorn, httpx, openai 2.x, pydantic 2.x). OpenAI SDK is used only for the `OpenAIError` type; forwarding is transparent httpx pass-through.
+- Python 3.12+ (production runs 3.13); dependencies pinned in `pyproject.toml`
+  (fastapi, uvicorn, httpx 0.28, openai 3.x, pydantic 2.x). openai 3.x ships its own
+  transport (httpx2) and no longer pulls httpx or certifi in, so the relay's explicit
+  `httpx` pin is load-bearing. The SDK is used only for the `OpenAIError` type;
+  forwarding is a transparent httpx pass-through.
 - Relay implements an OpenAI-compatible REST API. Default FastAPI entrypoint: `app/main.py`.
 - Primary routing/action logic lives in `app/routes/` and `app/api/`.
 - Data files (SQLite, JSONL, temp artifacts) under `data/` are not part of the long-term "action relay" scope unless explicitly needed.
@@ -72,13 +76,12 @@ When generating or checking anything related to OpenAI APIs, models, tools, SDKs
 - `reference/openai/SOURCES.md` + `sources.json` — top-20 sources (docs + repos).
 - `reference/openai/openai-reference-manifest.jsonl` — accession ledger (`pull_status`: `fetched` vs `summary_only`).
 - Snapshots under `reference/openai/{workspace-agents,cookbook,apps-sdk,file-search,agents-sdk,tools-skills,github-openai}/`.
-- Older PDF (dated, lowest priority): `ChatGPT-API_reference_ground_truth-2025-10-29.pdf` at repo root.
 - Note: `summary_only` snapshots are NOT authoritative — `developers.openai.com` blocks automated fetch; verify against the live URL before relying on exact fields.
 
 Conflict rule:
 1) Website
 2) Official GitHub
-3) Local PDF
+3) In-repo reference catalog
 4) Third-party repos
 
 If you detect changes versus older examples, spell it out explicitly instead of silently following stale behavior.
@@ -110,7 +113,9 @@ Main components:
 - `app/routes/` — HTTP routes, including Custom Action endpoints.
 - `app/api/` — forwarding logic to OpenAI (or the relay provider), tools integration.
 - `app/core/config.py` — environment variables, timeouts, default models.
-- `schemas/openapi.yaml` — OpenAPI schema used by ChatGPT Actions.
+- `app/api/tools_api.py` — serves `/v1/manifest` and `/openapi.actions.json`,
+  the curated Actions schema. Both are generated from the live routes; there is
+  no checked-in OpenAPI file to maintain.
 - `tests/` — pytest suite validating routes, tools, and basic flows.
 
 ---
@@ -130,7 +135,12 @@ Principles:
 
 When implementing or changing an Action:
 1) Add/update route in `app/routes/actions.py` (or a clearly named module).
-2) Update `schemas/openapi.yaml` so ChatGPT can discover the Action.
+2) If the Action should be visible to ChatGPT, add its path to the right group in
+   `_build_manifest()` in `app/api/tools_api.py` and list that group in
+   `meta.actions_openapi_groups`. `/openapi.actions.json` is filtered from the
+   live schema, so a route that is not in a listed group will not appear.
+   Do NOT create a checked-in OpenAPI file — the previous one drifted to 32
+   declared paths against 59 served, 6 of which did not exist, and was deleted.
 3) Add/update tests in `tests/` that cover:
    - Happy path.
    - Common error cases.
@@ -146,4 +156,4 @@ Typical setup:
 cd ~/code/chatgpt-team
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # runtime-only deps live in requirements.txt
