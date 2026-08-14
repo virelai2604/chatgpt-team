@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app.api.action_schemas import RESPONSES_BODY
 from app.api.forward_openai import forward_openai_method_path, forward_openai_request
 from app.core.config import get_settings
 
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/v1", tags=["responses"])
 
 _SETTINGS = get_settings()
 
-@router.post("/responses")
+@router.post("/responses", openapi_extra=RESPONSES_BODY)
 async def create_response(request: Request):
     """
     POST /v1/responses

@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api.action_schemas import VIDEOS_CREATE_BODY, VIDEOS_REMIX_BODY
 from app.api.forward_openai import (
     build_outbound_headers,
     build_upstream_url,
@@ -167,6 +168,7 @@ def _error_response(
     "",
     operation_id="actionsVideosCreateV1Actions",
     summary="Actions wrapper for /v1/videos",
+    openapi_extra=VIDEOS_CREATE_BODY,
 )
 async def actions_create_video(request: Request) -> Response:
     info("→ [actions.videos.create] %s %s", request.method, request.url.path)
@@ -177,6 +179,7 @@ async def actions_create_video(request: Request) -> Response:
     "/{video_id}/remix",
     operation_id="actionsVideosRemixV1Actions",
     summary="Actions wrapper for /v1/videos/{video_id}/remix",
+    openapi_extra=VIDEOS_REMIX_BODY,
 )
 async def actions_remix_video(video_id: str, request: Request) -> Response:
     info("→ [actions.videos.remix] %s %s", request.method, request.url.path)

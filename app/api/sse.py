@@ -4,6 +4,7 @@ from typing import Any, Dict, cast
 
 from fastapi import APIRouter, Request, Response
 
+from app.api.action_schemas import RESPONSES_STREAM_BODY
 from app.api.forward_openai import forward_openai_method_path
 
 router = APIRouter(prefix="/v1", tags=["sse"])
@@ -33,6 +34,7 @@ async def responses_stream(request: Request) -> Response:
 @actions_router.post(
     "/stream",
     operation_id="actionsResponsesStream",
+    openapi_extra=RESPONSES_STREAM_BODY,
     summary="Actions wrapper for /v1/responses:stream (SSE)",
 )
 async def actions_responses_stream(request: Request) -> Response:
