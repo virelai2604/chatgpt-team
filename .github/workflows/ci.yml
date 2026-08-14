@@ -230,6 +230,12 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           RELAY_KEY: ${{ secrets.RELAY_KEY }}
           RELAY_AUTH_ENABLED: "true"
+          # The realtime WS proxy is enabled in production (render.yaml sets
+          # RELAY_REALTIME_WS_ENABLED=1) but had never been exercised anywhere --
+          # tests/test_realtime_ws_integration.py self-skipped on this flag. It has
+          # to be set on BOTH the relay and the test: the relay rejects the upgrade
+          # without it, and the test skips itself without it.
+          RELAY_REALTIME_WS_ENABLED: "1"
         run: |
           set -euo pipefail
           nohup python -m uvicorn app.main:app \
@@ -261,6 +267,7 @@ jobs:
           RELAY_AUTH_TOKEN: ${{ secrets.RELAY_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           INTEGRATION_OPENAI_API_KEY: "1"
+          RELAY_REALTIME_WS_ENABLED: "1"
         run: |
           set -euo pipefail
           echo "Target: ${RELAY_BASE_URL}"
