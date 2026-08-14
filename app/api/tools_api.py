@@ -72,7 +72,12 @@ def _build_manifest() -> Dict[str, Any]:
             "images_actions",
             "files_actions",
             "uploads_actions",
-            "videos_actions",
+            # "videos_actions" is deliberately absent. openai/openai-python@721cb1cd
+            # stamps `deprecated: true` on the Sora video paths ahead of a September
+            # shutdown, so advertising them to ChatGPT points models at an API with
+            # an expiry date. The routes stay served for direct callers until then;
+            # they are simply no longer offered as Actions. Re-add this entry only
+            # if OpenAI reverses the deprecation.
             "proxy",
             "realtime_http",
         ],

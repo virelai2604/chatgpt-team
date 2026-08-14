@@ -98,3 +98,23 @@ def test_actions_document_stays_small_enough_to_import() -> None:
     """
     size_kb = len(json.dumps(_actions_doc())) / 1024
     assert size_kb < 100, f"Actions document has grown to {size_kb:.0f} KB — did a full schema get inlined?"
+
+
+def test_deprecated_sora_video_routes_are_not_advertised_to_chatgpt() -> None:
+    """Sora shuts down in September; models must not be pointed at it.
+
+    openai/openai-python@721cb1cd stamps `deprecated: true` on the video paths.
+    The routes stay served for direct callers until the shutdown -- this only
+    asserts they are absent from the Actions subset, not that they are gone.
+    """
+    doc = _actions_doc()
+    advertised = sorted(p for p in doc.get("paths", {}) if "video" in p)
+    assert not advertised, (
+        f"deprecated Sora video paths are advertised to ChatGPT: {advertised}. "
+        "Remove 'videos_actions' from actions_openapi_groups in _build_manifest()."
+    )
+
+    # ...but they must still be served, or this removed capability instead of an ad.
+    with TestClient(app) as client:
+        served = set(client.get("/openapi.json").json()["paths"])
+    assert "/v1/videos" in served, "video routes should still work for direct callers"
