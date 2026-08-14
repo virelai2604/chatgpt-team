@@ -118,3 +118,32 @@ def test_deprecated_sora_video_routes_are_not_advertised_to_chatgpt() -> None:
     with TestClient(app) as client:
         served = set(client.get("/openapi.json").json()["paths"])
     assert "/v1/videos" in served, "video routes should still work for direct callers"
+
+
+def test_realtime_is_not_advertised_to_chatgpt() -> None:
+    """POST /v1/realtime/sessions returns 404 from OpenAI.
+
+    Verified live on 2026-08-14 through the integration-live job:
+
+        Realtime session upstream error: status=404
+        url=https://api.openai.com/v1/realtime/sessions
+
+    Advertising it handed ChatGPT a URL that cannot work. ChatGPT could not have
+    used the realtime surface regardless -- Actions are request/response and
+    cannot open a WebSocket -- so a session minted through the relay has no
+    consumer inside a Custom GPT.
+
+    As with the video routes, this asserts the endpoints are absent from the
+    Actions subset while still being served, so the check cannot be satisfied by
+    deleting the routes outright.
+    """
+    doc = _actions_doc()
+    advertised = sorted(p for p in doc.get("paths", {}) if "realtime" in p)
+    assert not advertised, (
+        f"realtime paths are advertised to ChatGPT but 404 upstream: {advertised}. "
+        "Remove 'realtime_http' from actions_openapi_groups in _build_manifest()."
+    )
+
+    with TestClient(app) as client:
+        served = set(client.get("/openapi.json").json()["paths"])
+    assert "/v1/realtime/sessions" in served, "the route should still be served to direct callers"
