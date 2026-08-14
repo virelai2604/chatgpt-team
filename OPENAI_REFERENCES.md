@@ -107,3 +107,19 @@ agent = Agent(name="KB", instructions="Answer from the knowledge base.",
 
 Skip enterprise pieces (guardrails, multi-agent handoffs, governance) until the
 single-agent version actually does useful work.
+
+## Workspace Recovery And Source Hygiene
+
+Dated status checkpoints, storage/source policies, and inventory manifests for the
+OpenAI Workspace Project (see `docs/status/`, `docs/policies/`, `reference/manifests/`):
+
+- `docs/status/openai_workspace_current_retrieval_eval_state_20260721.md`
+- `docs/status/openai_workspace_post_cleanup_project_source_verification_20260721.md`
+- `docs/status/source_manifest_preflight_v5_final_consistency_closure_20260813_221526.md`
+- `docs/status/archive_intake_audit_20260814.md`
+- `docs/policies/WRITE_TARGET_POLICY.md`
+- `docs/policies/database-role-map.md`
+- `docs/policies/openai_workspace_index_exclusion_policy.md`
+- `docs/policies/p4_index_pointer.md`
+- `reference/manifests/manifest_20260814.json`
+- `reference/manifests/archive_members_20260814.json`

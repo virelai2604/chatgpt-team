@@ -1,0 +1,48 @@
+{
+  "generated": "2026-08-14",
+  "repo": "virelai2604/chatgpt-team",
+  "note": "Curated source-hygiene checkpoint inventory. Regenerated from the exact files added in this branch. No raw archive content is committed.",
+  "count": 8,
+  "files": [
+    {
+      "path": "docs/status/archive_intake_audit_20260814.md",
+      "bytes": 2016,
+      "sha256": "7cc72d51d7f19a97cb26ef44806a7894879f510fcbd38cadb64b58abeffb16a0"
+    },
+    {
+      "path": "docs/status/openai_workspace_current_retrieval_eval_state_20260721.md",
+      "bytes": 1225,
+      "sha256": "351f6ae5fc8b4d08aabd7d5243b443d1167598c60f65715dcaac42b56aea0334"
+    },
+    {
+      "path": "docs/status/openai_workspace_post_cleanup_project_source_verification_20260721.md",
+      "bytes": 1154,
+      "sha256": "b545fe1c6d0402c771455b5dc96eea8bdad60237f2bd32f0a38cec1a3641e372"
+    },
+    {
+      "path": "docs/status/source_manifest_preflight_v5_final_consistency_closure_20260813_221526.md",
+      "bytes": 1107,
+      "sha256": "7d29e720113b4f029ee381c8d6adde707690080eb491ec56e2d622ede200268f"
+    },
+    {
+      "path": "docs/policies/WRITE_TARGET_POLICY.md",
+      "bytes": 1217,
+      "sha256": "68ffd73581b3a948820097ca2ffb2a2179eaeedee1db3a39d2044bb3975ecab2"
+    },
+    {
+      "path": "docs/policies/database-role-map.md",
+      "bytes": 1281,
+      "sha256": "7b15c2c2c57126ba0605f4a082949596019fc73cc9b3fb06b5a27945c99bcf35"
+    },
+    {
+      "path": "docs/policies/openai_workspace_index_exclusion_policy.md",
+      "bytes": 1061,
+      "sha256": "f873402d3ba57ab01bdb095b17e2a564d9d3937927e959064130b13d31f2c69d"
+    },
+    {
+      "path": "docs/policies/p4_index_pointer.md",
+      "bytes": 1009,
+      "sha256": "7c788f5c7603983659d6a5a0e41c1185ae3eef366869b466f80d463aa3d59344"
+    }
+  ]
+}
