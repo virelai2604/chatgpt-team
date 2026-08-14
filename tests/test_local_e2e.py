@@ -57,8 +57,18 @@ async def test_responses_non_streaming_basic(async_client: httpx.AsyncClient) ->
     assert isinstance(body.get("output"), list)
     assert body["output"], "output list should not be empty"
 
-    first_msg = body["output"][0]
-    assert first_msg.get("type") == "message"
+    # `output` is a heterogeneous list, not "the message at index 0". OpenAI's
+    # own spec (OutputItem in api_reference/openapi.transformed.yml) unions 28
+    # variants — OutputMessage, ReasoningItem, tool calls and more — so the
+    # assistant message can appear at any index. Reasoning-capable models emit a
+    # `reasoning` item first, which is what DEFAULT_MODEL (gpt-5.5) does today;
+    # index 0 only ever held for non-reasoning models.
+    messages = [item for item in body["output"] if item.get("type") == "message"]
+    assert messages, (
+        "no item of type 'message' in output; got types: "
+        f"{[item.get('type') for item in body['output']]}"
+    )
+    first_msg = messages[0]
     assert first_msg.get("role") == "assistant"
     assert isinstance(first_msg.get("content"), list)
     assert first_msg["content"], "content list should not be empty"
