@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from starlette.responses import Response
 
+from app.api.action_schemas import IMAGES_GENERATIONS_BODY
 from app.api.forward_openai import build_upstream_url, forward_openai_request
 from app.core.config import get_settings
 from app.utils.logger import relay_log as logger
@@ -278,8 +279,12 @@ async def _build_edits_multipart(payload: ImagesEditsJSON) -> Tuple[Dict[str, Tu
 # --- Standard images routes ---
 
 
-@router.post("/images", summary="Create image generation")
-@router.post("/images/generations", summary="Create image generation (alias)")
+@router.post("/images", summary="Create image generation", openapi_extra=IMAGES_GENERATIONS_BODY)
+@router.post(
+    "/images/generations",
+    summary="Create image generation (alias)",
+    openapi_extra=IMAGES_GENERATIONS_BODY,
+)
 async def create_image(request: Request) -> Response:
     logger.info("→ [images] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)

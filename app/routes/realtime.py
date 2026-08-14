@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from websockets import connect as ws_connect  # type: ignore
 from websockets.exceptions import ConnectionClosed  # type: ignore
 
+from app.api.action_schemas import REALTIME_SESSION_BODY
 from app.core.config import get_settings
 from app.utils.logger import relay_log as logger
 
@@ -200,7 +201,7 @@ async def _post_realtime_sessions(
     return resp.status_code, data
 
 
-@router.post("/realtime/sessions")
+@router.post("/realtime/sessions", openapi_extra=REALTIME_SESSION_BODY)
 async def create_realtime_session(request: Request) -> JSONResponse:
     """
     POST /v1/realtime/sessions - create a Realtime session descriptor.
