@@ -6,6 +6,16 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      run_live_integration:
+        description: "Run the 23 credential-gated tests against real OpenAI (billable, creates real files/batches)"
+        type: boolean
+        default: false
+      target:
+        description: "Relay to test: a fresh one built from this commit, or whatever is live on ai.lafiel.me"
+        type: choice
+        options: [local, deployed]
+        default: local
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -158,4 +168,104 @@ jobs:
 
       - name: Relay log on failure
         if: failure()
+        run: cat uvicorn.log || true
+
+  # Manual only. These are the 23 tests the `tests` job leaves skipped: they make
+  # real, billable OpenAI calls and create real artifacts upstream (16 POSTs across
+  # /v1/files, /v1/uploads, /v1/batches, /v1/videos, /v1/fine_tuning/jobs). That is
+  # why this is workflow_dispatch and not part of the PR gate — running it on every
+  # push would bill the account and litter the org with test files.
+  #
+  # Requires two repo secrets (Settings -> Secrets and variables -> Actions):
+  #   OPENAI_API_KEY  - a real key; the relay forwards with it
+  #   RELAY_KEY       - the production relay key, to get past RelayAuthMiddleware
+  #
+  # target: "local" boots a relay here and points it at real OpenAI (safe-ish: the
+  # relay under test is this commit). "deployed" runs against https://ai.lafiel.me,
+  # which tests whatever Render currently has live, not necessarily this commit.
+  integration-live:
+    name: Integration (live OpenAI, manual)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_integration
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements-dev.txt
+            requirements.txt
+            pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Fail early if the required secrets are missing
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          RELAY_KEY: ${{ secrets.RELAY_KEY }}
+        run: |
+          set -euo pipefail
+          # Without this the run would look like a pass: every test self-skips on a
+          # missing key, and "0 failed" reads identically to "everything worked".
+          missing=""
+          [ -n "${OPENAI_API_KEY}" ] || missing="${missing} OPENAI_API_KEY"
+          [ -n "${RELAY_KEY}" ]      || missing="${missing} RELAY_KEY"
+          if [ -n "${missing}" ]; then
+            echo "Missing required repo secret(s):${missing}" >&2
+            echo "Add them under Settings -> Secrets and variables -> Actions." >&2
+            exit 1
+          fi
+          echo "both secrets present"
+
+      - name: Start a local relay against real OpenAI
+        if: inputs.target == 'local'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          RELAY_KEY: ${{ secrets.RELAY_KEY }}
+          RELAY_AUTH_ENABLED: "true"
+        run: |
+          set -euo pipefail
+          nohup python -m uvicorn app.main:app \
+            --host 127.0.0.1 --port 8099 --log-level warning > uvicorn.log 2>&1 &
+          for _ in $(seq 1 30); do
+            if curl -fs -o /dev/null http://127.0.0.1:8099/v1/health; then
+              echo "relay up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "relay did not come up in 30s"; cat uvicorn.log; exit 1
+
+      - name: Resolve the base URL
+        id: base
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.target }}" = "deployed" ]; then
+            echo "url=https://ai.lafiel.me" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=http://127.0.0.1:8099" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run the credential-gated integration tests
+        env:
+          RELAY_BASE_URL: ${{ steps.base.outputs.url }}
+          RELAY_BASE: ${{ steps.base.outputs.url }}
+          RELAY_KEY: ${{ secrets.RELAY_KEY }}
+          RELAY_TOKEN: ${{ secrets.RELAY_KEY }}
+          RELAY_AUTH_TOKEN: ${{ secrets.RELAY_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          INTEGRATION_OPENAI_API_KEY: "1"
+        run: |
+          set -euo pipefail
+          echo "Target: ${RELAY_BASE_URL}"
+          pytest -q -m integration -rs
+
+      - name: Relay log on failure
+        if: failure() && inputs.target == 'local'
         run: cat uvicorn.log || true
