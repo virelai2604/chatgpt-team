@@ -72,3 +72,16 @@ The Actions schema is **curated** (subset) to expose only Actions-safe endpoints
 
 ```bash
 uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+## OpenAI Workspace Source Policy
+
+This repository stores distilled source-of-truth documents, runbooks, policies,
+manifests, and small verification checkpoints for the OpenAI Workspace Project.
+
+Do not commit raw chat archives, large ZIP bundles, local database files,
+generated eval spam, backup files, cache files, or secrets. When raw artifacts
+are needed, add a small manifest or checksum-backed checkpoint instead.
+
+See `docs/policies/` for the write-target, database-role, index-exclusion, and
+index-pointer policies, and `docs/status/` for dated verification checkpoints.

@@ -1,0 +1,123 @@
+{
+  "generated": "2026-08-14",
+  "archive": "ChatGPT-PR_#34_Merge_Review-2026-08-14-...-2026-08-13T23-06-29.zip",
+  "note": "Provenance inventory of archive members only. The archive itself and its raw exports are intentionally NOT committed (see docs/status/archive_intake_audit_20260814.md).",
+  "member_count": 23,
+  "members": [
+    {
+      "member": "ChatGPT-Enable_OpenAI_Docs_MCP-2026-08-14-6a78a5f9-15b8-83ec-be58-6f51763db579-2026-08-14T03-05-49.md",
+      "bytes": 77618,
+      "sha256": "3b6405375f5f0e96330a48d5dd1b9e930e5132851caaca14b5187d30dd736752"
+    },
+    {
+      "member": "ChatGPT-Originals-2026-08-14-69d24062-eea0-8324-ae19-41fd2d6c5317-2026-08-14T03-20-42.md",
+      "bytes": 106343,
+      "sha256": "a810d4ae6f24c15a01f208cf37ac880ff2dfa3ec810d9b3a1d954037b32a9c36"
+    },
+    {
+      "member": "ChatGPT-Originals-2026-08-14-69d24062-eea0-8324-ae19-41fd2d6c5317-2026-08-14T03-27-26.json",
+      "bytes": 1608455,
+      "sha256": "f3f401b271b6dbbde9b97d824f8cdb0b346f3caf67151676f1a23992831b4e39"
+    },
+    {
+      "member": "ChatGPT-PR_#34_Merge_Review-2026-08-14-6a5e2a4d-ba48-83ec-837e-11933f810893-2026-08-13T23-06-23.md",
+      "bytes": 368667,
+      "sha256": "49b55552bd0adb8e3ddd44c7b3a7da216f7c291f2f3aa2e8937613b54c111cab"
+    },
+    {
+      "member": "ChatGPT-PR_#34_Merge_Review-2026-08-14-6a5e2a4d-ba48-83ec-837e-11933f810893-2026-08-13T23-06-29.md",
+      "bytes": 368667,
+      "sha256": "49b55552bd0adb8e3ddd44c7b3a7da216f7c291f2f3aa2e8937613b54c111cab"
+    },
+    {
+      "member": "ChatGPT-PR_#34_Merge_Review-2026-08-14-6a5e2a4d-ba48-83ec-837e-11933f810893-2026-08-13T23-53-39.md",
+      "bytes": 371296,
+      "sha256": "e86813b11227f4221701503cf1fc2668af8f1285243fb33bdbc0fbbf29d84f2a"
+    },
+    {
+      "member": "ChatGPT-Project_Root_and_Tracks-2026-08-14-6a4cbd2c-7cd8-83ec-b1f6-037a7da15121-2026-08-13T21-58-36.md",
+      "bytes": 449860,
+      "sha256": "f526530a19ede96fbb6b0a764a84f50517231148df02f7b40056068a03f00159"
+    },
+    {
+      "member": "ChatGPT-Project_Root_and_Tracks-2026-08-14-6a4cbd2c-7cd8-83ec-b1f6-037a7da15121-2026-08-14T00-18-29.md",
+      "bytes": 492215,
+      "sha256": "82dfc4827baf2a53c9142571cb4ee5872d1ff66a113ef3ae2cb564ea37178beb"
+    },
+    {
+      "member": "archive_members.json",
+      "bytes": 7091,
+      "sha256": "41e83e5fedeff8ab970ca9d634a2336eabdedadba51441289130e1a6a178e01e"
+    },
+    {
+      "member": "hash_report_20260814.csv",
+      "bytes": 37118,
+      "sha256": "b9012bdd5e55d536d7214018f61c3167fb4193f3c8490feba498690450b9deb1"
+    },
+    {
+      "member": "manifest (7).csv",
+      "bytes": 6348,
+      "sha256": "63e853f8c4303e5682145fb87ff3512b9e59a08bfb866059a75425914e21eeb6"
+    },
+    {
+      "member": "manifest.json",
+      "bytes": 8080,
+      "sha256": "443cf45fc7c59b773f6404b12abe2a028222420978223246499f710c55df4b1d"
+    },
+    {
+      "member": "openai_archive_reconciliation_20260809(1).md",
+      "bytes": 6538,
+      "sha256": "e10575ff2cbb6b72c9daab09790ba595afa07a7594202eddbb4b623093d7f23f"
+    },
+    {
+      "member": "openai_archive_reconciliation_20260809.md",
+      "bytes": 6538,
+      "sha256": "e10575ff2cbb6b72c9daab09790ba595afa07a7594202eddbb4b623093d7f23f"
+    },
+    {
+      "member": "openai_canonical_content_audit_20260809(1).md",
+      "bytes": 4752,
+      "sha256": "8d12feac339a5876f0e283e5942767e264d8dc6a4b032845a1b03932ffa7eba7"
+    },
+    {
+      "member": "openai_canonical_content_audit_20260809.md",
+      "bytes": 4752,
+      "sha256": "8d12feac339a5876f0e283e5942767e264d8dc6a4b032845a1b03932ffa7eba7"
+    },
+    {
+      "member": "openai_deduplicated_append_only_master_20260809(1).md",
+      "bytes": 3457,
+      "sha256": "b3fa60f257c2e8212baf87b7d601cdf2ab23fe40e58b0c3bb55447df4bc05295"
+    },
+    {
+      "member": "openai_deduplicated_append_only_master_20260809.md",
+      "bytes": 3457,
+      "sha256": "b3fa60f257c2e8212baf87b7d601cdf2ab23fe40e58b0c3bb55447df4bc05295"
+    },
+    {
+      "member": "openai_workspace_chat_summary_and_github_additions_20260814 (1).md",
+      "bytes": 14489,
+      "sha256": "c4357d3bd92766ce0eef2b606e926beb8dc793768f69b75ce4d06665d8879b68"
+    },
+    {
+      "member": "openai_workspace_chat_summary_and_github_additions_20260814.md",
+      "bytes": 14489,
+      "sha256": "c4357d3bd92766ce0eef2b606e926beb8dc793768f69b75ce4d06665d8879b68"
+    },
+    {
+      "member": "openai_workspace_github_additions_p4_export_20260814.md",
+      "bytes": 9927,
+      "sha256": "248c2412cc9a2553a133f0b3dd8b188c0be89a852633564085953694a68ab6f9"
+    },
+    {
+      "member": "p4_synced_all_chats_deciphered_20260810(1).md",
+      "bytes": 7820,
+      "sha256": "23d2df2a4687a0c0e6ec9a8135142509b74fdd669428c442e4f44d90fd5a39b0"
+    },
+    {
+      "member": "p4_synced_all_chats_deciphered_20260810.md",
+      "bytes": 7820,
+      "sha256": "23d2df2a4687a0c0e6ec9a8135142509b74fdd669428c442e4f44d90fd5a39b0"
+    }
+  ]
+}
