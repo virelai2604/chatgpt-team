@@ -260,13 +260,19 @@ async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient) -> N
     batch_timeout_s = _env_float("BATCH_TIMEOUT_SECONDS", 600.0)
     poll_interval_s = _env_float("BATCH_POLL_INTERVAL_SECONDS", 2.0)
 
+    # Was hardcoded to "gpt-5.1" while the relay defaults to gpt-5.5. A model the
+    # key cannot reach makes every request in the batch error, so the batch reaches
+    # status=completed with an error_file_id and no output_file_id -- which this
+    # test then reported as "did not complete", pointing at the wrong thing.
+    batch_model = os.environ.get("BATCH_MODEL") or os.environ.get("DEFAULT_MODEL") or "gpt-5.5"
+
     jsonl_line = (
         json.dumps(
             {
                 "custom_id": "ping-1",
                 "method": "POST",
                 "url": "/v1/responses",
-                "body": {"model": "gpt-5.1", "input": "Return exactly: pong"},
+                "body": {"model": batch_model, "input": "Return exactly: pong"},
             }
         ).encode("utf-8")
         + b"\n"
@@ -320,8 +326,18 @@ async def test_batch_output_file_is_downloadable(client: httpx.AsyncClient) -> N
 
         await asyncio.sleep(poll_interval_s)
 
-    if status != "completed" or not output_file_id:
-        pytest.skip(f"batch did not complete within {batch_timeout_s}s (last status={status})")
+    if status != "completed":
+        pytest.skip(f"batch did not reach completed within {batch_timeout_s}s (last status={status})")
+
+    if not output_file_id:
+        # Distinct from a timeout: the batch finished, but produced no output file.
+        # Almost always means every request in it errored, so surface the counts and
+        # the error file rather than blaming the clock.
+        pytest.skip(
+            "batch completed but produced no output_file_id "
+            f"(error_file_id={body.get('error_file_id')!r}, "
+            f"request_counts={body.get('request_counts')!r}, model={batch_model!r})"
+        )
 
     # Download output file content
     r = await _request_with_retry(client, "GET", f"/v1/files/{output_file_id}/content", headers=_auth_headers())
