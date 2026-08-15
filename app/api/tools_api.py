@@ -51,8 +51,6 @@ def _build_manifest() -> Dict[str, Any]:
         ],
         "batches": ["/v1/batches", "/v1/batches/{batch_id}", "/v1/batches/{batch_id}/cancel"],
         "proxy": ["/v1/proxy"],
-        "realtime_http": ["/v1/realtime/sessions"],
-        "realtime_ws": ["/v1/realtime/ws"],
     }
 
     meta = {
@@ -79,22 +77,11 @@ def _build_manifest() -> Dict[str, Any]:
             # they are simply no longer offered as Actions. Re-add this entry only
             # if OpenAI reverses the deprecation.
             "proxy",
-            # "realtime_http" is deliberately absent too, for a harder reason than
-            # the videos one: POST /v1/realtime/sessions returns 404 from OpenAI.
-            # Verified live on 2026-08-14 --
-            #   Realtime session upstream error: status=404
-            #   url=https://api.openai.com/v1/realtime/sessions
-            # -- so advertising it handed ChatGPT a URL that cannot work. The route
-            # is still served, and the relay relays the 404 faithfully; it is only
-            # no longer offered as an Action.
-            #
-            # ChatGPT could not have used the realtime surface anyway: Actions are
-            # request/response and cannot open a WebSocket, so a session minted
-            # through the relay has no consumer inside a Custom GPT.
-            #
-            # Before re-adding, confirm against OpenAI's spec which endpoint mints
-            # ephemeral tokens today -- /realtime/client_secrets exists and is
-            # documented for exactly that purpose.
+            # No realtime group exists any more. POST /v1/realtime/sessions returned 404
+            # from OpenAI, their SDK dropped the endpoint, and the supported pattern is
+            # browser->OpenAI over WebRTC with a /realtime/client_secrets token -- so the
+            # whole surface was removed rather than re-pointed. See the commit that
+            # deleted app/routes/realtime.py.
         ],
     }
 

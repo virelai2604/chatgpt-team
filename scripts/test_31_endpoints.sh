@@ -112,7 +112,6 @@ declare -a ACTIONS_DIRECT_OPS=(
   "POST /v1/images/generations"
   "POST /v1/images/variations"
   "POST /v1/proxy"
-  "POST /v1/realtime/sessions"
   "POST /v1/responses"
   "POST /v1/responses/compact"
 )
@@ -161,7 +160,6 @@ body_for_direct() {
     "POST /v1/images/edits"|"POST /v1/images/variations"|"POST /v1/actions/images/edits"|"POST /v1/actions/images/variations")
       jq -nc '{note:"smoke test - expect upstream validation error"}'
       ;;
-    "POST /v1/realtime/sessions")
       jq -nc --arg model "$RESPONSES_MODEL" '{model:$model}'
       ;;
     "POST /v1/proxy")

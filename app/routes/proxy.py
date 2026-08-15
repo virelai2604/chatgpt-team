@@ -51,7 +51,6 @@ _BLOCKED_PREFIXES: Tuple[str, ...] = (
     "/v1/admin",
     "/v1/webhooks",
     "/v1/moderations",
-    "/v1/realtime",  # websocket family (not Actions-friendly)
     "/v1/uploads",  # multipart/resumable (use explicit wrapper routes)
     "/v1/audio",  # often multipart/binary
 )

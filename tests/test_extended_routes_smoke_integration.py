@@ -107,8 +107,11 @@ def test_openapi_includes_extended_route_families() -> None:
     # Conversations
     assert "/v1/conversations" in paths, "Missing /v1/conversations route"
 
-    # Realtime sessions (REST). WebSocket path may not appear in schema.
-    assert "/v1/realtime/sessions" in paths, "Missing /v1/realtime/sessions route"
+    # Realtime is deliberately absent: POST /v1/realtime/sessions 404'd upstream,
+    # OpenAI's SDK dropped the endpoint, and the supported pattern is the browser
+    # connecting directly over WebRTC with a /realtime/client_secrets token. The
+    # whole surface was removed rather than re-pointed at a proxy OpenAI does not use.
+    assert not [p for p in paths if "realtime" in p], "realtime routes should be gone"
 
 
 @pytest.mark.integration

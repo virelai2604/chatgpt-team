@@ -164,7 +164,6 @@ async def system_info() -> JSONResponse:
         "openai_organization": settings.OPENAI_ORGANIZATION,
         "openai_project": settings.OPENAI_PROJECT,
         "openai_assistants_beta": settings.OPENAI_ASSISTANTS_BETA,
-        "openai_realtime_beta": settings.OPENAI_REALTIME_BETA,
         "relay_auth_enabled": settings.RELAY_AUTH_ENABLED,
         "relay_auth_key_set": bool(settings.RELAY_KEY),
     }

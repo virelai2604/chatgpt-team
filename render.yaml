@@ -51,8 +51,6 @@ services:
 
       - key: OPENAI_ASSISTANTS_BETA
         value: assistants=v2
-      - key: OPENAI_REALTIME_BETA
-        value: realtime=v1
 
       # -------- Auth (recommended ON for production) --------
       - key: RELAY_AUTH_ENABLED
@@ -64,9 +62,6 @@ services:
       # -------- Default models --------
       - key: DEFAULT_MODEL
         value: gpt-5.5
-      - key: REALTIME_MODEL
-        value: gpt-realtime
-
 
       # -------- Relay identity / runtime --------
       - key: RELAY_HOST
@@ -105,10 +100,6 @@ services:
       # -------- Vector store (app/routes/bifl.py) --------
       - key: BIFL_VECTOR_STORE_ID
         sync: false
-
-      # -------- Realtime WS gate (app/routes/realtime.py) --------
-      - key: RELAY_REALTIME_WS_ENABLED
-        value: "1"
 
       # -------- Logging --------
       - key: LOG_LEVEL
