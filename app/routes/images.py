@@ -279,15 +279,36 @@ async def _build_edits_multipart(payload: ImagesEditsJSON) -> Tuple[Dict[str, Tu
 # --- Standard images routes ---
 
 
-@router.post("/images", summary="Create image generation", openapi_extra=IMAGES_GENERATIONS_BODY)
 @router.post(
     "/images/generations",
-    summary="Create image generation (alias)",
+    summary="Create image generation",
     openapi_extra=IMAGES_GENERATIONS_BODY,
 )
 async def create_image(request: Request) -> Response:
     logger.info("→ [images] %s %s", request.method, request.url.path)
     return await forward_openai_request(request)
+
+
+@router.post(
+    "/images",
+    summary="Create image generation (legacy alias)",
+    openapi_extra=IMAGES_GENERATIONS_BODY,
+    deprecated=True,
+)
+async def create_image_legacy(request: Request) -> Response:
+    """
+    Legacy alias: /v1/images is not an OpenAI endpoint.
+
+    OpenAI's spec declares only /v1/images/generations, /v1/images/edits and
+    /v1/images/variations -- there is no bare /v1/images. This route previously
+    shared a handler with /images/generations, and forward_openai_request()
+    preserves the inbound path, so a POST here was forwarded verbatim to
+    https://api.openai.com/v1/images and could only 404 upstream.
+
+    Rewritten to the canonical path, the same way /videos/generations is.
+    """
+    logger.info("→ [images.legacy] %s %s", request.method, request.url.path)
+    return await forward_openai_request(request, upstream_path="/v1/images/generations")
 
 
 @router.post(
