@@ -24,16 +24,24 @@ verify: open each source_url in a browser and split into full snapshots when nee
 
 ## #9 — Codex / ChatGPT Sites
 `https://developers.openai.com/codex`
-- Sites are for **public/demo/status pages only** — never secret storage.
-- `ai.lafiel.me` must stay a live backend, NOT a static Site.
+> Promoted 2026-08-15 to `github-openai/openai-sites.md` (`fetched`, pinned at
+> `9d3c7dd`), which carries the constraint in full: Sites are for public/demo/status
+> pages only, and `ai.lafiel.me` must stay a live backend, never a static Site.
 
 ## Repos (P1–P2) — reference, do not vendor
 
-- **openai/openai-node** — official JS/TS SDK (`npm i openai`); use for
-  Render/Cloudflare/n8n integrations. `https://github.com/openai/openai-node`
-- **openai/openai-cookbook** — examples/notebooks (link; pull specific ones).
-  `https://github.com/openai/openai-cookbook`
+Most of this list has been promoted to its own `fetched` file. Remaining:
+
 - **openai/openai-openapi** — the API's OpenAPI source; reference for modeling
   the relay's own schema. `https://github.com/openai/openai-openapi`
-- **openai/evals** — evaluation framework for quality/regression gates; add
-  later. `https://github.com/openai/evals`
+  (Note: `api_reference/openapi.transformed.yml` inside `openai/openai-python`
+  already carries the same content and is what `app/api/action_schemas.py` was
+  derived from — check whether a separate pull is still worth it.)
+
+> Promoted on 2026-08-15, all `pull_status: fetched` from local shallow clones:
+> `openai-node` → `node-sdk/openai-node.md` (already fetched 2026-07-16),
+> `openai-cookbook` → `cookbook/openai-cookbook-selected.md`,
+> `evals` → `github-openai/evals.md`,
+> plus `chatgpt-retrieval-plugin`, `tiktoken`, `codex`, `codex-action`,
+> `openai-cli`, `sites`, and the two `openai-developers-for-*` bundles under
+> `github-openai/`.

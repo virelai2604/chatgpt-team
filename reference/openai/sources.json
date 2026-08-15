@@ -2,24 +2,226 @@
   "catalog": "openai_reference_pull_priority",
   "note": "Reference catalog only. Libraries pinned via pip; docs referenced by URL; specific files pulled to reference/openai/ when offline durability is needed.",
   "docs_top10": [
-    {"rank": 1, "source": "Workspace Agents - Trigger runs", "purpose": "Canonical API trigger behavior for published Workspace Agents", "db_category": "workspace_agent_api_trigger", "url": "https://developers.openai.com/workspace-agents/trigger-runs"},
-    {"rank": 2, "source": "Workspace Agent API trigger Cookbook", "purpose": "Working API example for triggering agents from code", "db_category": "workspace_agent_cookbook", "url": "https://github.com/openai/openai-cookbook/blob/main/examples/chatgpt/workspace_agents/workspace-agents-api-trigger.ipynb"},
-    {"rank": 3, "source": "Workspace Agent access token / auth", "purpose": "Separate token from OPENAI_API_KEY; trigger-only scope", "db_category": "workspace_agent_auth", "url": "https://developers.openai.com/workspace-agents/authentication"},
-    {"rank": 4, "source": "Apps SDK - Build MCP server", "purpose": "Build the ai.lafiel.me MCP/API bridge and ChatGPT app tools", "db_category": "apps_sdk_mcp", "url": "https://developers.openai.com/apps-sdk/build/mcp-server"},
-    {"rank": 5, "source": "Apps SDK - MCP Apps in ChatGPT", "purpose": "Defines the ChatGPT app/MCP surface (UI, auth, state, deploy)", "db_category": "chatgpt_apps", "url": "https://developers.openai.com/apps-sdk/mcp-apps-in-chatgpt"},
-    {"rank": 6, "source": "OpenAI API - Skills (Tools)", "purpose": "Skill behavior and tool layer", "db_category": "skills", "url": "https://developers.openai.com/api/docs/guides/tools-skills"},
-    {"rank": 7, "source": "OpenAI - File Search", "purpose": "Hosted retrieval / Vector Store pattern for distilled knowledge", "db_category": "file_search_vector_store", "url": "https://developers.openai.com/api/docs/guides/tools-file-search"},
-    {"rank": 8, "source": "OpenAI Agents SDK", "purpose": "Agent workflow design, orchestration, results/state, evals", "db_category": "agents_sdk", "url": "https://developers.openai.com/api/docs/guides/agents"},
-    {"rank": 9, "source": "Codex / ChatGPT Sites", "purpose": "Public/demo/status pages only, never secret storage", "db_category": "codex_sites", "url": "https://developers.openai.com/codex"},
-    {"rank": 10, "source": "Codex Plugins / Build plugins", "purpose": "Current plugin examples (openai/skills deprecated)", "db_category": "codex_plugins_skills", "url": "https://github.com/openai/plugins"}
+    {
+      "rank": 1,
+      "source": "Workspace Agents - Trigger runs",
+      "purpose": "Canonical API trigger behavior for published Workspace Agents",
+      "db_category": "workspace_agent_api_trigger",
+      "url": "https://developers.openai.com/workspace-agents/trigger-runs"
+    },
+    {
+      "rank": 2,
+      "source": "Workspace Agent API trigger Cookbook",
+      "purpose": "Working API example for triggering agents from code",
+      "db_category": "workspace_agent_cookbook",
+      "url": "https://github.com/openai/openai-cookbook/blob/main/examples/chatgpt/workspace_agents/workspace-agents-api-trigger.ipynb"
+    },
+    {
+      "rank": 3,
+      "source": "Workspace Agent access token / auth",
+      "purpose": "Separate token from OPENAI_API_KEY; trigger-only scope",
+      "db_category": "workspace_agent_auth",
+      "url": "https://developers.openai.com/workspace-agents/authentication"
+    },
+    {
+      "rank": 4,
+      "source": "Apps SDK - Build MCP server",
+      "purpose": "Build the ai.lafiel.me MCP/API bridge and ChatGPT app tools",
+      "db_category": "apps_sdk_mcp",
+      "url": "https://developers.openai.com/apps-sdk/build/mcp-server"
+    },
+    {
+      "rank": 5,
+      "source": "Apps SDK - MCP Apps in ChatGPT",
+      "purpose": "Defines the ChatGPT app/MCP surface (UI, auth, state, deploy)",
+      "db_category": "chatgpt_apps",
+      "url": "https://developers.openai.com/apps-sdk/mcp-apps-in-chatgpt"
+    },
+    {
+      "rank": 6,
+      "source": "OpenAI API - Skills (Tools)",
+      "purpose": "Skill behavior and tool layer",
+      "db_category": "skills",
+      "url": "https://developers.openai.com/api/docs/guides/tools-skills"
+    },
+    {
+      "rank": 7,
+      "source": "OpenAI - File Search",
+      "purpose": "Hosted retrieval / Vector Store pattern for distilled knowledge",
+      "db_category": "file_search_vector_store",
+      "url": "https://developers.openai.com/api/docs/guides/tools-file-search"
+    },
+    {
+      "rank": 8,
+      "source": "OpenAI Agents SDK",
+      "purpose": "Agent workflow design, orchestration, results/state, evals",
+      "db_category": "agents_sdk",
+      "url": "https://developers.openai.com/api/docs/guides/agents"
+    },
+    {
+      "rank": 9,
+      "source": "Codex / ChatGPT Sites",
+      "purpose": "Public/demo/status pages only, never secret storage",
+      "db_category": "codex_sites",
+      "url": "https://developers.openai.com/codex"
+    },
+    {
+      "rank": 10,
+      "source": "Codex Plugins / Build plugins",
+      "purpose": "Current plugin examples (openai/skills deprecated)",
+      "db_category": "codex_plugins_skills",
+      "url": "https://github.com/openai/plugins"
+    }
   ],
   "github_repos": [
-    {"rank": 1, "repo": "openai/openai-cookbook", "why": "Official examples and guides", "priority": "P0", "vendor": false, "use": "link; pull specific notebooks only"},
-    {"rank": 2, "repo": "openai/plugins", "why": "Current Codex plugin examples (.codex-plugin/plugin.json + skills)", "priority": "P0", "vendor": false, "use": "reference structure to package tools"},
-    {"rank": 3, "repo": "openai/skills", "why": "Deprecated; historical skill patterns; points to openai/plugins", "priority": "P1", "vendor": false, "use": "reference only"},
-    {"rank": 4, "repo": "openai/openai-node", "why": "JS/TS SDK for Render/Cloudflare/n8n", "priority": "P1", "vendor": false, "use": "npm install openai"},
-    {"rank": 5, "repo": "openai/openai-python", "why": "Python SDK for WSL scripts, embeddings, file search", "priority": "P1", "vendor": false, "use": "pip install openai (pinned >=3.0,<4.0; 3.0 moved to HTTPX2)", "fetched": true},
-    {"rank": 6, "repo": "openai/openai-openapi", "why": "API schema source for endpoint modeling", "priority": "P2", "vendor": false, "use": "reference for the relay OpenAPI", "fetched": false},
-    {"rank": 7, "repo": "openai/evals", "why": "Evaluation patterns / regression gates", "priority": "P2", "vendor": false, "use": "add later for quality gates", "fetched": false}
+    {
+      "rank": 1,
+      "repo": "openai/openai-cookbook",
+      "why": "Official examples and guides",
+      "priority": "P0",
+      "vendor": false,
+      "use": "link; pull specific notebooks only"
+    },
+    {
+      "rank": 2,
+      "repo": "openai/plugins",
+      "why": "Current Codex plugin examples (.codex-plugin/plugin.json + skills)",
+      "priority": "P0",
+      "vendor": false,
+      "use": "reference structure to package tools"
+    },
+    {
+      "rank": 3,
+      "repo": "openai/skills",
+      "why": "Deprecated; historical skill patterns; points to openai/plugins",
+      "priority": "P1",
+      "vendor": false,
+      "use": "reference only"
+    },
+    {
+      "rank": 4,
+      "repo": "openai/openai-node",
+      "why": "JS/TS SDK for Render/Cloudflare/n8n",
+      "priority": "P1",
+      "vendor": false,
+      "use": "npm install openai"
+    },
+    {
+      "rank": 5,
+      "repo": "openai/openai-python",
+      "why": "Python SDK for WSL scripts, embeddings, file search",
+      "priority": "P1",
+      "vendor": false,
+      "use": "pip install openai (pinned >=3.0,<4.0; 3.0 moved to HTTPX2)",
+      "fetched": true
+    },
+    {
+      "rank": 6,
+      "repo": "openai/openai-openapi",
+      "why": "API schema source for endpoint modeling",
+      "priority": "P2",
+      "vendor": false,
+      "use": "reference for the relay OpenAPI",
+      "fetched": false
+    },
+    {
+      "rank": 7,
+      "repo": "openai/evals",
+      "why": "Evaluation patterns / regression gates",
+      "priority": "P2",
+      "vendor": false,
+      "use": "add later for quality gates",
+      "fetched": false
+    },
+    {
+      "repo": "openai/chatgpt-retrieval-plugin",
+      "url": "https://github.com/openai/chatgpt-retrieval-plugin",
+      "purpose": "OpenAI's own ChatGPT plugin: .well-known/ai-plugin.json + openapi.yaml + 4 auth variants. Direct benchmark for this relay's discovery surface.",
+      "pinned_commit": "b28ddce58474441da332d4e15c6dd60ddaa953ab",
+      "local_snapshot": "reference/openai/github-openai/chatgpt-retrieval-plugin.md",
+      "pull_status": "fetched",
+      "verified_at": "2026-08-15"
+    },
+    {
+      "repo": "openai/tiktoken",
+      "url": "https://github.com/openai/tiktoken",
+      "purpose": "BPE tokeniser. Not currently used; the library to reach for if the relay ever budgets or truncates tokens.",
+      "pinned_commit": "08a5f3b2c987ada4fc5aa1f16c643c203fa8acaa",
+      "local_snapshot": "reference/openai/github-openai/tiktoken.md",
+      "pull_status": "fetched",
+      "verified_at": "2026-08-15"
+    },
+    {
+      "repo": "openai/evals",
+      "url": "https://github.com/openai/evals",
+      "purpose": "Quality/regression gates beyond the structural pytest suite. Relevant if the relay gains behaviour of its own.",
+      "pinned_commit": "8eac7a7de5215c907fbddc30efdaf316913eccdd",
+      "local_snapshot": "reference/openai/github-openai/evals.md",
+      "pull_status": "fetched",
+      "verified_at": "2026-08-15"
+    },
+    {
+      "repo": "openai/codex",
+      "url": "https://github.com/openai/codex",
+      "purpose": "Codex CLI coding agent (Rust). Not an API surface; recorded to prevent confusion with codex-action.",
+      "pinned_commit": "22bf16a37ed45006c0226541874abd7449c29911",
+      "local_snapshot": "reference/openai/github-openai/codex.md",
+      "pull_status": "fetched",
+      "verified_at": "2026-08-15"
+    },
+    {
+      "repo": "openai/codex-action",
+      "url": "https://github.com/openai/codex-action",
+      "purpose": "GitHub Action wrapping codex exec behind a Responses-API proxy. Blocked here by the repo's third-party-action restriction.",
+      "pinned_commit": "c385816875cc2fc8e033ed9d1cba96f8c331210e",
+      "local_snapshot": "reference/openai/github-openai/codex-action.md",
+      "pull_status": "fetched",
+      "verified_at": "2026-08-15"
+    },
+    {
+      "repo": "openai/openai-cli",
+      "url": "https://github.com/openai/openai-cli",
+      "purpose": "Official Go CLI. Possible manual probe against the relay's OpenAI-compatible surface; auth alignment unverified.",
+      "pinned_commit": "3023717289fdafce3e13f06fe613fac592391d2a",
+      "local_snapshot": "reference/openai/github-openai/openai-cli.md",
+      "pull_status": "fetched",
+      "verified_at": "2026-08-15"
+    },
+    {
+      "repo": "openai/sites",
+      "url": "https://github.com/openai/sites",
+      "purpose": "Records the constraint, not the capability: ai.lafiel.me must stay a live backend, never a static Site.",
+      "pinned_commit": "9d3c7dd5e24ddd9058f5242a835c08b72b3f1069",
+      "local_snapshot": "reference/openai/github-openai/openai-sites.md",
+      "pull_status": "fetched",
+      "verified_at": "2026-08-15"
+    },
+    {
+      "repo": "openai/openai-developers-for-claude",
+      "url": "https://github.com/openai/openai-developers-for-claude",
+      "purpose": "Claude Code plugin bundling the OpenAI Docs MCP server plus 6 skills. Working fork kept in a separate repository.",
+      "pinned_commit": "3c5c0debdec2695f657c5f1b99a32df6d23dd0ed",
+      "local_snapshot": "reference/openai/github-openai/openai-developers-for-claude.md",
+      "pull_status": "fetched",
+      "verified_at": "2026-08-15"
+    },
+    {
+      "repo": "openai/openai-developers-for-cursor",
+      "url": "https://github.com/openai/openai-developers-for-cursor",
+      "purpose": "Cursor-side sibling of the Claude bundle; recorded so the two are known to be siblings, not alternatives.",
+      "pinned_commit": "9120f1f6bb47964651ab822e24b4f358e3638ae3",
+      "local_snapshot": "reference/openai/github-openai/openai-developers-for-cursor.md",
+      "pull_status": "fetched",
+      "verified_at": "2026-08-15"
+    },
+    {
+      "repo": "openai/chatgpt-retrieval-plugin/tree/main/examples/authentication-methods",
+      "url": "https://github.com/openai/chatgpt-retrieval-plugin/tree/main/examples/authentication-methods",
+      "purpose": "Five canonical ai-plugin.json files (all four auth types) copied verbatim as a shape reference.",
+      "pinned_commit": "b28ddce58474441da332d4e15c6dd60ddaa953ab",
+      "local_snapshot": "reference/openai/plugin-manifests/",
+      "pull_status": "fetched",
+      "verified_at": "2026-08-15"
+    }
   ]
 }
