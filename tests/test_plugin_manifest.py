@@ -56,11 +56,21 @@ def test_manifest_declares_the_auth_the_relay_actually_enforces() -> None:
     assert _manifest()["api"]["has_user_authentication"] is True
 
 
-def test_manifest_only_points_at_endpoints_that_exist() -> None:
-    """Every path the manifest names must answer, so clients and models aren't sent to 404s."""
+def test_manifest_only_points_at_endpoints_that_exist(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every path the manifest names must answer, so clients and models aren't sent to 404s.
+
+    Auth is pinned OFF here, and that is load-bearing rather than convenience.
+    pytest-env sets RELAY_KEY, which makes config.py turn RELAY_AUTH_ENABLED on by
+    default -- so RelayAuthMiddleware answered 401 before routing, every status was
+    401, and `!= 404` passed without exercising a single route. The test was vacuous
+    locally and only did its job in CI, where the workflow sets RELAY_AUTH_ENABLED
+    to "false". It caught a stale /v1/realtime/sessions reference there while
+    passing here, which is how this was found.
+    """
+    monkeypatch.setattr(settings, "RELAY_AUTH_ENABLED", False, raising=False)
     m = _manifest()
 
-    with TestClient(app) as client:
+    with TestClient(create_app()) as client:
         # The OpenAPI document the manifest advertises.
         api_path = "/" + m["api"]["url"].split("/", 3)[3]
         assert client.get(api_path).status_code == 200, f"api.url points at {api_path}, which 404s"
@@ -69,8 +79,15 @@ def test_manifest_only_points_at_endpoints_that_exist() -> None:
         advertised = set(re.findall(r"/v1/[a-z0-9/_-]+", m["description_for_model"]))
         assert advertised, "description_for_model names no endpoints — did it get emptied?"
         for path in sorted(advertised):
+            status = client.get(path).status_code
+            # A 401 means auth is still on and the request never reached routing,
+            # which would make the 404 check below meaningless.
+            assert status != 401, (
+                f"{path} returned 401 — auth is enabled, so this check cannot see routing. "
+                "The RELAY_AUTH_ENABLED monkeypatch above is not taking effect."
+            )
             # 405 == route exists but is POST-only, which is fine here.
-            assert client.get(path).status_code != 404, f"{path} is advertised to models but 404s"
+            assert status != 404, f"{path} is advertised to models but 404s"
 
     # A logo_url must not be declared unless the asset is actually present.
     if "logo_url" in m:
