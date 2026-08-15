@@ -123,3 +123,10 @@ OpenAI Workspace Project (see `docs/status/`, `docs/policies/`, `reference/manif
 - `docs/policies/p4_index_pointer.md`
 - `reference/manifests/manifest_20260814.json`
 - `reference/manifests/archive_members_20260814.json`
+
+## OpenAI Upstream Reference Pins
+
+Dated commit pins for referenced OpenAI upstream repositories (pointer-only; not vendored):
+
+- `reference/openai/upstream-clone-pins-20260814.md`
+- `reference/manifests/openai_upstream_pins_20260814.json`

@@ -1,0 +1,40 @@
+{
+  "generated": "2026-08-14",
+  "purpose": "Dated commit pins for OpenAI upstream reference repositories, verified by shallow clone. Pointer-only: the repositories themselves are NOT vendored into this repo (see docs/policies/openai_workspace_index_exclusion_policy.md).",
+  "verification_method": "git clone --depth 1 --filter=blob:none; HEAD commit recorded",
+  "repos": [
+    {
+      "name": "openai/openai-agents-python",
+      "clone_url": "https://github.com/openai/openai-agents-python.git",
+      "default_branch": "main",
+      "pinned_commit": "0b93ce8faa27d4631df399fe48856b52a8fd9897",
+      "commit_date": "2026-08-14",
+      "commit_subject": "fix: isolate RunState checkpoint tool decisions (#4413)",
+      "verified_at": "2026-08-14",
+      "register_source_id": "gh_openai_agents_python",
+      "note": "Refreshes the July-12 register row (previously noted 0.18.2)."
+    },
+    {
+      "name": "openai/openai-cookbook",
+      "clone_url": "https://github.com/openai/openai-cookbook.git",
+      "default_branch": "main",
+      "pinned_commit": "4a85c3018d20ceef48bf7549450c567896501bf9",
+      "commit_date": "2026-08-05",
+      "commit_subject": "chore(codeowners): require DX review (#2920)",
+      "verified_at": "2026-08-14",
+      "register_source_id": "gh_openai_cookbook",
+      "note": "Large repo (~1.7G working tree); pointer-only, never vendored."
+    },
+    {
+      "name": "openai/evals",
+      "clone_url": "https://github.com/openai/evals.git",
+      "default_branch": "main",
+      "pinned_commit": "8eac7a7de5215c907fbddc30efdaf316913eccdd",
+      "commit_date": "2026-04-14",
+      "commit_subject": "Pin pre-commit hook revisions to immutable commits (#1644)",
+      "verified_at": "2026-08-14",
+      "register_source_id": "evals",
+      "note": "openai/evals repo backing the evals docs summary; last upstream commit 2026-04-14."
+    }
+  ]
+}
