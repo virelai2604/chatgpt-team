@@ -119,7 +119,10 @@ async def main_async(args) -> None:
         vec_lists = await asyncio.gather(
             *[_embed_batch(client, args.model, b[1], args.dimensions, sem) for b in window]
         )
-        for (bids, btexts, bmetas), vecs in zip(window, vec_lists):
+        # strict=True: vec_lists is gather() over exactly `window`, so the lengths
+        # match by construction. If a refactor ever breaks that, fail loudly rather
+        # than silently embedding fewer chunks than there are documents.
+        for (bids, btexts, bmetas), vecs in zip(window, vec_lists, strict=True):
             coll.add(
                 ids=bids,
                 embeddings=vecs,

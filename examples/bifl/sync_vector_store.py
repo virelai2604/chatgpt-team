@@ -23,6 +23,7 @@ Then paste the printed line into Render → Environment:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import glob
 import os
 import sys
@@ -75,14 +76,14 @@ def main() -> None:
         vs_id = vs.id
         print(f"[vector_store] created {vs_id} (name={args.name})")
 
-    streams = [open(p, "rb") for p in files]
-    try:
+    # ExitStack rather than a try/finally: if open() raises partway through the
+    # list (file deleted since _expand(), permissions), the handles already
+    # opened still get closed. A try/finally cannot -- it is not entered yet.
+    with contextlib.ExitStack() as stack:
+        streams = [stack.enter_context(open(p, "rb")) for p in files]
         batch = client.vector_stores.file_batches.upload_and_poll(
             vector_store_id=vs_id, files=streams
         )
-    finally:
-        for s in streams:
-            s.close()
 
     print(f"[batch] status={batch.status}  counts={batch.file_counts}")
     if batch.status != "completed":
