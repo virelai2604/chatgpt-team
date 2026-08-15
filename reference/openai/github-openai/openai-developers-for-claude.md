@@ -44,7 +44,12 @@ be inferred from the SDK's directory layout instead — `resources/realtime/` sh
 `client_secrets.py` and no `sessions.py`. The conclusion held, but a docs lookup would
 have been direct rather than inferential.
 
-## Not vendored into this repo
+## Vendored into this repo (2026-08-15)
 
-It is a tool for working *on* the relay, not part of it — Node tooling, separate tests,
-separate release cadence. Kept in its own repository instead.
+The runtime plugin bundle is now vendored at
+`.claude/plugins/openai-developers-for-claude/` (marketplace + the `openai-developers`
+plugin + its 6 skills + `.mcp.json`), pinned at `3c5c0de`, Apache-2.0. The upstream Node
+dev harness (`package.json`, `tests/`) is intentionally excluded — it tests the plugin
+structure and is not needed to run it. See that directory's `VENDORED.md` for provenance
+and update instructions. The bundled Docs MCP host (`developers.openai.com/mcp?source=claude`)
+may 403 from a restricted sandbox even though it works from a normally-networked client.

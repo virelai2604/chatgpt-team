@@ -10,5 +10,16 @@
       "mcp__github__list_branches",
       "mcp__github__issue_read"
     ]
+  },
+  "extraKnownMarketplaces": {
+    "openai-developers": {
+      "source": {
+        "source": "directory",
+        "path": ".claude/plugins/openai-developers-for-claude"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "openai-developers@openai-developers": true
   }
 }
