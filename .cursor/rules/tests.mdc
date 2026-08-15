@@ -1,0 +1,57 @@
+---
+description: Rules for writing tests in this repo.
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# Tests
+
+The recurring failure here is not tests that fail. It is **tests that pass for a reason
+other than the one they claim**. Four have been found and fixed; each was caught only by
+deliberately breaking the thing under test.
+
+## Always run a negative control
+
+Before trusting a new test, break the code it covers and confirm the test fails with the
+message you expect. Put the observed failure in the commit message. A test never seen red
+has not been verified.
+
+## Known traps
+
+**Auth answers before routing.** `pytest-env` sets `RELAY_KEY`, which makes `config.py`
+enable `RELAY_AUTH_ENABLED`, so `RelayAuthMiddleware` returns 401 before any route runs.
+Assertions like `!= 404` then pass without exercising anything. Pin auth off *and* assert
+the status is not 401:
+
+```python
+monkeypatch.setattr(settings, "RELAY_AUTH_ENABLED", False, raising=False)
+...
+assert status != 401, "auth is on; this check cannot see routing"
+```
+
+**`app.routes` yields no `APIRoute`s.** This Starlette version keeps included routers as
+`_IncludedRouter` wrappers rather than flattening them, so iterating for `APIRoute`
+returns zero and any loop over it is vacuous. Use `app.openapi()["paths"]` instead.
+
+**`httpx.MockTransport` buffers responses.** It cannot reproduce a close-before-iterate
+race, so a streaming test built on it passes against broken code. Use a real
+`http.server.HTTPServer` on an ephemeral port.
+
+**Path comparisons against the official spec.** Its paths omit `/v1`. Strip the prefix and
+include a control path you know exists, or you get 100% false drift.
+
+## Markers
+
+`-m unit` must stay hermetic — no network, no real key. Anything touching upstream is
+`@pytest.mark.integration` and skips unless `INTEGRATION_OPENAI_API_KEY=1`.
+
+## Assertion messages
+
+Say what broke and what to do, not just what was expected:
+
+```python
+assert not missing, (
+    "these operations are advertised to ChatGPT with no request body schema, "
+    f"so the model cannot construct a call: {missing}"
+)
+```
