@@ -35,7 +35,7 @@ from openai import OpenAI
 # Spec loading
 # -----------------------------
 
-SPEC_A_PATH_DEFAULT = "P4_Cross_Domain_Analogy_Hybrid_Developer_v2.json"
+SPEC_A_PATH_DEFAULT = "P4_Cross_Domain_Analogy_Hybrid_Developer_v2_3_3.json"
 
 
 def load_json(path: str) -> dict:
