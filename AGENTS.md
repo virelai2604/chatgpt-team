@@ -94,6 +94,19 @@ Conflict rule:
 
 If you detect changes versus older examples, spell it out explicitly instead of silently following stale behavior.
 
+### Cursor
+
+Cursor reads this file natively, but it cannot scope it — `AGENTS.md` always applies in
+full. `.cursor/rules/*.mdc` adds the scoping: `relay-routes` auto-attaches on
+`app/routes/**` and `app/api/**`, `tests` on `tests/**`, and `openai-reference-priority`
+is pulled in by description when a task touches an OpenAI endpoint or model.
+
+They restate the constraints above that are expensive to rediscover — the forwarding
+path-preservation trap, the `/v1`-prefix mismatch against OpenAI's spec, and the
+vacuous-test traps. Keep them consistent with this file; `tests/test_cursor_rules.py`
+only checks that each rule parses and that its globs match real files, not that its
+content is still true.
+
 ---
 
 ## Codex / Agent Behavior (P4 “Analogy Hybrid Developer”)

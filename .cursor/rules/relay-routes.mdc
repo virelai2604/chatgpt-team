@@ -1,0 +1,61 @@
+---
+description: Rules for adding or changing relay routes and forwarding logic.
+globs: app/routes/**/*.py,app/api/**/*.py
+alwaysApply: false
+---
+
+# Relay routes
+
+The relay is a **transparent httpx pass-through**, not an SDK wrapper. It forwards raw
+bytes and injects the real `OPENAI_API_KEY` server-side. The `openai` package is imported
+in exactly one place — `app/utils/error_handler.py`, for the `OpenAIError` type.
+
+Do not add pydantic request models to proxy routes. Parsing and re-serializing bodies
+means every parameter OpenAI adds is silently dropped until someone updates a model.
+
+## Forwarding preserves the inbound path
+
+```python
+upstream_path_final = upstream_path or request.url.path
+```
+
+So a route served under a name OpenAI does **not** serve is forwarded verbatim and can
+only 404 upstream. Any alias needs an explicit rewrite:
+
+```python
+return await forward_openai_request(request, upstream_path="/v1/images/generations")
+```
+
+This is not hypothetical. `POST /v1/images` shipped this way — OpenAI declares only
+`/images/generations`, `/images/edits`, `/images/variations`, so every call 404'd. Fixed
+in #69; `/videos/generations` → `/videos` is the same pattern.
+
+**Before adding a route, confirm the path exists in the official spec** (see the
+`openai-reference-priority` rule). If it does not, it is an alias and needs a rewrite
+target plus a test in `tests/test_upstream_path_rewrites.py`.
+
+## Streaming
+
+Returning a `StreamingResponse` from inside `async with client.stream(...)` closes the
+upstream response before Starlette iterates it, yielding an empty 200. Send manually and
+defer the close:
+
+```python
+upstream = await client.send(req, stream=True)
+return StreamingResponse(
+    upstream.aiter_bytes(), ...,
+    background=BackgroundTask(upstream.aclose),
+)
+```
+
+## Exposing a route to ChatGPT
+
+1. Add the path to the right group in `_build_manifest()` (`app/api/tools_api.py`) and
+   list that group in `meta.actions_openapi_groups`.
+2. Write ops need a `requestBody` via `openapi_extra=` — Actions builds the call from the
+   schema, so an undeclared body means the model sends none. Use the compact subsets in
+   `app/api/action_schemas.py`; never inline upstream `$ref` graphs (one operation pulls
+   in ~203 schemas / ~141 KB).
+3. **Never create a checked-in OpenAPI file.** `/openapi.actions.json` is filtered from
+   the live schema. The previous checked-in file drifted to 32 declared paths against 59
+   served, 6 nonexistent, and was deleted.

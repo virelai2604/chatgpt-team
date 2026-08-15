@@ -1,0 +1,42 @@
+---
+description: How to verify any claim about OpenAI APIs, models, endpoints, or SDK behavior. Use whenever a task touches an OpenAI endpoint, request/response shape, model name, or SDK version.
+alwaysApply: false
+---
+
+# Verifying OpenAI facts
+
+Never answer from memory about OpenAI's API surface. This repo is a relay: a wrong
+endpoint or field name ships as a live 404, not a type error.
+
+Priority order, highest first:
+
+1. **Platform docs** — <https://platform.openai.com/docs/api-reference/>
+2. **Official GitHub** — `openai/openai-python`, `openai/openai-openapi`
+3. **In-repo catalog** — `reference/openai/` (provenance-stamped; see `SOURCES.md`)
+4. Third-party anything
+
+If a lower tier disagrees with a higher one, say so explicitly instead of quietly
+following the stale value.
+
+## The authoritative endpoint list
+
+`api_reference/openapi.transformed.yml` in `openai/openai-python`. Pinned SHA lives in
+`reference/manifests/openai_upstream_pins_*.json`.
+
+Two traps when comparing it to this relay's routes:
+
+- **Its paths omit `/v1`.** The server URL is `https://api.openai.com/v1`, so the spec
+  says `/models`, not `/v1/models`. Comparing raw strings reports 100% drift and means
+  nothing. Strip the prefix first, and include a control path you know exists.
+- **The spec outlives the service.** `/realtime/sessions` is still declared but returns
+  404 from the live API, and the SDK dropped it. Presence in the YAML is not proof an
+  endpoint works.
+
+## Never re-add
+
+- **Realtime** (`/v1/realtime/*`, WS proxy) — 404s upstream; the supported pattern is a
+  `client_secrets` mint plus a *browser* WebRTC connection, not a server proxy hop.
+- **Sora video routes as Actions** — deprecated upstream; still served for direct
+  callers, deliberately withdrawn from `actions_openapi_groups`.
+
+Check `AGENTS.md` for why before reviving either.
