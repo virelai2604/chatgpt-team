@@ -130,3 +130,5 @@ Dated commit pins for referenced OpenAI upstream repositories (pointer-only; not
 
 - `reference/openai/upstream-clone-pins-20260814.md`
 - `reference/manifests/openai_upstream_pins_20260814.json`
+- `reference/openai/upstream-clone-pins-20260815.md` (batch 2: sites, node, cli, evals, tiktoken, codex, python, codex-action, plugins, developers-for-claude, developers-for-cursor, retrieval-plugin)
+- `reference/manifests/openai_upstream_pins_20260815.json`

@@ -1,0 +1,19 @@
+{
+  "generated": "2026-08-15",
+  "purpose": "Dated HEAD-commit pins for additional OpenAI upstream repositories. Pointer-only: the repositories are NOT vendored into this repo (see docs/policies/openai_workspace_index_exclusion_policy.md). Extends openai_upstream_pins_20260814.json (agents-python, cookbook, evals).",
+  "verification_method": "git ls-remote --symref <url> HEAD (existence + HEAD SHA verified; no clone, no working tree, commit dates not captured)",
+  "repos": [
+    {"name": "openai/sites", "clone_url": "https://github.com/openai/sites.git", "default_branch": "main", "pinned_commit": "9d3c7dd5e24ddd9058f5242a835c08b72b3f1069", "verified_at": "2026-08-15"},
+    {"name": "openai/openai-node", "clone_url": "https://github.com/openai/openai-node.git", "default_branch": "main", "pinned_commit": "6827a403bfb4d93d86a59769faa4b24a95837823", "verified_at": "2026-08-15", "register_source_id": "gh_openai_node", "note": "Refreshes the July-16 register row provenance."},
+    {"name": "openai/openai-cli", "clone_url": "https://github.com/openai/openai-cli.git", "default_branch": "main", "pinned_commit": "3023717289fdafce3e13f06fe613fac592391d2a", "verified_at": "2026-08-15"},
+    {"name": "openai/evals", "clone_url": "https://github.com/openai/evals.git", "default_branch": "main", "pinned_commit": "8eac7a7de5215c907fbddc30efdaf316913eccdd", "verified_at": "2026-08-15", "note": "Matches the 2026-08-14 pin (openai_upstream_pins_20260814.json) — unchanged."},
+    {"name": "openai/tiktoken", "clone_url": "https://github.com/openai/tiktoken.git", "default_branch": "main", "pinned_commit": "08a5f3b2c987ada4fc5aa1f16c643c203fa8acaa", "verified_at": "2026-08-15"},
+    {"name": "openai/codex", "clone_url": "https://github.com/openai/codex.git", "default_branch": "main", "pinned_commit": "4861236f06d0df397436531b4aa3d7fa6975959c", "verified_at": "2026-08-15"},
+    {"name": "openai/openai-python", "clone_url": "https://github.com/openai/openai-python.git", "default_branch": "main", "pinned_commit": "10ee3f0da2ac6f93345c1204bd7bb1a2faa79ff2", "verified_at": "2026-08-15", "register_source_id": "gh_openai_python", "note": "Refreshes the Aug-13 register row provenance."},
+    {"name": "openai/codex-action", "clone_url": "https://github.com/openai/codex-action.git", "default_branch": "main", "pinned_commit": "c385816875cc2fc8e033ed9d1cba96f8c331210e", "verified_at": "2026-08-15"},
+    {"name": "openai/plugins", "clone_url": "https://github.com/openai/plugins.git", "default_branch": "main", "pinned_commit": "11c74d6ba24d3a6d48f54a194cd00ef3beea18f9", "verified_at": "2026-08-15", "register_source_id": "gh_openai_plugins", "note": "Current Codex plugin/skill source (openai/skills is deprecated -> openai/plugins)."},
+    {"name": "openai/openai-developers-for-claude", "clone_url": "https://github.com/openai/openai-developers-for-claude.git", "default_branch": "main", "pinned_commit": "3c5c0debdec2695f657c5f1b99a32df6d23dd0ed", "verified_at": "2026-08-15"},
+    {"name": "openai/openai-developers-for-cursor", "clone_url": "https://github.com/openai/openai-developers-for-cursor.git", "default_branch": "main", "pinned_commit": "9120f1f6bb47964651ab822e24b4f358e3638ae3", "verified_at": "2026-08-15"},
+    {"name": "openai/chatgpt-retrieval-plugin", "clone_url": "https://github.com/openai/chatgpt-retrieval-plugin.git", "default_branch": "main", "pinned_commit": "b28ddce58474441da332d4e15c6dd60ddaa953ab", "verified_at": "2026-08-15", "note": "Historical retrieval architecture; do not treat as the current default."}
+  ]
+}
