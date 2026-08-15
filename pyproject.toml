@@ -37,9 +37,6 @@ dependencies = [
   "pyyaml>=6.0,<7.0",
   "loguru>=0.7,<1.0",
 
-  # Realtime WS proxy client. websockets 14+ uses the new asyncio client
-  # (additional_headers instead of extra_headers); realtime.py targets that API.
-  "websockets>=15,<17",
 ]
 
 [project.optional-dependencies]

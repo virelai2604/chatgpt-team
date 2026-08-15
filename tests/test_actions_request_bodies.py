@@ -120,30 +120,30 @@ def test_deprecated_sora_video_routes_are_not_advertised_to_chatgpt() -> None:
     assert "/v1/videos" in served, "video routes should still work for direct callers"
 
 
-def test_realtime_is_not_advertised_to_chatgpt() -> None:
-    """POST /v1/realtime/sessions returns 404 from OpenAI.
+def test_realtime_surface_is_gone() -> None:
+    """The realtime surface was removed entirely, not merely unadvertised.
 
-    Verified live on 2026-08-14 through the integration-live job:
+    Unlike the Sora video routes -- deprecated but still working, so still served
+    -- realtime was deleted outright, on three independent grounds:
 
-        Realtime session upstream error: status=404
-        url=https://api.openai.com/v1/realtime/sessions
+    1. `POST /v1/realtime/sessions` returned 404 from OpenAI. Verified live on
+       2026-08-14 through the integration-live job:
+           Realtime session upstream error: status=404
+           url=https://api.openai.com/v1/realtime/sessions
+    2. OpenAI's own SDK dropped it. `openai-python/src/openai/resources/realtime/`
+       ships `calls.py`, `client_secrets.py` and `realtime.py` -- no `sessions.py`.
+       The endpoint survives only as a stale entry in the published OpenAPI YAML,
+       which is why the spec and the running service disagreed.
+    3. The WebSocket proxy was never the supported shape. OpenAI's own browser
+       demo has the server mint a token via `/v1/realtime/.../client_secrets` and
+       the browser connect *directly* over WebRTC -- no server-side proxy hop.
 
-    Advertising it handed ChatGPT a URL that cannot work. ChatGPT could not have
-    used the realtime surface regardless -- Actions are request/response and
-    cannot open a WebSocket -- so a session minted through the relay has no
-    consumer inside a Custom GPT.
-
-    As with the video routes, this asserts the endpoints are absent from the
-    Actions subset while still being served, so the check cannot be satisfied by
-    deleting the routes outright.
+    If realtime is ever wanted again, the answer is a `client_secrets` mint plus a
+    browser WebRTC connection, not a revival of this proxy.
     """
-    doc = _actions_doc()
-    advertised = sorted(p for p in doc.get("paths", {}) if "realtime" in p)
-    assert not advertised, (
-        f"realtime paths are advertised to ChatGPT but 404 upstream: {advertised}. "
-        "Remove 'realtime_http' from actions_openapi_groups in _build_manifest()."
-    )
-
     with TestClient(app) as client:
-        served = set(client.get("/openapi.json").json()["paths"])
-    assert "/v1/realtime/sessions" in served, "the route should still be served to direct callers"
+        served = sorted(p for p in client.get("/openapi.json").json()["paths"] if "realtime" in p)
+    assert not served, f"realtime routes should be gone but are still served: {served}"
+
+    advertised = sorted(p for p in _actions_doc().get("paths", {}) if "realtime" in p)
+    assert not advertised, f"realtime paths are advertised to ChatGPT: {advertised}"

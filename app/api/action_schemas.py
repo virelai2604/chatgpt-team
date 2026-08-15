@@ -24,7 +24,7 @@ Field names, types and `required` lists are taken from OpenAI's own published
 spec — `api_reference/openapi.transformed.yml` in openai/openai-python, the
 same document that generates the SDK. The relevant component schemas are
 `CreateResponse`, `CreateEmbeddingRequest`, `CreateImageRequest`,
-`RealtimeSessionCreateRequest` and `CreateVideoMultipartBody`.
+and `CreateVideoMultipartBody`.
 
 They are deliberately *not* verbatim copies. `CreateResponse` alone pulls in 203
 component schemas and ~141 KB once its `$ref` graph is resolved; inlining that
@@ -159,39 +159,6 @@ IMAGES_GENERATIONS_BODY = _json_body(
         },
         "additionalProperties": True,
     }
-)
-
-# --- /v1/realtime/sessions -------------------------------------------------
-# Source: RealtimeSessionCreateRequest. Upstream marks client_secret required,
-# but the relay mints the session on the caller's behalf and defaults `model`
-# to REALTIME_MODEL, so nothing is required of an Actions caller here.
-REALTIME_SESSION_BODY = _json_body(
-    {
-        "type": "object",
-        "title": "RealtimeSessionCreateRequest",
-        "description": (
-            "Body for POST /v1/realtime/sessions. Subset of RealtimeSessionCreateRequest in "
-            f"{_SPEC}. The relay supplies credentials and defaults `model` to REALTIME_MODEL, "
-            "so an empty object is a valid request."
-        ),
-        "properties": {
-            "model": {"type": "string", "description": "Realtime model ID, e.g. gpt-realtime."},
-            "modalities": {"type": "array", "items": {"type": "string"}, "description": 'e.g. ["text", "audio"].'},
-            "instructions": {"type": "string"},
-            "voice": {"type": "string"},
-            "input_audio_format": {"type": "string"},
-            "output_audio_format": {"type": "string"},
-            "input_audio_transcription": {"type": "object"},
-            "turn_detection": {"type": "object"},
-            "tools": {"type": "array", "items": {"type": "object"}},
-            "tool_choice": {"description": "auto | none | required, or a specific tool."},
-            "temperature": {"type": "number"},
-            "speed": {"type": "number"},
-            "max_response_output_tokens": {"description": "An integer, or the string 'inf'."},
-        },
-        "additionalProperties": True,
-    },
-    required=False,
 )
 
 # --- /v1/actions/videos ----------------------------------------------------

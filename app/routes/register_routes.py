@@ -19,7 +19,6 @@ from . import (
     images,
     models,
     proxy,
-    realtime,
     responses,
     uploads,
     vector_stores,
@@ -80,7 +79,6 @@ def register_routes(app: _RouterLike) -> None:
     app.include_router(conversations.router)  # /v1/conversations
     app.include_router(containers.router)     # /v1/containers
     app.include_router(batches.router)        # /v1/batches
-    app.include_router(realtime.router)       # /v1/realtime (HTTP + WS)
 
     # Generic allowlisted proxy LAST
     app.include_router(proxy.router)          # /v1/proxy

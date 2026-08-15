@@ -10,11 +10,9 @@ Read the working tree directly. It is the only source of truth.
 
 This repo previously shipped two generated snapshots — `chatgpt_baseline.md` and
 `chatgpt_changes.md` — that agents were told to treat as the codebase. Both were
-pinned at merge-base `f267274` and had drifted badly: the baseline still showed
-`extra_headers` for the realtime websocket connect, a form that raises `TypeError`
-against the pinned `websockets>=15` (see
-`reference/openai/01_OpenAI_Docs_Summaries/14-realtime.md`). They have been removed,
-along with `chatgpt_sync.sh` and `generate_tree.py` which produced them.
+pinned at merge-base `f267274` and had drifted badly, describing code that no longer
+matched the tree. They have been removed, along with `chatgpt_sync.sh` and
+`generate_tree.py` which produced them.
 
 Rules:
 - Read files from the tree; never rely on a snapshot of them.
@@ -52,6 +50,16 @@ Current endpoint surface (as of 2026-07):
 - BIFL retriever (read-only): `/v1/bifl/health`, `/v1/bifl/search`, `/v1/bifl/fetch` (search needs `BIFL_VECTOR_STORE_ID`).
 - Actions-safe OpenAPI subset served at `/openapi.actions.json` (for Custom GPT import).
 - Health at `/v1/health`. Auth is relay-key based (`RELAY_KEY`); the real `OPENAI_API_KEY` stays server-side.
+
+Removed, deliberately — do not re-add without checking why they went:
+- **Realtime** (`/v1/realtime/*`, including the WebSocket proxy). `POST /v1/realtime/sessions`
+  returned 404 from OpenAI, their SDK dropped the endpoint (`resources/realtime/` ships
+  `client_secrets.py`, not `sessions.py`), and the supported pattern is the *browser*
+  connecting to OpenAI directly over WebRTC using a token minted from
+  `/v1/realtime/client_secrets` — not a server-side proxy hop. Removing it also freed the
+  `websockets` dependency, which existed only for that route.
+- **Sora video routes as Actions.** Still served, but withdrawn from
+  `actions_openapi_groups` ahead of the September shutdown (`deprecated: true` upstream).
 
 Assumptions:
 - This repository is a private glue layer between ChatGPT and OpenAI APIs on behalf of the owner.

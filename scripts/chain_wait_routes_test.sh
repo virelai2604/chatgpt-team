@@ -94,7 +94,6 @@ ENABLE_VIDEO="${ENABLE_VIDEO:-false}"
 
 EMBED_MODEL="${EMBED_MODEL:-text-embedding-3-small}"
 TEXT_MODEL="${TEXT_MODEL:-gpt-4.1-mini}"
-REALTIME_MODEL="${REALTIME_MODEL:-gpt-4.1-mini}"
 IMAGE_PROMPT="${IMAGE_PROMPT:-a small robot}"
 VIDEO_PROMPT="${VIDEO_PROMPT:-a cat running}"
 VIDEO_MODEL="${VIDEO_MODEL:-sora-2}"
@@ -519,9 +518,6 @@ else
   record_skip "Responses create"
 fi
 
-# 10) Realtime sessions (non-5xx expected)
-run_step_json "Realtime sessions" "POST" "${BASE_URL}/v1/realtime/sessions" \
-  '{"model":"'"${REALTIME_MODEL}"'"}' true
 
 # 11) Actions videos (non-5xx expected)
 if [[ "${ENABLE_VIDEO}" == "true" ]]; then

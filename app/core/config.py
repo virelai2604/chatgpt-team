@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import List, Optional
 
-
 def _get_env(
     key: str,
     default: Optional[str] = None,
@@ -33,7 +32,6 @@ def _get_env(
 
     return value
 
-
 def _get_int(key: str, default: int) -> int:
     raw = os.getenv(key)
     if raw is None or raw.strip() == "":
@@ -42,7 +40,6 @@ def _get_int(key: str, default: int) -> int:
         return int(raw.strip())
     except ValueError:
         return default
-
 
 def _get_bool(key: str, default: bool) -> bool:
     raw = os.getenv(key)
@@ -56,7 +53,6 @@ def _get_bool(key: str, default: bool) -> bool:
         return False
 
     return default
-
 
 def _parse_list(raw: str) -> List[str]:
     """
@@ -86,7 +82,6 @@ def _parse_list(raw: str) -> List[str]:
     # CSV fallback
     return [item.strip() for item in raw.split(",") if item.strip()]
 
-
 def _get_list(key: str, default: Optional[List[str]] = None) -> List[str]:
     raw = os.getenv(key)
     if raw is None or raw.strip() == "":
@@ -95,7 +90,6 @@ def _get_list(key: str, default: Optional[List[str]] = None) -> List[str]:
     if parsed:
         return parsed
     return list(default) if default is not None else []
-
 
 @dataclass
 class Settings:
@@ -115,13 +109,11 @@ class Settings:
     OPENAI_API_BASE: str
     OPENAI_API_KEY: str
     OPENAI_ASSISTANTS_BETA: str
-    OPENAI_REALTIME_BETA: str
     OPENAI_ORGANIZATION: Optional[str]
     OPENAI_PROJECT: Optional[str]
 
     # Models
     DEFAULT_MODEL: str
-    REALTIME_MODEL: str
 
     # Relay runtime
     RELAY_HOST: str
@@ -130,7 +122,6 @@ class Settings:
     RELAY_TIMEOUT: int
     PROXY_TIMEOUT: int
     PYTHON_VERSION: str
-    RELAY_REALTIME_WS_ENABLED: bool
 
     # Streaming / orchestration
     ENABLE_STREAM: bool
@@ -201,10 +192,6 @@ class Settings:
         return self.OPENAI_ASSISTANTS_BETA
 
     @property
-    def openai_realtime_beta(self) -> str:
-        return self.OPENAI_REALTIME_BETA
-
-    @property
     def openai_organization(self) -> Optional[str]:
         return self.OPENAI_ORGANIZATION
 
@@ -219,14 +206,6 @@ class Settings:
     @default_model.setter
     def default_model(self, value: str) -> None:
         self.DEFAULT_MODEL = value
-
-    @property
-    def realtime_model(self) -> str:
-        return self.REALTIME_MODEL
-
-    @realtime_model.setter
-    def realtime_model(self, value: str) -> None:
-        self.REALTIME_MODEL = value
 
     @property
     def relay_timeout_seconds(self) -> int:
@@ -277,11 +256,6 @@ class Settings:
     def cors_allow_credentials(self) -> bool:
         return self.CORS_ALLOW_CREDENTIALS
 
-    @property
-    def relay_realtime_ws_enabled(self) -> bool:
-        return self.RELAY_REALTIME_WS_ENABLED
-
-
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     project_name = "chatgpt-team-relay"
@@ -297,14 +271,12 @@ def get_settings() -> Settings:
     # Allow empty key so the server can start; forwarder should reject requests if missing.
     openai_api_key = _get_env("OPENAI_API_KEY", "") or ""
     openai_assistants_beta = _get_env("OPENAI_ASSISTANTS_BETA", "assistants=v2") or "assistants=v2"
-    openai_realtime_beta = _get_env("OPENAI_REALTIME_BETA", "realtime=v1") or "realtime=v1"
     openai_organization = os.getenv("OPENAI_ORGANIZATION")
     openai_project = os.getenv("OPENAI_PROJECT")
 
     # Defaults track the models the relay is actually deployed with, so a local run
     # without env behaves like production rather than silently falling back a generation.
     default_model = _get_env("DEFAULT_MODEL", "gpt-5.5") or "gpt-5.5"
-    realtime_model = _get_env("REALTIME_MODEL", "gpt-realtime") or "gpt-realtime"
 
     # 0.0.0.0 is deliberate and required: Render (and any container runtime) routes
     # to the published port, and a process bound to 127.0.0.1 is unreachable from
@@ -315,7 +287,6 @@ def get_settings() -> Settings:
     relay_timeout = _get_int("RELAY_TIMEOUT", 120)
     proxy_timeout = _get_int("PROXY_TIMEOUT", 120)
     python_version = _get_env("PYTHON_VERSION", "") or ""
-    relay_realtime_ws_enabled = _get_bool("RELAY_REALTIME_WS_ENABLED", False)
 
     enable_stream = _get_bool("ENABLE_STREAM", True)
     chain_wait_mode = _get_env("CHAIN_WAIT_MODE", "sequential") or "sequential"
@@ -338,7 +309,6 @@ def get_settings() -> Settings:
     cors_allow_headers = _get_list("CORS_ALLOW_HEADERS", default=["*"])
     cors_allow_credentials = _get_bool("CORS_ALLOW_CREDENTIALS", True)
 
-
     timeout_seconds = relay_timeout
     max_retries = _get_int("MAX_RETRIES", 3)
 
@@ -352,18 +322,15 @@ def get_settings() -> Settings:
         OPENAI_API_BASE=openai_api_base,
         OPENAI_API_KEY=openai_api_key,
         OPENAI_ASSISTANTS_BETA=openai_assistants_beta,
-        OPENAI_REALTIME_BETA=openai_realtime_beta,
         OPENAI_ORGANIZATION=openai_organization,
         OPENAI_PROJECT=openai_project,
         DEFAULT_MODEL=default_model,
-        REALTIME_MODEL=realtime_model,
         RELAY_HOST=relay_host,
         RELAY_PORT=relay_port,
         RELAY_NAME=relay_name,
         RELAY_TIMEOUT=relay_timeout,
         PROXY_TIMEOUT=proxy_timeout,
         PYTHON_VERSION=python_version,
-        RELAY_REALTIME_WS_ENABLED=relay_realtime_ws_enabled,
         ENABLE_STREAM=enable_stream,
         CHAIN_WAIT_MODE=chain_wait_mode,
         RELAY_AUTH_ENABLED=relay_auth_enabled,
@@ -377,6 +344,5 @@ def get_settings() -> Settings:
         timeout_seconds=timeout_seconds,
         max_retries=max_retries,
     )
-
 
 settings: Settings = get_settings()
