@@ -132,3 +132,11 @@ Dated commit pins for referenced OpenAI upstream repositories (pointer-only; not
 - `reference/manifests/openai_upstream_pins_20260814.json`
 - `reference/openai/upstream-clone-pins-20260815.md` (batch 2: sites, node, cli, evals, tiktoken, codex, python, codex-action, plugins, developers-for-claude, developers-for-cursor, retrieval-plugin)
 - `reference/manifests/openai_upstream_pins_20260815.json`
+
+## OpenAI Skills & Plugins Resource Pack
+
+Reconciled, pointer-only index of Skills/Plugins, Agents SDK docs, and the Agent
+Skills standard. Corrects the deprecated-`openai/skills` claim (skills are now
+shipped as Codex plugins via `openai/plugins`):
+
+- `reference/openai/openai-skills-plugins-resource-pack-20260725.md`
