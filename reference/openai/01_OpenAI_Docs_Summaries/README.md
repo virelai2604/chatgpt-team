@@ -70,5 +70,7 @@ current/model/API/pricing/availability/connector/tool detail.
 | 13 | `13-agents-sdk.md` | see file |
 | 14 | `14-realtime.md` | see file |
 | 15 | `15-api-keys-projects-organizations.md` | see file |
+| 16 | `16-prompt-caching.md` | see file |
+| 17 | `17-compaction.md` | see file |
 
 See `manifest.jsonl` for machine-readable provenance (one row per summary).
