@@ -98,5 +98,5 @@ Do not upload or duplicate:
 - [Done] Heavy DB/vector/model/credential upload exclusions remain active.
 - [Not done] Local clone of `chatgpt-team` under the old expected path.
 - [Not proven] Production deployment equals GitHub `main`.
-- [Not done] Commit this refreshed registry to GitHub.
+- [Done] Committed this refreshed registry to GitHub (`docs/workspace/`, on `main`).
 - [Not done] Clean up selected `.bak_*` files after review.

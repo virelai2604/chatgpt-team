@@ -42,7 +42,7 @@ Refresh the 2026-07-14 project split after the user confirmed that the old local
 ## Not Done
 
 - [Not done] Local clone of `chatgpt-team` under the old expected path.
-- [Not done] Commit refreshed registry/checkpoint files to GitHub.
+- [Done] Committed refreshed registry/checkpoint files to GitHub (`docs/workspace/`, on `main`).
 - [Not done] Verify production deployment equals GitHub `main`.
 - [Not done] Refresh official OpenAI summaries from live official sources.
 - [Not done] Run new hosted File Search pilot.
@@ -53,7 +53,6 @@ Refresh the 2026-07-14 project split after the user confirmed that the old local
 
 - [Not proven] Production deployment equals GitHub `main`.
 - [Not proven] Any local clone exists somewhere else.
-- [Not proven] GitHub contains the refreshed root registry files.
 - [Not proven] OpenAI Library connector scope.
 
 ## Rules
@@ -74,13 +73,13 @@ Lightweight project-governance data like this file can be stored in both:
 
 provided it contains no secrets and no heavy database/vector/model artifacts.
 
-Recommended GitHub destination if committed later:
+GitHub destination (committed on `main`):
 
 ```text
 docs/workspace/PROJECTS_REGISTRY_2026-08-20.md
 docs/workspace/PROJECTS_SPLIT_CHECKPOINT_2026-08-20.md
-docs/workspace/OpenClaw_README.md
-docs/workspace/OpenClaw_PROJECTS_SPLIT_CHECKPOINT_2026-08-20.md
+docs/workspace/openclaw/README.md
+docs/workspace/openclaw/PROJECTS_SPLIT_CHECKPOINT_2026-08-20.md
 ```
 
 ## Next Actions
